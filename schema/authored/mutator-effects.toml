@@ -1,0 +1,443 @@
+# What each mutator actually changes.
+#
+# Hand-written, because these effects live inside C++ function bodies in
+# game_patch/multi/mutators.cpp and cannot be parsed reliably. Keys in `sets`
+# are real config paths; anything with no config key to point at goes in
+# `notes` instead. A stale entry here only makes a provenance popover
+# under-explain - it never changes what gets written to the config file.
+
+[meta]
+apply_order_note = "When several mutators are on at once they are applied in a fixed order that does not depend on the order you list them in: Pogo, Dodging, Skiing, Low Gravity, Weird Gun Game, Humans vs. Bots, Jetpacks, Gibbing, Flaming Enemies, Big Craters, Super Rail, Delayed Supers, Armored, Super Drain, Vampire, Arena, One Weapon, Instagib, Score Limit Override, Ideal Player Count Override. Where two mutators touch the same setting, the later one in that list wins. Anything you set by hand in the same scope wins over every mutator."
+
+
+# ============================================================================
+
+["instagib"]
+summary = "Rail gun only, with unlimited ammo and no reloading, and nothing to pick up."
+help = "Against stock health a rail shot kills outright, so this plays as one hit, one kill. Players cannot switch away from the rail gun."
+notes = [
+  "Every pickup in the level is hidden: weapons, ammo, health, armor and powerups alike. Flags and other game type items are left alone.",
+  "The rail gun never reloads and its ammo counter never goes down.",
+  "Players cannot switch to any other weapon.",
+]
+
+[[instagib.sets]]
+key = "spawn_loadout"
+value = "rail gun only"
+
+[[instagib.sets]]
+key = "spawn_loadout_blue"
+value = "cleared"
+note = "Any separate blue team loadout is dropped, so both teams get the same thing."
+
+[[instagib.sets]]
+key = "spawn_weapon.weapon_name"
+value = "rail_gun"
+note = "Players spawn already holding the rail driver."
+
+[[instagib.sets]]
+key = "spawn_delay.enabled"
+value = true
+
+[[instagib.sets]]
+key = "spawn_delay.base_seconds"
+value = 0.5
+
+[[instagib.sets]]
+key = "infinite_reloads"
+value = true
+
+[[instagib.sets]]
+key = "drop_weapons"
+value = false
+
+
+# ============================================================================
+
+["oneweapon"]
+summary = "Every weapon and ammo pickup in the level turns into the same one weapon, the rail gun by default."
+help = "Players spawn with only the control baton and have to pick the featured weapon up. Unlike Instagib the featured weapon behaves normally: it reloads, it uses ammo, and players can switch between it and the baton."
+notes = [
+  "Weapon and ammo pickups are redirected to whatever the Weapon option is set to. The rail gun is the default.",
+  "Every pickup that is not a weapon or ammo is hidden, so no health, armor or powerups.",
+  "With Keep thrown explosives on, which is the default, remote charge and grenade pickups are left as they are.",
+  "Only weapons that some pickup in the level can grant are offered in the Weapon list, otherwise players would be stuck with the baton.",
+]
+
+[[oneweapon.sets]]
+key = "spawn_loadout"
+value = "control baton only"
+
+[[oneweapon.sets]]
+key = "spawn_loadout_blue"
+value = "cleared"
+note = "Any separate blue team loadout is dropped, so both teams get the same thing."
+
+[[oneweapon.sets]]
+key = "spawn_weapon.weapon_name"
+value = "Riot Stick"
+note = "Players spawn holding the control baton."
+
+[[oneweapon.sets]]
+key = "spawn_delay.enabled"
+value = true
+
+[[oneweapon.sets]]
+key = "spawn_delay.base_seconds"
+value = 0.5
+
+[[oneweapon.sets]]
+key = "weapons_stay"
+value = true
+
+
+# ============================================================================
+
+["arena"]
+summary = "Spawn at 100 health and 100 armor with an assault rifle, and go straight back to full on every kill."
+notes = [
+  "Every pickup except weapons is hidden, so no ammo, health, armor or powerups.",
+  "A kill instantly refills the clip of the weapon you are holding, with no reload animation and no pause in fire.",
+]
+
+[[arena.sets]]
+key = "spawn_life.enabled"
+value = true
+
+[[arena.sets]]
+key = "spawn_life.value"
+value = 100
+
+[[arena.sets]]
+key = "spawn_armor.enabled"
+value = true
+
+[[arena.sets]]
+key = "spawn_armor.value"
+value = 100
+
+[[arena.sets]]
+key = "spawn_delay.enabled"
+value = true
+
+[[arena.sets]]
+key = "spawn_delay.base_seconds"
+value = 0.5
+
+[[arena.sets]]
+key = "spawn_loadout"
+value = "control baton and assault rifle"
+
+[[arena.sets]]
+key = "spawn_loadout_blue"
+value = "cleared"
+note = "Any separate blue team loadout is dropped, so both teams get the same thing."
+
+[[arena.sets]]
+key = "spawn_weapon.weapon_name"
+value = "Assault Rifle"
+note = "Players spawn already holding the assault rifle."
+
+[[arena.sets]]
+key = "force_respawn"
+value = true
+
+[[arena.sets]]
+key = "kill_rewards.effective_health"
+value = 300
+note = "Enough to put health and armor back to full after any kill."
+
+[[arena.sets]]
+key = "kill_rewards.health_is_super"
+value = false
+
+[[arena.sets]]
+key = "kill_rewards.armor_is_super"
+value = false
+
+[[arena.sets]]
+key = "weapon_pickups_give_full_ammo"
+value = true
+
+[[arena.sets]]
+key = "infinite_reloads"
+value = true
+
+[[arena.sets]]
+key = "drop_weapons"
+value = false
+
+
+# ============================================================================
+
+["vampire"]
+summary = "Damaging an enemy heals you for half of the damage you dealt."
+help = "With the Full lifesteal option on you get back the full amount instead. Damage you do to yourself or to a teammate never heals you."
+notes = [
+  "The healing is given as effective health, so it tops up health first and then armor, and it cannot push you past your normal maximum.",
+  "With No health/armor pickups on, which is the default, medical kits, first aid kits and suit repairs are removed from the level. This is applied on top of whatever any other mutator does to pickups, not instead of it.",
+]
+
+
+# ============================================================================
+
+["superdrain"]
+summary = "Health and armor above the normal maximum leak back down to it."
+notes = [
+  "One point of health and one point of armor per second, stopping exactly at the normal maximum.",
+  "No damage is dealt, so the drain can never kill anyone and never scores a kill for anybody.",
+]
+
+
+# ============================================================================
+
+["armored"]
+summary = "Everyone spawns with 100 armor instead of none."
+
+[[armored.sets]]
+key = "spawn_armor.enabled"
+value = true
+
+[[armored.sets]]
+key = "spawn_armor.value"
+value = 100
+
+
+# ============================================================================
+
+["superrail"]
+summary = "The rail gun pickup is treated as a super item: it ignores weapon stay and only comes back after a minute."
+notes = [
+  "If the loaded weapon tables have no rail gun at all, this does nothing.",
+  "When Delayed Supers is on as well, the rail gun pickup is held back at level start along with the other super items.",
+]
+
+[[superrail.sets]]
+key = "weapon_stay_exemptions"
+value = "rail gun exempted from weapon stay"
+note = "Only one player can hold the rail gun at a time, even on a server where weapons stay."
+
+[[superrail.sets]]
+key = "item_respawn_time_overrides"
+value = "rail gun pickup respawns after 60 seconds"
+
+
+# ============================================================================
+
+["bigcraters"]
+summary = "Explosions dig craters twice as wide as normal."
+notes = [
+  "Only weapon explosions are affected. The driller's own digging keeps its normal size.",
+  "The server's crater limit still applies, so bigger craters means the limit is reached sooner.",
+]
+
+
+# ============================================================================
+
+["flamingenemies"]
+summary = "Sustained flamethrower fire sets players alight, and they keep burning after the flame stops."
+help = "The burn deals damage every half second and is credited to whoever set the fire, so a burn can score a kill for them."
+notes = [
+  "It takes about 25 points of flamethrower damage within a second to set someone on fire.",
+  "Only the flamethrower ignites. Other fire damage does not.",
+  "Teammates cannot be set on fire.",
+  "The burn ends five seconds after the last flamethrower hit, and also ends early on entering water, taking a large explosive hit, taking any melee hit, or picking up a medical kit, first aid kit or super health.",
+]
+
+
+# ============================================================================
+
+["gibbing"]
+summary = "Deaths from heavy overkill damage blow the body apart."
+help = "This is the same feature as the Gibbing settings section, just switched on by the mutator."
+notes = [
+  "The damage threshold and whether non-explosive damage can gib are left at whatever the gibbing settings say.",
+]
+
+[[gibbing.sets]]
+key = "gibbing.enabled"
+value = true
+
+
+# ============================================================================
+
+["jetpacks"]
+summary = "Every player wears a jetpack and can thrust upward by holding jump in the air."
+notes = [
+  "The tank holds about five seconds of thrust and takes about seven and a half seconds to refill once you stop.",
+  "A player who runs the tank dry has to wait for a little fuel to come back before the jetpack answers the jump key again.",
+]
+
+
+# ============================================================================
+
+["humansvsbots"]
+summary = "Bots always play on the blue team and humans always on the red team."
+notes = [
+  "Players are put on their side as they join and again as they spawn, and a manual team change is refused with a message explaining why.",
+  "Spectators and server browsers are not forced onto either side.",
+]
+
+[[humansvsbots.sets]]
+key = "balance_teams"
+value = "ignored"
+note = "This mutator owns the team split, so the normal even-teams shuffle does not run."
+
+[[humansvsbots.sets]]
+key = "auto_team_balance"
+value = "ignored"
+note = "Automatic balancing is skipped for the same reason."
+
+
+# ============================================================================
+
+["delayedsupers"]
+summary = "Super health, super armor, invulnerability, the damage amplifier and the fusion launcher are missing at level start."
+help = "Each one appears for the first time only once its normal respawn time has gone by, so the opening of a round is not a race for the strongest items."
+notes = [
+  "After that first appearance the items respawn on their normal timers.",
+  "If Super Rail is on as well, the rail gun pickup is delayed too.",
+]
+
+[[delayedsupers.sets]]
+key = "delayed_items"
+value = "super health, super armor, invulnerability, damage amplifier, fusion launcher"
+
+
+# ============================================================================
+
+["weirdgungame"]
+summary = "Swaps Gun Game's weapon ladder for a list of odd and enemy-only weapons, finishing on the riot shield."
+help = "Only usable in Gun Game. The ladder includes things players do not normally get to fire, such as the jeep gun, the snake spit, a torpedo and the Capek cane."
+notes = [
+  "Any Gun Game weapon ladder or final weapon you configure yourself is ignored while this is on.",
+]
+
+[[weirdgungame.sets]]
+key = "gg_tiers"
+value = "a fixed built-in ladder of unusual weapons"
+
+[[weirdgungame.sets]]
+key = "gg_final_weapon"
+value = "riot shield"
+
+
+# ============================================================================
+
+["lowgravity"]
+summary = "The level runs at much lower gravity than normal."
+notes = [
+  "The same reduced gravity is used on every level, whatever the level itself asks for.",
+  "It affects projectiles as well as players, so grenades and rockets carry a lot further.",
+]
+
+
+# ============================================================================
+
+["skiing"]
+summary = "Hold crouch to slide along the ground almost without friction, picking up speed on any slope."
+help = "Steering while sliding curves your direction without costing speed. Strafing across your line of travel is what builds speed up."
+notes = [
+  "Slopes glide for a very long time. Level ground still bleeds speed off, so idle wiggling does not pay.",
+  "A slope too steep to stand on launches the player off it instead of being skied.",
+  "While any movement mutator is on, slam and heavy impact fall damage is turned off for the player. Ordinary landing fall damage still applies.",
+]
+
+
+# ============================================================================
+
+["dodging"]
+summary = "Double-tap a movement key, or crouch and press jump, to burst in that direction."
+notes = [
+  "A dodge only works on the ground, and there is about three quarters of a second of cooldown between dodges.",
+  "The crouch and jump form dodges in whichever direction the held movement keys point, so all eight directions are available.",
+  "A dodge never takes away speed you already had heading that way.",
+  "While any movement mutator is on, slam and heavy impact fall damage is turned off for the player. Ordinary landing fall damage still applies.",
+]
+
+
+# ============================================================================
+
+["pogo"]
+summary = "Holding jump bounces the player again the moment they land."
+notes = [
+  "Holding crouch stops the bounce, the same as a normal jump being refused while crouched.",
+  "While any movement mutator is on, slam and heavy impact fall damage is turned off for the player. Ordinary landing fall damage still applies.",
+]
+
+
+# ============================================================================
+
+["scorelimit"]
+summary = "Overrides the score limit for whichever game type is in play."
+help = "Which setting it lands on depends on the game type, since each one keeps its own limit. The option starts at the server's current value, so turning the mutator on without changing the number changes nothing."
+notes = [
+  "Game types with no score limit at all cannot use this, and the mutator is skipped there.",
+  "The value is clamped to at least 1.",
+]
+
+[[scorelimit.sets]]
+key = "individual_kill_limit"
+value = "the Score limit option"
+note = "Used in Deathmatch and Wipeout."
+
+[[scorelimit.sets]]
+key = "team_kill_limit"
+value = "the Score limit option"
+note = "Used in Team Deathmatch."
+
+[[scorelimit.sets]]
+key = "cap_limit"
+value = "the Score limit option"
+note = "Used in Capture the Flag."
+
+[[scorelimit.sets]]
+key = "koth_score_limit"
+value = "the Score limit option"
+note = "Used in King of the Hill."
+
+[[scorelimit.sets]]
+key = "dc_score_limit"
+value = "the Score limit option"
+note = "Used in Damage Control."
+
+[[scorelimit.sets]]
+key = "pit_score_limit"
+value = "the Score limit option"
+note = "Used in Pit."
+
+[[scorelimit.sets]]
+key = "gg_score_limit"
+value = "the Score limit option"
+note = "Used in Gun Game."
+
+[[scorelimit.sets]]
+key = "bag_score_limit"
+value = "the Score limit option"
+note = "Used in Bagman."
+
+[[scorelimit.sets]]
+key = "tbag_score_limit"
+value = "the Score limit option"
+note = "Used in Team Bagman."
+
+[[scorelimit.sets]]
+key = "sal_cap_limit"
+value = "the Score limit option"
+note = "Used in Salvage."
+
+
+# ============================================================================
+
+["idealplayers"]
+summary = "Overrides the player count the server treats as its target size."
+help = "The option starts at the server's current value, so turning the mutator on without changing the number changes nothing."
+notes = [
+  "This is the number bots fill the server up to, and the number the server advertises as the size it is aiming for.",
+  "The value is clamped to at least 1.",
+  "Not available in game types that cannot run bots.",
+]
+
+[[idealplayers.sets]]
+key = "ideal_player_count"
+value = "the Ideal players option"

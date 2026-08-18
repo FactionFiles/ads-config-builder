@@ -1,0 +1,552 @@
+# Plain-English labels for the server settings.
+# Covers every path in schema/generated/server.json "flat", plus the rcon profile
+# array, the per-level keys, the rules preset file keys and the bot profile keys.
+#
+# Namespaced keys used for the tables that are not part of "flat":
+#   levels.*        keys allowed inside a [[levels]] entry
+#   presets.*       keys allowed at the top of a rules preset file
+#   bot_profiles.*  keys allowed inside a bot profile file
+#
+# unit  = the unit the value is written in inside the config file
+# display = the unit to show the user, when it differs from the file unit
+
+# ---------------------------------------------------------------- name and players
+
+["ads_version"]
+page = "srv-basics"
+label = "Config file version"
+help = "Marks which version of the server config format this file is written in; the tool sets it for you and there is no reason to change it by hand."
+
+["server_name"]
+page = "srv-basics"
+label = "Server name"
+help = "The name people see in the in-game server list."
+
+["max_players"]
+page = "srv-basics"
+label = "Maximum players"
+help = "How many people can be connected at once, up to 32; pick a number your map rotation can actually hold."
+unit = "players"
+
+["upnp"]
+page = "srv-basics"
+label = "Try to open the port automatically"
+help = "Asks your router to forward the server's port. Helpful on a home connection, and ignored by most hosting providers."
+
+["fflink_gsk"]
+page = "srv-basics"
+label = "FactionFiles server key"
+help = "Links this server to your FactionFiles account so matches played here are reported to the site; paste the key FactionFiles gives you, or leave it empty."
+
+# ---------------------------------------------------------------- passwords and access
+
+["password"]
+page = "srv-access"
+label = "Join password"
+help = "Leave it empty for a server anyone can join; set one to keep the server private."
+
+["rcon_password"]
+page = "srv-access"
+label = "Admin password"
+help = "The old-style single admin password, limited to a fixed set of commands. Named admin profiles are the better option unless you need to support an older tool."
+
+["require_client_mod"]
+page = "srv-access"
+label = "Players must have the same mod loaded"
+help = "Only matters when the server runs a total conversion; turning it off lets people join without installing it, which will look wrong for them."
+
+["alpine_restrict"]
+page = "srv-access"
+label = "Alpine Faction requirements"
+help = "How much the server insists that players are running Alpine Faction rather than the original game."
+
+["alpine_restrict.advertise_alpine"]
+page = "srv-access"
+label = "Show as an Alpine server in the browser"
+help = "Tells the server list that this server uses Alpine features, so people know what they are joining."
+
+["alpine_restrict.only_welcome_alpine"]
+page = "srv-access"
+label = "Ask non-Alpine players to upgrade"
+help = "Players on the original game are still allowed in, but are told the server is meant for Alpine Faction."
+
+["alpine_restrict.clients_require_alpine"]
+page = "srv-access"
+label = "Require Alpine Faction"
+help = "Turn this on when your rules depend on features the original game does not have, such as mutators."
+
+["alpine_restrict.reject_non_alpine_clients"]
+page = "srv-access"
+label = "Turn away players on the original game"
+help = "Refuses the connection outright instead of letting people in and having the game behave oddly for them."
+
+["alpine_restrict.alpine_require_release_build"]
+page = "srv-access"
+label = "Require a released build"
+help = "Keeps out people running their own development builds of Alpine Faction, which is worth doing on a competitive server."
+
+["alpine_restrict.require_d3d11"]
+page = "srv-access"
+label = "Require the Direct3D 11 renderer"
+help = "Players still using the old renderer are kept out; only turn this on if your maps or rules need it."
+
+# ---------------------------------------------------------------- what players can turn off
+
+["allow_fullbright_meshes"]
+page = "srv-client"
+label = "Fully lit player models"
+help = "Lets players make everyone glow evenly so nobody can hide in a dark corner. Competitive servers often allow it; it does spoil the look of a map."
+
+["allow_lightmap_mode"]
+page = "srv-client"
+label = "Plain untextured level"
+help = "Lets players strip the level down to flat lighting, which makes other players easier to pick out."
+
+["allow_disable_screenshake"]
+page = "srv-client"
+label = "Screen shake"
+help = "Players may switch off the camera shake from explosions and heavy weapons."
+
+["allow_disable_muzzle_flash"]
+page = "srv-client"
+label = "Muzzle flash lights"
+help = "Players may switch off the light each shot throws, which some people find distracting."
+
+["allow_unlimited_fps"]
+page = "srv-client"
+label = "Unlimited frame rate"
+help = "Lets players go past the 240 frames per second cap. Some movement techniques behave differently at very high frame rates, so competitive servers usually leave this off."
+
+["allow_footsteps"]
+page = "srv-client"
+label = "Footstep sounds"
+help = "Players may switch their own footstep sounds off. Turning this off makes footsteps audible for everyone, which competitive servers usually want."
+
+["allow_outlines"]
+page = "srv-client"
+label = "Player outlines"
+help = "Lets players draw a colored outline around other players so they stand out against the level."
+
+["allow_outlines_xray"]
+page = "srv-client"
+label = "Outlines through walls"
+help = "Decides whether outlines show through solid geometry. Only has any effect while outlines are allowed at all, and seeing people through walls is a large advantage."
+
+["sprays"]
+page = "srv-client"
+label = "Sprays"
+help = "Player-made images that can be stuck on walls."
+
+["sprays.enabled"]
+page = "srv-client"
+label = "Players can spray images"
+help = "Turn it off on a server where you would rather not moderate what people put on the walls."
+
+["sprays.cooldown_ms"]
+page = "srv-client"
+label = "Wait between sprays"
+help = "How long a player must wait before spraying again, which is what stops someone papering a whole room."
+unit = "milliseconds"
+
+["click_limiter"]
+page = "srv-client"
+label = "Fire rate limit"
+help = "Caps how fast semi-automatic weapons can be fired, so a mouse macro is no better than a fast finger."
+
+["click_limiter.enabled"]
+page = "srv-client"
+label = "Limit semi-automatic fire rate"
+help = "Leave it on unless you specifically want people to be able to click as fast as their hardware allows."
+
+["click_limiter.cooldown"]
+page = "srv-client"
+label = "Minimum time between shots"
+help = "The shortest gap allowed between two semi-automatic shots; larger numbers make the limit stricter."
+unit = "milliseconds"
+
+# ---------------------------------------------------------------- voting
+
+["vote_match"]
+page = "srv-voting"
+label = "Vote to start a match"
+help = "Sets up an organized match between two teams, with a ready-up step before it begins."
+
+["vote_match.enabled"]
+page = "srv-voting"
+label = "Allow match votes"
+help = "Players can propose a match on a chosen map and team size."
+
+["vote_match.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_match.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_kick"]
+page = "srv-voting"
+label = "Vote to kick"
+help = "Lets players remove someone from the server without an admin present."
+
+["vote_kick.enabled"]
+page = "srv-voting"
+label = "Allow kick votes"
+help = "Handy on an unattended server, but it can be abused on a busy one."
+
+["vote_kick.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_kick.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_level"]
+page = "srv-voting"
+label = "Vote to change map"
+help = "Lets players pick the next map from a list you allow."
+
+["vote_level.enabled"]
+page = "srv-voting"
+label = "Allow map votes"
+help = "Players choose the next map instead of waiting for the rotation to reach it."
+
+["vote_level.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_level.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_level.add_rotation_to_allowed_levels"]
+page = "srv-voting"
+label = "Allow every map in the rotation"
+help = "Adds your whole rotation to what people may vote for, on top of anything you list separately."
+
+["vote_level.add_installed_to_allowed_levels"]
+page = "srv-voting"
+label = "Allow every map installed on the server"
+help = "Opens voting up to anything sitting in the server's map folder, which can include maps you never meant to run."
+
+["vote_level.only_allow_gametype_prefix"]
+page = "srv-voting"
+label = "Only allow maps named for a game mode"
+help = "Restricts voting to maps whose file name starts with a mode prefix, which is a rough way of keeping people from voting a single-player level."
+
+["vote_extend"]
+page = "srv-voting"
+label = "Vote to extend the round"
+help = "Adds more time to the map that is already being played."
+
+["vote_extend.enabled"]
+page = "srv-voting"
+label = "Allow extend votes"
+help = "Useful when a good game keeps getting cut short by the time limit."
+
+["vote_extend.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_extend.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_restart"]
+page = "srv-voting"
+label = "Vote to restart the map"
+help = "Starts the current map again from the beginning."
+
+["vote_restart.enabled"]
+page = "srv-voting"
+label = "Allow restart votes"
+help = "Lets players reset a game that started badly, for instance after a mass disconnect."
+
+["vote_restart.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_restart.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_next"]
+page = "srv-voting"
+label = "Vote to skip to the next map"
+help = "Moves straight on to whatever comes next in the rotation."
+
+["vote_next.enabled"]
+page = "srv-voting"
+label = "Allow skip votes"
+help = "A quick way off a map nobody is enjoying."
+
+["vote_next.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_next.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_rand"]
+page = "srv-voting"
+label = "Vote for a random map"
+help = "Jumps to a map picked at random from the rotation, or simply to the next one if the rotation is already shuffled."
+
+["vote_rand.enabled"]
+page = "srv-voting"
+label = "Allow random map votes"
+help = "Lets players move on without having to agree on where to."
+
+["vote_rand.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_rand.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+["vote_previous"]
+page = "srv-voting"
+label = "Vote to go back a map"
+help = "Returns to the map that was played before this one."
+
+["vote_previous.enabled"]
+page = "srv-voting"
+label = "Allow go-back votes"
+help = "Lets players return to a map that ended too soon."
+
+["vote_previous.ignore_nonvoters"]
+page = "srv-voting"
+label = "Ignore people who did not vote"
+help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+
+["vote_previous.time"]
+page = "srv-voting"
+label = "Time to vote"
+help = "How long the vote stays open before it is counted."
+unit = "seconds"
+
+# ---------------------------------------------------------------- idle players
+
+["inactivity"]
+page = "srv-idle"
+label = "Idle players"
+help = "Spot players who have stopped playing, and optionally remove them to free up a slot."
+
+["inactivity.enabled"]
+page = "srv-idle"
+label = "Watch for idle players"
+help = "Marks people who are not moving or shooting as idle, so team balancing and bot counts leave them out."
+
+["inactivity.kick_after_warning"]
+page = "srv-idle"
+label = "Remove idle players"
+help = "Warns an idle player first and then disconnects them if nothing changes. Leave it off to mark them as idle without ever kicking anyone."
+
+["inactivity.new_player_grace"]
+page = "srv-idle"
+label = "Grace period for new arrivals"
+help = "How long someone who has just joined is left alone, so a slow map load never gets them kicked."
+unit = "seconds"
+
+["inactivity.allowed_inactive"]
+page = "srv-idle"
+label = "How long counts as idle"
+help = "How long a player can go without doing anything before the server marks them idle."
+unit = "seconds"
+
+["inactivity.warning_duration"]
+page = "srv-idle"
+label = "Warning before the kick"
+help = "How long an idle player has to respawn or move after being warned, before they are disconnected."
+unit = "seconds"
+
+["inactivity.kick_message"]
+page = "srv-idle"
+label = "Warning message"
+help = "What an idle player is told just before they are removed."
+
+# ---------------------------------------------------------------- messages
+
+["send_stats_message"]
+page = "rules-msg"
+label = "End of map stats"
+help = "Sends each player a private summary of how they did when a map ends."
+
+["damage_notifications"]
+page = "rules-msg"
+label = "Damage feedback"
+help = "Tells players how much damage they dealt to whoever they just hit."
+
+["damage_notifications.enabled"]
+page = "rules-msg"
+label = "Show damage numbers"
+help = "Players see the damage they dealt on screen, which makes it much easier to judge a fight."
+
+["damage_notifications.support_legacy"]
+page = "rules-msg"
+label = "Fall back to a hit sound"
+help = "Players on the original game cannot show damage numbers, so send them the old hit sound instead of nothing."
+
+# ---------------------------------------------------------------- damage and physics (server-wide)
+
+["gaussian_spread"]
+page = "rules-damage"
+label = "Smoother bullet spread"
+help = "Makes shots cluster near the middle of the crosshair rather than landing anywhere in the spread cone, so inaccurate weapons feel fairer."
+
+["use_sp_damage_calculation"]
+page = "rules-damage"
+label = "Use single-player damage numbers"
+help = "Switches to the damage math the single-player campaign uses, which changes how much armor absorbs; almost every server leaves this off."
+
+# ---------------------------------------------------------------- rotation
+
+["dynamic_rotation"]
+page = "rotation"
+label = "Shuffle the map order"
+help = "Reshuffles the rotation each time it reaches the end, so the server does not play the same sequence forever."
+
+["levels"]
+page = "rotation"
+label = "Map rotation"
+help = "The maps this server plays, in order, each optionally with rules of its own."
+
+["levels.filename"]
+page = "rotation"
+label = "Map file"
+help = "The .rfl file name of the map, which has to be installed on the server or downloadable from FactionFiles."
+
+["levels.rules"]
+page = "rotation"
+label = "Rules just for this map"
+help = "Anything set here overrides the base rules for this one map only, and everything else is inherited."
+
+["levels.rules_presets"]
+page = "rotation"
+label = "Presets for this map"
+help = "Rules preset files applied to this map before its own rule changes, in the order listed."
+
+# ---------------------------------------------------------------- bots
+
+["bot_shared_secret"]
+page = "bots"
+label = "Bot join code"
+help = "A number a bot client must present to be accepted as a bot; leave it at zero to refuse bot connections entirely."
+
+["bot_profiles"]
+page = "bots"
+label = "Bot profiles"
+help = "Each bot on the server is one profile file listed here, so adding a bot means adding a file."
+
+["bot_profiles.player_name"]
+page = "bots"
+label = "Bot name"
+help = "The name this bot plays under; leave it empty to give it a random one."
+
+["bot_profiles.mp_character"]
+page = "bots"
+label = "Bot character"
+help = "The character model this bot uses; leave it empty to pick one at random."
+
+["bot_profiles.personality_preset"]
+page = "bots"
+label = "Personality"
+help = "How the bot behaves, for instance cautious or aggressive; set it to random to vary it each time."
+
+["bot_profiles.skill_preset"]
+page = "bots"
+label = "Skill"
+help = "How good the bot is at aiming and reacting; pick something close to the people who play here."
+
+["bot_profiles.personality_overrides"]
+page = "bots"
+label = "Personality adjustments"
+help = "Change individual traits away from the chosen personality, for a bot that is mostly cautious but never retreats, say."
+
+["bot_profiles.skill_overrides"]
+page = "bots"
+label = "Skill adjustments"
+help = "Change individual skill values away from the chosen skill level, such as aim without changing reaction time."
+
+["bot_profiles.quirks"]
+page = "bots"
+label = "Quirks"
+help = "Optional habits that give a bot some character, each switched on or off on its own."
+
+# ---------------------------------------------------------------- admin access
+
+["rcon_profiles"]
+page = "admin"
+label = "Admin profiles"
+help = "Named admin passwords, each allowed to run only the commands you pick, so you can hand out moderation without handing out everything."
+
+["rcon_profiles.name"]
+page = "admin"
+label = "Profile name"
+help = "A label for this set of permissions, such as Moderators; it is only used in logs and in the config print."
+
+["rcon_profiles.password"]
+page = "admin"
+label = "Password"
+help = "What someone types to claim this profile; up to 15 characters, and anything longer is cut off."
+
+["rcon_profiles.full_admin"]
+page = "admin"
+label = "Can run every command"
+help = "Grants unrestricted admin access, which makes the command list below meaningless. Give this to yourself and almost nobody else."
+
+["rcon_profiles.allow_multiple"]
+page = "admin"
+label = "Several people can use it at once"
+help = "Leave it off for a single-holder password; turn it on for a shared moderator login."
+
+["rcon_profiles.allowed_commands"]
+page = "admin"
+label = "Commands this profile may run"
+help = "Pick exactly what this profile can do, for instance kicking and changing the map but not editing the rules."
+
+# ---------------------------------------------------------------- presets
+
+["base"]
+page = "rules-mode"
+label = "Base game rules"
+help = "The rules every map uses unless that map overrides them."
+
+["rules_preset_aliases"]
+page = "presets"
+label = "Preset shortcuts"
+help = "Short names for preset files so you can refer to them by name, including from an in-game vote, instead of typing a path."
+
+["presets.rules"]
+page = "presets"
+label = "Rules in this preset"
+help = "The rule changes a preset file carries; a preset may also put these at the top of the file instead of nesting them."
+
+["presets.rules_presets"]
+page = "presets"
+label = "Presets this preset builds on"
+help = "Other preset files applied first, so you can layer a house ruleset on top of a shared one."

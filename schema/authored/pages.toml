@@ -1,0 +1,115 @@
+# Page definitions for the settings UI.
+# Ids and titles are fixed by the approved prototype - do not rename them.
+# scope: server | rules | other
+
+[[page]]
+id = "srv-basics"
+title = "Name & players"
+scope = "server"
+order = 1
+blurb = "How your server appears in the browser and how many people can join."
+
+[[page]]
+id = "srv-access"
+title = "Passwords & access"
+scope = "server"
+order = 2
+blurb = "Who is allowed to join, and what kind of game client they have to be running."
+
+[[page]]
+id = "srv-client"
+title = "What players can turn off"
+scope = "server"
+order = 3
+blurb = "Visual, audio and cosmetic options you let players change on their own machine."
+
+[[page]]
+id = "srv-voting"
+title = "Voting"
+scope = "server"
+order = 4
+blurb = "Which votes players are allowed to call, and how long each vote runs."
+
+[[page]]
+id = "srv-idle"
+title = "Idle players"
+scope = "server"
+order = 5
+blurb = "Warn and remove players who stop playing."
+
+[[page]]
+id = "rules-mode"
+title = "Mode & scoring"
+scope = "rules"
+order = 6
+blurb = "Which game mode is played, how long it runs, and what it takes to win."
+
+[[page]]
+id = "rules-mutators"
+title = "Mutators"
+scope = "rules"
+order = 7
+blurb = "Ready-made rule changes you can switch on, like Instagib or Low Gravity."
+
+[[page]]
+id = "rules-spawn"
+title = "Spawning"
+scope = "rules"
+order = 8
+blurb = "What players get when they respawn, and where they appear."
+
+[[page]]
+id = "rules-weapons"
+title = "Weapons & items"
+scope = "rules"
+order = 9
+blurb = "What can be picked up, how fast it comes back, and what it turns into."
+
+[[page]]
+id = "rules-damage"
+title = "Damage & physics"
+scope = "rules"
+order = 10
+blurb = "How hard players hit each other, and how the world reacts."
+
+[[page]]
+id = "rules-msg"
+title = "Messages"
+scope = "rules"
+order = 11
+blurb = "What the server tells players while they are on it."
+
+[[page]]
+id = "rotation"
+title = "All maps"
+scope = "other"
+order = 12
+blurb = "The list of maps the server plays, and the order it plays them in."
+
+[[page]]
+id = "bots"
+title = "Bots"
+scope = "other"
+order = 13
+blurb = "Computer-controlled players that fill out a quiet server."
+
+[[page]]
+id = "admin"
+title = "Admin access"
+scope = "other"
+order = 14
+blurb = "Named admin passwords, each allowed to run only the commands you pick."
+
+[[page]]
+id = "presets"
+title = "Presets"
+scope = "other"
+order = 15
+blurb = "Sets of game rules saved on their own so other servers can reuse them."
+
+[[page]]
+id = "checks"
+title = "Problems"
+scope = "other"
+order = 16
+blurb = "Things in this config that look wrong or will not work together."

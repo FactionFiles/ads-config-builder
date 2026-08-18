@@ -7,6 +7,7 @@
   import SettingsPage from './lib/ui/SettingsPage.svelte'
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
   import RotationPage from './lib/ui/RotationPage.svelte'
+  import AdminPage from './lib/ui/AdminPage.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
@@ -290,6 +291,12 @@
         onchange={next => (doc.levels = next)}
         onopen={i => go(rulesPages[0].id, i)}
         onopenbase={() => go(rulesPages[0].id)}
+      />
+    {:else if page?.id === 'admin'}
+      <AdminPage
+        profiles={doc.rconProfiles}
+        legacyPassword={(doc.server.rcon_password as string) ?? ''}
+        onchange={next => (doc.rconProfiles = next)}
       />
     {:else if page?.id === 'rules-mutators'}
       <MutatorsPage

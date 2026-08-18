@@ -4,7 +4,7 @@
 // setting say honestly that nobody has touched it.
 
 import { parse, stringify } from 'smol-toml'
-import { meta, rulesIndex, serverIndex } from '../schema'
+import { meta, rulesIndex, server as serverSchema, serverIndex } from '../schema'
 import type { SchemaKey } from '../schema/types'
 import type { MutatorDeclaration } from './resolve'
 
@@ -31,10 +31,22 @@ export interface LevelEntry {
   unknown: ManualKeys
 }
 
+/**
+ * One admin profile. The fields are keyed by their schema key rather than named
+ * here, so the page renders them from the schema like every other setting and
+ * the key names live in exactly one place.
+ */
+export interface RconProfile {
+  fields: ManualKeys
+  /** anything else in this profile entry, kept verbatim */
+  unknown: ManualKeys
+}
+
 export interface ConfigDocument {
   server: ManualKeys
   base: RulesScope
   levels: LevelEntry[]
+  rconProfiles: RconProfile[]
   /**
    * Keys we did not recognize when the file was opened, kept verbatim so a
    * config written by a newer Alpine survives a round trip through this tool
@@ -48,7 +60,11 @@ export function emptyScope(): RulesScope {
 }
 
 export function emptyDocument(): ConfigDocument {
-  return { server: {}, base: emptyScope(), levels: [], unknown: {} }
+  return { server: {}, base: emptyScope(), levels: [], rconProfiles: [], unknown: {} }
+}
+
+export function emptyRconProfile(): RconProfile {
+  return { fields: {}, unknown: {} }
 }
 
 export function emptyLevel(filename: string): LevelEntry {
@@ -113,6 +129,10 @@ export function toToml(doc: ConfigDocument): string {
 
   const base = scopeToToml(doc.base)
   if (Object.keys(base).length) root.base = base
+
+  if (doc.rconProfiles.length) {
+    root.rcon_profiles = doc.rconProfiles.map(p => ({ ...p.fields, ...p.unknown }))
+  }
 
   if (doc.levels.length) {
     root.levels = doc.levels.map(level => ({
@@ -236,9 +256,25 @@ function levelFromToml(table: Record<string, unknown>, report: ImportReport): Le
   return level
 }
 
+const rconFields = new Set(
+  (serverSchema.arrays.find(a => a.key === 'rcon_profiles')?.keys ?? []).map(k => k.key)
+)
+
+function rconProfileFromToml(table: Record<string, unknown>, report: ImportReport): RconProfile {
+  const profile = emptyRconProfile()
+  for (const [key, value] of Object.entries(table)) {
+    if (rconFields.has(key)) profile.fields[key] = value
+    else {
+      profile.unknown[key] = value
+      report.unrecognized.push(`rcon_profiles.${key}`)
+    }
+  }
+  return profile
+}
+
 export function fromToml(text: string): ImportReport {
   const root = parse(text) as Record<string, unknown>
-  const { ads_version, base, levels, ...server } = root
+  const { ads_version, base, levels, rcon_profiles, ...server } = root
 
   const report: ImportReport = {
     doc: emptyDocument(),
@@ -252,6 +288,10 @@ export function fromToml(text: string): ImportReport {
   report.unrecognized.push(...parts.unrecognized)
   report.doc.server = parts.manual
   report.doc.unknown = parts.unknown
+
+  if (Array.isArray(rcon_profiles)) {
+    report.doc.rconProfiles = rcon_profiles.filter(isTable).map(p => rconProfileFromToml(p, report))
+  }
 
   if (isTable(base)) report.doc.base = scopeFromToml(base, report)
   if (Array.isArray(levels)) {

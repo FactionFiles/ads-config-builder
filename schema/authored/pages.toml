@@ -1,5 +1,6 @@
 # Page definitions for the settings UI.
-# Ids and titles are fixed by the approved prototype - do not rename them.
+# Ids are fixed - they are in the URL. Titles follow the approved prototype
+# unless we deliberately change one.
 # scope: server | rules | other
 
 [[page]]
@@ -95,10 +96,10 @@ blurb = "Computer-controlled players that fill out a quiet server."
 
 [[page]]
 id = "admin"
-title = "Admin access"
+title = "Advanced admin access"
 scope = "other"
 order = 14
-blurb = "Named admin passwords, each allowed to run only the commands you pick."
+blurb = "Several named admin passwords, each allowed to run only the commands you pick."
 
 [[page]]
 id = "presets"

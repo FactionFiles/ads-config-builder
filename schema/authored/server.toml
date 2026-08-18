@@ -48,7 +48,7 @@ help = "Leave it empty for a server anyone can join; set one to keep the server 
 ["rcon_password"]
 page = "srv-access"
 label = "Admin password"
-help = "The old-style single admin password, limited to a fixed set of commands. Named admin profiles are the better option unless you need to support an older tool."
+help = "A single password that lets somebody run a fixed set of admin commands. For separate passwords with different powers, see Advanced admin access."
 
 ["require_client_mod"]
 page = "srv-access"

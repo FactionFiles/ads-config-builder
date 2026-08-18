@@ -16,13 +16,15 @@
     /** the control alone, for editing several maps at once where no single
      *  provenance answer exists */
     bare?: boolean
+    /** false on repeats of the same field, where the help was already read once */
+    showHelp?: boolean
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
   }
 
   const {
-    scope, path, resolved, levelScope = false, offMode, bare = false,
+    scope, path, resolved, levelScope = false, offMode, bare = false, showHelp = true,
     onchange, onreset, onprovenance,
   }: Props = $props()
 
@@ -72,7 +74,7 @@
 <div class="fr" class:inert class:offmode={offMode}>
   <div>
     <div class="lab">{text.label}</div>
-    {#if text.help}<div class="help">{text.help}</div>{/if}
+    {#if text.help && showHelp}<div class="help">{text.help}</div>{/if}
     {#if offMode}
       <div class="warn">{offMode}</div>
     {/if}

@@ -122,6 +122,20 @@ export function resolveServer(manual: Record<string, unknown>): ResolvedRules {
   return out
 }
 
+/**
+ * One entry of an array of tables, against the built-in defaults for its fields.
+ * Nothing layers here - an admin profile is not inherited from anywhere - but
+ * the fields still render through the shared field renderer, which wants a
+ * resolved map and a value for a field nobody has touched.
+ */
+export function resolveEntry(root: SchemaKey, fields: Record<string, unknown>): ResolvedRules {
+  const out = collectDefaults([root])
+  for (const [key, value] of Object.entries(fields)) {
+    contribute(out, `${root.key}.${key}`, { layer: 'manual', value })
+  }
+  return out
+}
+
 function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
   const apply = (ops: DefaultOp[]) => {
     for (const op of ops) {

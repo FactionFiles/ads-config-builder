@@ -35,6 +35,14 @@
     return key?.kind === 'scalar' && (key as { global?: boolean }).global === true
   }
 
+  // Only a scalar this config file actually holds gets a field. A table or list
+  // has a page of its own or none yet, and the authored layer also describes keys
+  // that belong to other documents - a bot profile, a preset - which are labeled
+  // for completeness and would be written into the wrong file from here.
+  function isEditable(scope: Scope, path: string) {
+    return schemaFor(scope, path)?.kind === 'scalar'
+  }
+
   interface Group { key: string; title: string; help: string; entries: Entry[] }
 
   // settings on this page, gathered under the group they belong to. the group is
@@ -69,6 +77,7 @@
         g.help = text.help
         continue
       }
+      if (!isEditable(entry.scope, entry.path)) continue
       const cut = entry.path.lastIndexOf('.')
       group(cut === -1 ? '' : entry.path.slice(0, cut), entry.scope).entries.push(entry)
     }

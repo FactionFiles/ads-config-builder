@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.vite/
+
+# produced at build time by tools/gen-schema
+schema/generated/
+
+.DS_Store
+*.local

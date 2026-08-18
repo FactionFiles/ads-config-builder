@@ -2,6 +2,7 @@
   import { choiceBlurbFor, choiceLabelsFor, schemaFor, textFor, type Scope } from '../../schema'
   import type { ScalarKey } from '../../schema/types'
   import { tableFor } from '../gamedata'
+  import { toDisplay, toFile, unitFor } from '../format'
   import type { Resolved, ResolvedRules } from '../resolve'
   import ProvenanceDot from './ProvenanceDot.svelte'
 
@@ -50,18 +51,8 @@
   )
 
   // the unit the file stores, and what to show instead when they differ
-  const shown = $derived(displayValue(value))
-  function displayValue(v: unknown) {
-    if (typeof v !== 'number') return v
-    if (text.display === 'minutes' && text.unit === 'seconds') return v / 60
-    return v
-  }
-  function fileValue(v: number) {
-    if (text.display === 'minutes' && text.unit === 'seconds') return v * 60
-    return v
-  }
-
-  const unitLabel = $derived(text.display ?? text.unit)
+  const shown = $derived(toDisplay(text, value))
+  const unitLabel = $derived(unitFor(text))
   const choiceBlurb = $derived(
     typeof value === 'string' ? choiceBlurbFor(scope, path, value) : undefined
   )
@@ -70,7 +61,7 @@
   function setBool(next: boolean) { onchange?.(path, next) }
   function setNumber(raw: string) {
     const n = Number(raw)
-    if (Number.isFinite(n)) onchange?.(path, fileValue(n))
+    if (Number.isFinite(n)) onchange?.(path, toFile(text, n))
   }
 </script>
 

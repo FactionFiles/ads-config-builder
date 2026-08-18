@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { schemaFor, textFor, type Scope } from '../../schema'
+  import { choiceBlurbFor, choiceLabelsFor, schemaFor, textFor, type Scope } from '../../schema'
   import type { ScalarKey } from '../../schema/types'
   import { tableFor } from '../gamedata'
   import type { Resolved, ResolvedRules } from '../resolve'
@@ -10,13 +10,15 @@
     path: string
     resolved: ResolvedRules
     levelScope?: boolean
+    /** set when the mode in play ignores this setting, worded for the user */
+    offMode?: string
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
   }
 
   const {
-    scope, path, resolved, levelScope = false, onchange, onreset, onprovenance,
+    scope, path, resolved, levelScope = false, offMode, onchange, onreset, onprovenance,
   }: Props = $props()
 
   const schema = $derived(schemaFor(scope, path))
@@ -39,8 +41,9 @@
     return parts.join('.')
   }
 
+  const choiceLabels = $derived(choiceLabelsFor(scope, path))
   const options = $derived(
-    scalar?.choices?.map(c => ({ value: c, label: text.choiceLabels?.[c] ?? c }))
+    scalar?.choices?.map(c => ({ value: c, label: choiceLabels?.[c] ?? c }))
       ?? (scalar?.lookup
         ? tableFor(scalar.lookup).map(e => ({ value: e.name, label: e.display }))
         : undefined)
@@ -59,6 +62,9 @@
   }
 
   const unitLabel = $derived(text.display ?? text.unit)
+  const choiceBlurb = $derived(
+    typeof value === 'string' ? choiceBlurbFor(scope, path, value) : undefined
+  )
   const canReset = $derived(current !== undefined && (current.layer === 'manual'))
 
   function setBool(next: boolean) { onchange?.(path, next) }
@@ -68,10 +74,13 @@
   }
 </script>
 
-<div class="fr" class:inert>
+<div class="fr" class:inert class:offmode={offMode}>
   <div>
     <div class="lab">{text.label}</div>
     {#if text.help}<div class="help">{text.help}</div>{/if}
+    {#if offMode}
+      <div class="warn">{offMode}</div>
+    {/if}
     {#if scalar?.typeMismatch}
       <div class="warn">
         The server reads this as {scalar.typeMismatch.readAs} but stores it as
@@ -137,6 +146,10 @@
         onopen={anchor => onprovenance?.(path, anchor)}
       />
     </div>
+
+    {#if choiceBlurb}
+      <div class="blurb">{choiceBlurb}</div>
+    {/if}
 
     {#if canReset}
       <div class="src {levelScope ? 'map' : 'you'}">

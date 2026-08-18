@@ -35,6 +35,7 @@
   const serverSettings = $derived<ResolvedRules>(resolveServer(doc.server))
 
   const resolved = $derived<Record<Scope, ResolvedRules>>({ rules: baseRules, server: serverSettings })
+  const gameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
 
   function change(scope: Scope, path: string, value: unknown) {
@@ -106,7 +107,7 @@
       {#if page.blurb}<p class="blurb">{page.blurb}</p>{/if}
       <SettingsPage
         page={page.id}
-        gameType={(baseRules.get('game_type')?.value as string) ?? ''}
+        {gameType}
         {resolved}
         onchange={change}
         onreset={reset}

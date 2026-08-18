@@ -14,7 +14,7 @@ import consoleLabelsJson from '../../schema/generated/console-labels.json'
 import authoredJson from '../../schema/generated/authored.json'
 
 import type {
-  AuthoredEntry, ConsoleLabel, GameTypesSchema, MutatorEffect, MutatorsSchema,
+  AuthoredEntry, ConsoleLabel, GameTypesSchema, Mutator, MutatorEffect, MutatorsSchema,
   Page, RulesSchema, SchemaKey, SchemaMeta, ServerSchema,
 } from './types'
 
@@ -71,6 +71,24 @@ export function textFor(scope: Scope, path: string): AuthoredEntry {
   }
 }
 
+/**
+ * Display names for a setting's choices. The game mode names come from the
+ * game's own mode list rather than the authored layer, so a mode added upstream
+ * shows up named instead of as a bare config token.
+ */
+export function choiceLabelsFor(scope: Scope, path: string): Record<string, string> | undefined {
+  if (scope === 'rules' && path === 'game_type') {
+    return Object.fromEntries(gametypes.gametypes.map(g => [g.name, g.title]))
+  }
+  return textFor(scope, path).choiceLabels
+}
+
+/** the game's own one-line description of a choice, where it has one */
+export function choiceBlurbFor(scope: Scope, path: string, choice: string): string | undefined {
+  if (scope === 'rules' && path === 'game_type') return gametypesByName.get(choice)?.blurb
+  return undefined
+}
+
 export function pagesForScope(scope: Page['scope']): Page[] {
   return pages.filter(p => p.scope === scope)
 }
@@ -92,17 +110,68 @@ export function entriesForPage(page: string) {
 
 export const gametypesByName = new Map(gametypes.gametypes.map(g => [g.name, g]))
 
-/**
- * Every setting that is some mode's score limit. Alpine keeps one key per mode
- * and reads only the one belonging to the mode in play, so showing all nine at
- * once - which is what the old builder did - asks the user to work out which of
- * them matters. Only the live one is shown.
- */
-export const scoreLimitKeys = new Set(
-  gametypes.gametypes.map(g => g.scoreLimitKey).filter((k): k is string => k !== null)
-)
+export const allModes = gametypes.gametypes.map(g => g.name)
 
-export function scoreLimitKeyFor(mode: string): string | null {
-  return gametypesByName.get(mode)?.scoreLimitKey ?? null
+/**
+ * Which modes a setting has any effect in, or null when it applies everywhere.
+ *
+ * Two families are gated by the generated schema rather than by hand, because
+ * the game states the answer itself and a hand-written copy would drift: the
+ * per-mode score limits, and the rounds settings. Everything else comes from the
+ * authored layer, where the modes were read off the code that consumes the
+ * setting. check-schema.mjs rejects an authored hint on a derived key.
+ */
+const derivedModes = new Map<string, string[]>()
+for (const g of gametypes.gametypes) {
+  if (g.scoreLimitKey) {
+    derivedModes.set(g.scoreLimitKey, [...(derivedModes.get(g.scoreLimitKey) ?? []), g.name])
+  }
 }
+const roundModes = gametypes.gametypes.filter(g => g.usesRounds).map(g => g.name)
+for (const path of rules.flat) {
+  if (path === 'rounds' || path.startsWith('rounds.')) derivedModes.set(path, roundModes)
+}
+
+const teamModes = gametypes.gametypes.filter(g => g.isTeam).map(g => g.name)
+
+export function modesFor(scope: Scope, path: string): string[] | null {
+  const derived = scope === 'rules' ? derivedModes.get(path) : undefined
+  if (derived) return derived
+  const entry = textFor(scope, path)
+  if (entry.teamOnly) return teamModes
+  if (entry.modes) return entry.modes
+  if (entry.notModes) return allModes.filter(m => !entry.notModes!.includes(m))
+  return null
+}
+
+export function appliesToMode(scope: Scope, path: string, mode: string): boolean {
+  const modes = modesFor(scope, path)
+  return modes === null || modes.includes(mode)
+}
+
+/** mode names as the user reads them, for "only applies in ..." wording */
+export function modeTitles(modes: string[]): string {
+  const titles = modes.map(m => gametypesByName.get(m)?.title ?? m)
+  if (titles.length <= 1) return titles.join('')
+  return `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}`
+}
+/**
+ * The modes a mutator can be used in. Alpine turns each requirement into a game
+ * type mask at startup; the same answer falls out of the generated mode list, so
+ * this reads the requirement rather than copying the mask.
+ */
+export function modesForMutator(m: Mutator): string[] {
+  switch (m.gametypeReq) {
+    case 'TeamOnly': return gametypes.gametypes.filter(g => g.isTeam).map(g => g.name)
+    case 'GunGameOnly': return gametypes.gametypes.filter(g => g.name === 'gg').map(g => g.name)
+    case 'HasScoreLimit': return gametypes.gametypes.filter(g => g.scoreLimitKey).map(g => g.name)
+    case 'BotsSupported': return gametypes.gametypes.filter(g => g.botsSupported).map(g => g.name)
+    default: return allModes
+  }
+}
+
+export function mutatorAllowsMode(m: Mutator, mode: string): boolean {
+  return modesForMutator(m).includes(mode)
+}
+
 export const mutatorsByName = new Map(mutators.mutators.map(m => [m.name, m]))

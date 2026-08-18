@@ -65,9 +65,15 @@ export interface RulesSchema {
 export interface GameType {
   name: string
   aliases: string[]
+  /** the game's own name for the mode, e.g. "Capture the Flag" */
+  title: string
+  /** the game's own one-line description of the mode */
+  blurb: string
   id: number
   isTeam: boolean
   botsSupported: boolean
+  /** plays several short rounds on one map rather than one continuous match */
+  usesRounds: boolean
   /** the rules key this mode is scored by, or null when it has no numeric limit */
   scoreLimitKey: string | null
 }
@@ -152,6 +158,13 @@ export interface AuthoredEntry {
   display?: string
   uncertain?: boolean
   choiceLabels?: Record<string, string>
+  /** the modes this setting has any effect in; absent means every mode */
+  modes?: string[]
+  /** the modes it has no effect in - safer than a long `modes` list, since a
+   *  mode added upstream stays included rather than silently dropping out */
+  notModes?: string[]
+  /** it only does anything in modes that have teams, whichever those are */
+  teamOnly?: boolean
 }
 
 export interface Page {
@@ -165,6 +178,13 @@ export interface Page {
 export interface MutatorEffect {
   summary: string
   help?: string
-  sets?: { key: string; value: unknown; note?: string }[]
+  sets?: {
+    key: string
+    /** a literal the mutator writes, or prose when the effect is not a value */
+    value?: unknown
+    /** the mutator option this setting takes its value from */
+    fromOption?: string
+    note?: string
+  }[]
   notes?: string[]
 }

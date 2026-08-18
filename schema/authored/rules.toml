@@ -3,6 +3,15 @@
 #
 # unit  = the unit the value is written in inside the config file
 # display = the unit to show the user, when it differs from the file unit
+#
+# Mode gating, for settings the server only reads in some game modes. Set at
+# most one of them, and read the answer off the code that consumes the setting
+# rather than off the key name:
+#   modes    = the modes it works in
+#   notModes = the modes it does nothing in, for when that list is the short one
+#   teamOnly = true, for anything gated on the mode having teams
+# The per-mode score limits and the rounds settings are gated by the generator
+# instead, since Alpine states which modes those apply to itself.
 
 # ---------------------------------------------------------------- the match
 
@@ -10,22 +19,6 @@
 page = "rules-mode"
 label = "Game mode"
 help = "The kind of game played on every map that does not pick its own; changing it resets that mode's own defaults, like the starting weapon and the respawn delay."
-
-[game_type.choiceLabels]
-dm = "Deathmatch"
-ctf = "Capture the Flag"
-tdm = "Team Deathmatch"
-koth = "King of the Hill"
-dc = "Damage Control"
-rev = "Revolt"
-run = "Run"
-esc = "Escalation"
-bag = "Bagman"
-tbag = "Team Bagman"
-pit = "Pit"
-wo = "Wipeout"
-gg = "Gun Game"
-sal = "Salvage"
 
 ["mutators"]
 page = "rules-mutators"
@@ -38,6 +31,7 @@ label = "Round length"
 help = "How long a map runs before the next one loads."
 unit = "seconds"
 display = "minutes"
+notModes = ["pit", "wo"]
 
 ["overtime"]
 page = "rules-mode"
@@ -48,22 +42,26 @@ help = "Keep playing past the time limit when the scores are tied."
 page = "rules-mode"
 label = "Play overtime on a tie"
 help = "When time runs out with the scores level, give both sides extra time to break the tie instead of ending the map."
+notModes = ["run", "pit", "wo", "gg"]
 
 ["overtime.time"]
 page = "rules-mode"
 label = "Extra time"
 help = "How much longer play continues once overtime starts."
 unit = "minutes"
+notModes = ["run", "pit", "wo", "gg"]
 
 ["overtime.tie_when_flag_stolen"]
 page = "rules-mode"
 label = "Treat a stolen flag as a tie"
 help = "In Capture the Flag, go to overtime when a flag is being carried as time expires, even if one team is ahead."
+modes = ["ctf", "sal"]
 
 ["overtime.tie_when_hill_contested"]
 page = "rules-mode"
 label = "Treat a contested hill as a tie"
 help = "In King of the Hill, go to overtime when both teams are standing on the hill as time expires, even if one team is ahead."
+modes = ["koth"]
 
 ["rounds"]
 page = "rules-mode"
@@ -163,61 +161,72 @@ page = "rules-mode"
 label = "Dropped bag return time"
 help = "How long a dropped bag lies on the ground in Bagman before it returns to its start point on its own."
 unit = "seconds"
+modes = ["bag", "tbag"]
 
 ["bag_spawn_delay"]
 page = "rules-mode"
 label = "Bag spawn delay"
 help = "How long a fresh map runs in Bagman before the bag first appears, so nobody can grab it on the opening rush."
 unit = "seconds"
+modes = ["bag", "tbag"]
 
 ["sal_flag_spawn_delay"]
 page = "rules-mode"
 label = "Salvage flag spawn delay"
 help = "How long a fresh map runs in Salvage before the flag first appears, so nobody can grab it on the opening rush."
 unit = "seconds"
+modes = ["sal"]
 
 ["sal_flag_capture_respawn_delay"]
 page = "rules-mode"
 label = "Salvage flag delay after a capture"
 help = "How long the map waits before putting a new flag out once a team has scored in Salvage."
 unit = "seconds"
+modes = ["sal"]
 
 ["sal_flag_return_time"]
 page = "rules-mode"
 label = "Salvage dropped flag return time"
 help = "How long a dropped flag lies on the ground in Salvage before it goes back to its start point."
 unit = "seconds"
+modes = ["sal"]
 
 ["flag_dropping"]
 page = "rules-mode"
 label = "Players can drop the flag"
-help = "Lets a flag carrier hand the flag off deliberately in Capture the Flag instead of only losing it when killed."
+help = "Lets a flag carrier hand the flag off deliberately instead of only losing it when killed."
+modes = ["ctf", "sal"]
 
 ["flag_captures_while_stolen"]
 page = "rules-mode"
 label = "Capture while your own flag is missing"
 help = "Lets a team score in Capture the Flag even while an enemy is carrying their flag, rather than having to get it back first."
+modes = ["ctf"]
 
 ["flag_return_time"]
 page = "rules-mode"
 label = "Dropped flag return time"
 help = "How long a dropped flag lies on the ground in Capture the Flag before it returns to base on its own."
 unit = "seconds"
+modes = ["ctf"]
 
 ["gg_rampage_rewards"]
 page = "rules-mode"
 label = "Reward Gun Game streaks"
 help = "Give a random powerup to any player who climbs a whole weapon level without dying in Gun Game."
+modes = ["gg"]
 
 ["gg_tiers"]
 page = "rules-mode"
 label = "Gun Game weapon ladder"
 help = "The order weapons are handed out in Gun Game, as groups that are shuffled for each player; leave it empty to use the built-in ladder."
+modes = ["gg"]
 
 ["gg_final_weapon"]
 page = "rules-mode"
 label = "Gun Game final weapon"
 help = "The weapon a player has to get their last kill with to win Gun Game."
+modes = ["gg"]
 
 # ---------------------------------------------------------------- teams and population
 
@@ -225,16 +234,19 @@ help = "The weapon a player has to get their last kill with to win Gun Game."
 page = "rules-mode"
 label = "Teammates can hurt each other"
 help = "Turn this on for a stricter game where a careless rocket costs your own side."
+teamOnly = true
 
 ["balance_teams"]
 page = "rules-mode"
 label = "Put new players on the smaller team"
 help = "Assigns anyone joining or changing team to whichever side has fewer players."
+teamOnly = true
 
 ["auto_team_balance"]
 page = "rules-mode"
 label = "Even out the teams during a match"
 help = "Moves a player across at the moment they die if the sides have drifted badly apart, instead of waiting for the next map."
+teamOnly = true
 
 ["ideal_player_count"]
 page = "rules-mode"
@@ -267,12 +279,14 @@ help = "The weapon a player is holding the moment they spawn."
 page = "rules-spawn"
 label = "Weapon"
 help = "Which weapon players are holding when they appear; each game mode picks its own unless you set one here."
+notModes = ["gg"]
 
 ["spawn_weapon.clips"]
 page = "rules-spawn"
 label = "Spare clips"
 help = "How many extra clips of ammunition the starting weapon comes with."
 unit = "clips"
+notModes = ["gg"]
 
 ["spawn_life"]
 page = "rules-spawn"
@@ -352,6 +366,7 @@ help = "How the server picks which of a map's spawn points to use."
 page = "rules-spawn"
 label = "Use each team's own spawn points"
 help = "Keeps teams in their own half of a map; turning it off lets anyone appear anywhere, which suits small maps."
+teamOnly = true
 
 ["spawn_selection.try_avoid_players"]
 page = "rules-spawn"
@@ -372,6 +387,7 @@ help = "Removes the randomness entirely and always picks the point furthest from
 page = "rules-spawn"
 label = "Only stay away from enemies"
 help = "Lets players spawn right next to teammates, so a squad can regroup, while still avoiding the other side."
+teamOnly = true
 
 ["spawn_selection.dynamic_respawns"]
 page = "rules-spawn"
@@ -387,11 +403,13 @@ help = "Which pickups get turned into extra spawn points, and how few real spawn
 page = "rules-spawn"
 label = "Everything players spawn with"
 help = "The full list of weapons and ammunition handed out on spawn; leave it alone to use the game mode's normal kit."
+notModes = ["gg"]
 
 ["spawn_loadout_blue"]
 page = "rules-spawn"
 label = "Blue team spawn kit"
 help = "A different set of weapons for the blue team only, for asymmetric attack and defense games."
+teamOnly = true
 
 ["force_character"]
 page = "rules-spawn"
@@ -414,31 +432,37 @@ help = "The character model everyone plays as."
 page = "rules-weapons"
 label = "Weapons stay after being picked up"
 help = "Leaves weapon pickups on the map for the next person instead of making everyone wait for a respawn."
+notModes = ["gg"]
 
 ["weapon_stay_exemptions"]
 page = "rules-weapons"
 label = "Weapons that do not stay"
 help = "Weapons listed here still disappear when taken, which is the usual way to stop everyone carrying the strongest gun at once."
+notModes = ["gg"]
 
 ["drop_weapons"]
 page = "rules-weapons"
 label = "Players drop their weapon when killed"
 help = "Leaves the dead player's weapon on the ground for someone else to take."
+notModes = ["gg"]
 
 ["drop_amps"]
 page = "rules-weapons"
 label = "Players drop their damage amp when killed"
 help = "Passes the damage amplifier on to whoever can grab it rather than losing it until the next respawn."
+notModes = ["bag", "tbag"]
 
 ["weapon_pickups_give_full_ammo"]
 page = "rules-weapons"
 label = "Weapon pickups give full ammo"
 help = "A weapon you already own tops you all the way up instead of giving just one clip."
+notModes = ["gg"]
 
 ["infinite_reloads"]
 page = "rules-weapons"
 label = "Reloading never uses up ammo"
 help = "Players can always reload, so they never run dry, but still have to stop and do it."
+notModes = ["gg"]
 
 ["force_rail_reload"]
 page = "rules-weapons"
@@ -449,16 +473,19 @@ help = "Stops players cancelling the rail gun's long reload by switching weapons
 page = "rules-weapons"
 label = "Replace items around the map"
 help = "Swap one pickup for another everywhere it appears, for example turning every medkit into armor; leave the replacement blank to remove the item entirely."
+notModes = ["gg"]
 
 ["item_respawn_time_overrides"]
 page = "rules-weapons"
 label = "Change how fast items come back"
 help = "Override the respawn time of individual pickups, usually to slow down the strongest ones."
+notModes = ["gg"]
 
 ["delayed_items"]
 page = "rules-weapons"
 label = "Items that are not there at the start"
 help = "These pickups are hidden when a map loads and only appear after their first respawn time has passed, so nobody can rush them."
+notModes = ["gg"]
 
 # ---------------------------------------------------------------- damage and physics
 
@@ -610,3 +637,4 @@ help = "What each player is told when they arrive; anything past 240 characters 
 page = "rules-msg"
 label = "Players can ping locations"
 help = "Lets a player mark a spot on the map for their team to see, which only works in team modes and in Run."
+notModes = ["dm", "bag", "pit", "gg"]

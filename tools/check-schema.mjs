@@ -42,6 +42,7 @@ function loadAuthored(name) {
 const rules = loadGenerated('rules.json')
 const server = loadGenerated('server.json')
 const mutators = loadGenerated('mutators.json')
+const gametypes = loadGenerated('gametypes.json')
 
 const pagesFile = loadAuthored('pages.toml')
 const authoredRules = loadAuthored('rules.toml')
@@ -54,6 +55,53 @@ if (pagesFile && pageIds.size === 0) problem('no pages', 'pages.toml declares no
 // every generated key needs an authored entry, and every authored entry needs a
 // generated key. the first catches an Alpine setting we have not described yet;
 // the second catches a description left behind after upstream removed a setting.
+// mode names, plus the keys whose mode gating the generated schema already
+// answers. an authored `modes` on one of those would be a second copy of a fact
+// the Alpine source states, so it is rejected rather than merged.
+const modeNames = new Set(gametypes.gametypes.map(g => g.name))
+const derivedModeKeys = new Map()
+for (const g of gametypes.gametypes) {
+  if (g.scoreLimitKey) derivedModeKeys.set(g.scoreLimitKey, 'it is a per-mode score limit')
+}
+for (const path of rules.flat) {
+  if (path === 'rounds' || path.startsWith('rounds.')) {
+    derivedModeKeys.set(path, 'gt_type_uses_rounds already says which modes use rounds')
+  }
+}
+
+function checkModes(label, path, entry) {
+  const given = ['modes', 'notModes', 'teamOnly'].filter(f => entry[f] !== undefined)
+  if (given.length === 0) return
+  if (given.length > 1) {
+    problem(`${label}: mode gating is set more than one way`, `${path} - has ${given.join(' and ')}`)
+    return
+  }
+  if (label === 'rules' && derivedModeKeys.has(path)) {
+    problem(`${label}: ${given[0]} is set on a key the generator already gates`,
+      `${path} - ${derivedModeKeys.get(path)}, so drop the authored gating`)
+    return
+  }
+  if (entry.teamOnly !== undefined) {
+    if (entry.teamOnly !== true) problem(`${label}: teamOnly must be true or absent`, path)
+    return
+  }
+  const field = given[0]
+  const list = entry[field]
+  if (!Array.isArray(list) || list.length === 0) {
+    problem(`${label}: ${field} must be a non-empty list`, path)
+    return
+  }
+  for (const mode of list) {
+    if (!modeNames.has(mode)) {
+      problem(`${label}: ${field} names a game type that does not exist`,
+        `${path} -> "${mode}" (known: ${[...modeNames].join(', ')})`)
+    }
+  }
+  if (list.length === modeNames.size) {
+    problem(`${label}: ${field} lists every game type`, `${path} - drop it instead`)
+  }
+}
+
 function crossCheck(label, generatedPaths, authored) {
   if (!authored) return
   const have = new Set(Object.keys(authored))
@@ -65,6 +113,11 @@ function crossCheck(label, generatedPaths, authored) {
     if (!entry.page) problem(`${label}: entry has no page`, path)
     else if (pageIds.size && !pageIds.has(entry.page)) {
       problem(`${label}: entry points at an unknown page`, `${path} -> "${entry.page}"`)
+    }
+    checkModes(label, path, entry)
+    if (label === 'rules' && path === 'game_type' && entry.choiceLabels) {
+      problem('rules: game_type carries hand-written mode names',
+        'the mode names come from multi_gametype_help_text, so drop game_type.choiceLabels')
     }
   }
   const generated = new Set(generatedPaths)
@@ -85,10 +138,19 @@ if (effects) {
     const entry = effects[m.name]
     if (!entry) { problem('mutator has no effects entry', `${m.name} ("${m.label}")`); continue }
     if (!entry.summary) problem('mutator effects entry has no summary', m.name)
+    const optionNames = new Set(m.options.map(o => o.name))
     for (const set of entry.sets ?? []) {
       if (!set.key) problem('mutator effect has no key', m.name)
       else if (!rulePaths.has(set.key)) {
         problem('mutator effect points at a setting that does not exist', `${m.name} -> "${set.key}"`)
+      }
+      if (set.value === undefined && set.fromOption === undefined) {
+        problem('mutator effect has neither a value nor a fromOption', `${m.name} -> "${set.key}"`)
+      }
+      if (set.fromOption !== undefined && !optionNames.has(set.fromOption)) {
+        problem('mutator effect reads an option that does not exist',
+          `${m.name} -> "${set.key}" reads "${set.fromOption}"` +
+          (optionNames.size ? ` (known: ${[...optionNames].join(', ')})` : ' (it has no options)'))
       }
     }
   }
@@ -98,6 +160,11 @@ if (effects) {
     if (!names.has(name)) problem('effects entry for a mutator that no longer exists', name)
   }
 }
+
+const modeRestricted = [
+  ...Object.values(authoredRules ?? {}),
+  ...Object.values(authoredServer ?? {}),
+].filter(e => e.modes || e.notModes || e.teamOnly).length + derivedModeKeys.size
 
 if (problems.length === 0) {
   // TOML is the hand-editing format; the app gets JSON. Compiling it here rather
@@ -114,6 +181,7 @@ if (problems.length === 0) {
     `${server.flat.length} server settings`,
     `${mutators.mutators.length} mutators`,
     `${pageIds.size} pages`,
+    `${modeRestricted} mode-specific settings`,
   ]
   console.log(`schema check passed: ${counts.join(', ')}`)
   console.log('wrote schema/generated/authored.json')

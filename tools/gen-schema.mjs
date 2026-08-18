@@ -620,6 +620,40 @@ export function extractGameTypes(sources, structs) {
     cases = []
   }
 
+  // rounds gating, so the rounds settings can hide in the modes that ignore them
+  const roundsFn = funcBody(sources.gametypeCpp,
+    /\bgt_type_uses_rounds\s*\([^)]*\)\s*\{/, 'gt_type_uses_rounds')
+  for (const g of order) g.usesRounds = false
+  let roundTypes = 0
+  for (const m of roundsFn.matchAll(/rf::NetGameType::(NG_TYPE_\w+)/g)) {
+    expect(byId[m[1]], 'Unknown game type in gt_type_uses_rounds', `${m[1]} is not in the NetGameType enum`)
+    byId[m[1]].usesRounds = true
+    roundTypes++
+  }
+  expect(roundTypes > 0, 'No game types use rounds', 'gt_type_uses_rounds names no NetGameType values')
+
+  // the one-line mode descriptions the game itself shows
+  const helpFn = funcBody(sources.gametypeCpp,
+    /\bmulti_gametype_help_text\s*\([^)]*\)\s*\{/, 'multi_gametype_help_text')
+  let helpCase = null
+  for (const line of helpFn.split('\n')) {
+    const c = line.match(/case\s+rf::(NG_TYPE_\w+)\s*:/)
+    if (c) helpCase = c[1]
+    const ret = line.match(/return\s+"([^"]+)"\s*;/)
+    if (!ret || !helpCase) continue
+    const gt = byId[helpCase]
+    expect(gt, 'Unknown game type in multi_gametype_help_text', `${helpCase} is not in the NetGameType enum`)
+    const split = ret[1].indexOf(': ')
+    expect(split > 0, 'Game type help text lost its title',
+      `Expected "Title: description", got "${ret[1]}" for ${helpCase}`)
+    gt.title = ret[1].slice(0, split)
+    gt.blurb = ret[1].slice(split + 2)
+    helpCase = null
+  }
+  const described = order.filter(g => g.title).length
+  expect(described >= 14, 'Too few described game types',
+    `multi_gametype_help_text yielded ${described} descriptions, expected at least 14`)
+
   // bots: everything the mutator mask does not exclude
   const maskFn = funcBody(sources.mutatorsCpp, /\bgametype_mask_for_req\s*\([^)]*\)\s*\{/, 'gametype_mask_for_req')
   for (const m of maskFn.matchAll(/~\s*\(\s*1u?\s*<<\s*static_cast<int>\s*\(\s*rf::(NG_TYPE_\w+)\s*\)\s*\)/g)) {
@@ -1083,8 +1117,11 @@ function main() {
         name: g.names[0],
         aliases: g.names.slice(1),
         id: g.id,
+        title: g.title,
+        blurb: g.blurb,
         isTeam: g.isTeam,
         botsSupported: g.botsSupported,
+        usesRounds: g.usesRounds,
         scoreLimitKey: scoreLimitKeys[g.names[0]],
       })),
       defaults: {

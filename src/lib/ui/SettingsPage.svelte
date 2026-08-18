@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { allEntries, schemaFor, scoreLimitKeyFor, scoreLimitKeys, textFor, type Scope } from '../../schema'
+  import { allEntries, appliesToMode, modesFor, modeTitles, schemaFor, textFor, type Scope } from '../../schema'
   import type { ResolvedRules } from '../resolve'
   import Field from './Field.svelte'
 
@@ -7,7 +7,7 @@
     page: string
     /** resolved values per scope, since a page can hold settings from both */
     resolved: Record<Scope, ResolvedRules>
-    /** the game mode in play, which decides which score limit is the live one */
+    /** the game mode in play, which decides which settings have any effect */
     gameType: string
     levelScope?: boolean
     onchange?: (scope: Scope, path: string, value: unknown) => void
@@ -17,8 +17,19 @@
 
   const { page, resolved, gameType, levelScope = false, onchange, onreset, onprovenance }: Props = $props()
 
-  interface Entry { scope: Scope; path: string }
+  interface Entry { scope: Scope; path: string; offMode?: string }
 
+  // a setting the mode in play ignores. it is hidden unless this scope sets it
+  // by hand, because a value that is in the file must never be invisible - it
+  // is shown with a note instead, so it can be found and cleared.
+  function offMode(scope: Scope, path: string): string | undefined {
+    if (appliesToMode(scope, path, gameType)) return undefined
+    const modes = modesFor(scope, path)
+    return modes ? `Only applies in ${modeTitles(modes)}.` : undefined
+  }
+
+  // ads_version and friends are written by the tool, not chosen by the user, so
+  // they get an authored entry for completeness but never a field
   function isToolOwned(scope: Scope, path: string) {
     const key = schemaFor(scope, path)
     return key?.kind === 'scalar' && (key as { global?: boolean }).global === true
@@ -32,14 +43,10 @@
   const groups = $derived.by(() => {
     const out: Group[] = []
     const byKey = new Map<string, Group>()
-    // ads_version is written by the tool, not chosen by the user, so it gets an
-    // authored entry for completeness but never a field
-    const liveScoreLimit = scoreLimitKeyFor(gameType)
-    const onPage = allEntries.filter(
-      e => textFor(e.scope, e.path).page === page
-        && !isToolOwned(e.scope, e.path)
-        && !(scoreLimitKeys.has(e.path) && e.path !== liveScoreLimit)
-    )
+    const onPage: Entry[] = allEntries
+      .filter(e => textFor(e.scope, e.path).page === page && !isToolOwned(e.scope, e.path))
+      .map(e => ({ ...e, offMode: offMode(e.scope, e.path) }))
+      .filter(e => !e.offMode || resolved[e.scope].get(e.path)?.layer === 'manual')
     const paths = new Set(allEntries.map(e => e.path))
 
     const group = (key: string, scope: Scope): Group => {
@@ -80,6 +87,7 @@
       path={entry.path}
       resolved={resolved[entry.scope]}
       {levelScope}
+      offMode={entry.offMode}
       onchange={(path, value) => onchange?.(entry.scope, path, value)}
       onreset={path => onreset?.(entry.scope, path)}
       onprovenance={(path, anchor) => onprovenance?.(entry.scope, path, anchor)}

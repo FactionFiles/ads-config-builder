@@ -255,3 +255,79 @@ select.ctl { cursor: pointer; }
   height: 1px;
   background: var(--line);
 }
+
+/* ---------------------------------------------------------------------------
+   buttons that are not a setting control: toolbars, panels, dialogs
+   --------------------------------------------------------------------------- */
+
+.btn {
+  border: 1px solid var(--line-2);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover { background: var(--sunk); }
+
+.btn.pri {
+  background: var(--graphite);
+  border-color: var(--graphite);
+  color: var(--on-graphite);
+}
+
+.btn.pri:hover { opacity: .88; }
+
+.btn.pressed {
+  background: var(--graphite);
+  border-color: var(--graphite);
+  color: var(--on-graphite);
+}
+
+textarea.ctl {
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+/* ---------------------------------------------------------------------------
+   a standing note at the top of a page: how the thing below it works, not a
+   warning about anything the user did
+   --------------------------------------------------------------------------- */
+
+.banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 13px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.banner .ic {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--graphite);
+  color: var(--on-graphite);
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.banner.warn {
+  border-color: var(--p-you);
+  background: var(--p-you-b);
+  color: var(--ink-2);
+}
+
+.banner.warn .ic { background: var(--p-you); }

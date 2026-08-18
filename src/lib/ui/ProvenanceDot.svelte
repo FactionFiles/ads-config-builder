@@ -22,13 +22,21 @@
     if (layer === 'mutator') return 'a mutator'
     if (layer === 'manual') return level ? 'this map only' : 'you'
     if (layer === 'gametype') return "the game mode's defaults"
-    if (layer === 'inherited') return 'the base rules'
     return 'the Alpine default'
   }
 
-  const tone = $derived(toneFor(resolved?.layer, levelScope))
+  // a value this map did not touch still came from somewhere, so the dot keeps
+  // showing whoever set it for every map rather than going blank
+  const inherited = $derived(resolved?.layer === 'inherited')
+  const layer = $derived(
+    inherited ? resolved!.trail[resolved!.trail.length - 1]?.layer : resolved?.layer
+  )
+
+  const tone = $derived(toneFor(layer, inherited ? false : levelScope))
   const description = $derived(
-    `Set by ${labelFor(resolved?.layer, levelScope)}${resolved?.source ? `: ${resolved.source}` : ''}`
+    (inherited ? 'Same as every map. Set by ' : 'Set by ')
+    + labelFor(layer, inherited ? false : levelScope)
+    + (resolved?.source ? `: ${resolved.source}` : '')
   )
 </script>
 

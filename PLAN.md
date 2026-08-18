@@ -271,12 +271,27 @@ Facts established from the Alpine source, worth not re-deriving:
   names it with `fromOption`, so Score Limit Override and Ideal Player Count
   Override resolve to real numbers with proper provenance instead of prose - and
   the score limit follows the mode, since each mode is scored by its own key.
+- **M5 done.** `src/lib/ui/RotationPage.svelte` is the sheet: a pinned row for the
+  base rules and one row per map, every cell reading "same" or the value this map
+  substitutes. Any setting can be a column, picked through `SettingPicker.svelte`,
+  which the multi-map editor reuses so the two lists cannot drift. Add a map,
+  paste a list, reorder, remove, select several and change one setting across all
+  of them. Clicking a row scopes every rules page to that map, which is the whole
+  point of the shell: the same pages, a smaller scope, no second form.
+
+  The sheet also has to teach the layering, because the top row looks editable
+  and is not: it is a picture of the base rules, and clicking it goes to the
+  pages that own them. Selecting every map and setting a value there produces a
+  working but much worse config - the same key repeated in every `[[levels]]`,
+  and no inheritance for a map added later - so that case is caught and offered
+  the base rules instead rather than being silently allowed.
 
 ### Next, in order
 
-1. M5 rotation sheet, M7 import round-trip.
+1. M7 import round-trip.
 2. M8 remaining pages: presets (the base rules field on Mode & scoring is still a
    bare text box), bots, admin profiles, voting, idle, problems.
+3. A parity pass against `old.html`, then delete it and `design/prototype.html`.
 
 ### Mode relevance, and where the answer comes from
 
@@ -319,6 +334,13 @@ None of these block the builder; they are worth reporting to Alpine.
   commented out - so Super Rail's exemption accumulates.
 - **The Capture the Flag mode description says "Steal the the enemy flag".** The
   tool shows the game's own wording, so the typo shows through.
+- **A map that changes the mode silently loses the base rules' mutators.**
+  `apply_defaults_for_game_type` clears `MutatorConfig` outright, and the source
+  comment says a scope that changes `game_type` must re-declare its mutators.
+  Nothing tells the operator, and the effects the mutators wrote into ordinary
+  rules keys are not cleared with it, so the map keeps half of what Instagib did
+  while Instagib itself is off. The tool models this and warns on the map's
+  mutators page and in the rotation sheet's Mutators column.
 
 ### Things worth knowing that the plan did not anticipate
 

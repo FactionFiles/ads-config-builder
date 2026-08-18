@@ -5,36 +5,63 @@
   } from '../../schema'
   import type { Mutator } from '../../schema/types'
   import { weaponsWithPickup } from '../gamedata'
-  import { optionValue, type MutatorDeclaration, type ResolvedRules } from '../resolve'
+  import {
+    effectiveMutators, optionValue, type MutatorDeclaration, type ResolvedRules,
+  } from '../resolve'
 
   interface Props {
     declared: MutatorDeclaration[]
+    /** true when this is one map's page rather than the game rules */
+    levelScope?: boolean
+    /** what the base rules turned on, when this is one map's page */
+    inherited?: MutatorDeclaration[]
+    /** this map changed the mode, which clears what the base rules turned on */
+    modeCleared?: boolean
     resolved: ResolvedRules
     gameType: string
     onchange: (next: MutatorDeclaration[]) => void
   }
 
-  const { declared, resolved, gameType, onchange }: Props = $props()
+  const {
+    declared, levelScope = false, inherited = [], modeCleared = false,
+    resolved, gameType, onchange,
+  }: Props = $props()
 
   const all = mutatorSchema.mutators
   const applyRank = new Map(mutatorSchema.applyOrder.map((id, i) => [id, i]))
 
+  const running = $derived(effectiveMutators(inherited, declared, modeCleared))
   const declaredBy = $derived(new Map(declared.map(d => [d.name, d])))
+  const runningBy = $derived(new Map(running.map(d => [d.name, d])))
   // the active ones read in the server's apply order, so the note under them
   // matches the order on the cards. the rest keep the game's own listing order.
   const on = $derived(
-    all.filter(m => declaredBy.has(m.name))
+    all.filter(m => runningBy.has(m.name))
       .sort((a, b) => (applyRank.get(a.id) ?? 0) - (applyRank.get(b.id) ?? 0))
   )
   const available = $derived(
-    all.filter(m => !declaredBy.has(m.name) && mutatorAllowsMode(m, gameType))
+    all.filter(m => !runningBy.has(m.name) && mutatorAllowsMode(m, gameType))
   )
   const blocked = $derived(
-    all.filter(m => !declaredBy.has(m.name) && !mutatorAllowsMode(m, gameType))
+    all.filter(m => !runningBy.has(m.name) && !mutatorAllowsMode(m, gameType))
+  )
+
+  /** on because the base rules turned it on, not because this map did */
+  function fromBase(m: Mutator) {
+    return !declaredBy.has(m.name) && runningBy.has(m.name)
+  }
+
+  /** mutators the base rules had that this map's mode change threw away */
+  const cleared = $derived(
+    modeCleared ? inherited.filter(d => !declaredBy.has(d.name)) : []
   )
 
   function effect(m: Mutator) {
     return mutatorEffects[m.name]
+  }
+
+  function label(name: string) {
+    return all.find(m => m.name === name)?.label ?? name
   }
 
   function add(m: Mutator) {
@@ -56,7 +83,7 @@
    * value rather than to a constant, so they need the resolved rules to answer.
    */
   function shown(m: Mutator, option: string) {
-    const decl = declaredBy.get(m.name) ?? { name: m.name }
+    const decl = runningBy.get(m.name) ?? { name: m.name }
     // an option can feed a different setting per mode - the score limit does -
     // so read the current value from the one the mode in play actually uses
     const target = effect(m)?.sets
@@ -93,12 +120,28 @@
   </div>
 </div>
 
+{#if cleared.length}
+  <div class="banner warn">
+    <span class="ic">!</span>
+    <div>
+      This map plays a different mode, and changing the mode clears the mutators
+      your game rules turned on. <b>{cleared.map(d => label(d.name)).join(', ')}</b>
+      {cleared.length === 1 ? 'is' : 'are'} not running here. Add
+      {cleared.length === 1 ? 'it' : 'them'} below to get
+      {cleared.length === 1 ? 'it' : 'them'} back.
+    </div>
+  </div>
+{/if}
+
 {#snippet card(m: Mutator, state: 'on' | 'off' | 'blocked')}
+  {@const base = state === 'on' && fromBase(m)}
   <div class="mcard" class:on={state === 'on'} class:off={state === 'blocked'}>
     <div class="top">
       <span class="nm">{m.label}</span>
       {#if state === 'blocked'}
         <span class="add">&mdash;</span>
+      {:else if base}
+        <span class="add plain">All maps</span>
       {:else}
         <button
           type="button"
@@ -112,7 +155,14 @@
       {state === 'blocked' ? blockedReason(m) : (effect(m)?.summary ?? '')}
     </div>
 
-    {#if state === 'on' && m.options.length}
+    {#if base}
+      <div class="rq base">
+        On because your game rules turn it on. Turn it off there, or change the
+        mode for this map.
+      </div>
+    {/if}
+
+    {#if state === 'on' && !base && m.options.length}
       <div class="opts">
         {#each m.options as option (option.name)}
           <label class="opt">
@@ -159,7 +209,7 @@
 {/snippet}
 
 {#if on.length}
-  <h3 class="gh">On for every map</h3>
+  <h3 class="gh">{levelScope ? 'On for this map' : 'On for every map'}</h3>
   <div class="mutgrid">
     {#each on as m (m.name)}{@render card(m, 'on')}{/each}
   </div>
@@ -179,33 +229,6 @@
 </div>
 
 <style>
-  .banner {
-    display: flex;
-    gap: 10px;
-    align-items: flex-start;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 11px 13px;
-    font-size: 12.5px;
-    color: var(--ink-2);
-    line-height: 1.5;
-    margin-bottom: 20px;
-  }
-
-  .banner .ic {
-    flex: none;
-    width: 17px;
-    height: 17px;
-    border-radius: 50%;
-    background: var(--graphite);
-    color: var(--on-graphite);
-    font-size: 11px;
-    font-weight: 700;
-    display: grid;
-    place-items: center;
-  }
-
   .mutgrid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -268,6 +291,15 @@
     color: var(--p-you);
     margin-top: 6px;
   }
+
+  .mcard .rq.base { color: var(--ink-3); }
+
+  .mcard .add.plain {
+    background: none;
+    border-color: var(--line-2);
+    color: var(--ink-3);
+  }
+
 
   .mcard .opts {
     margin-top: 9px;

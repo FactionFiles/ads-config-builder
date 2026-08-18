@@ -13,13 +13,17 @@
     levelScope?: boolean
     /** set when the mode in play ignores this setting, worded for the user */
     offMode?: string
+    /** the control alone, for editing several maps at once where no single
+     *  provenance answer exists */
+    bare?: boolean
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
   }
 
   const {
-    scope, path, resolved, levelScope = false, offMode, onchange, onreset, onprovenance,
+    scope, path, resolved, levelScope = false, offMode, bare = false,
+    onchange, onreset, onprovenance,
   }: Props = $props()
 
   const schema = $derived(schemaFor(scope, path))
@@ -131,18 +135,22 @@
         />
       {/if}
 
-      <ProvenanceDot
-        resolved={current}
-        {levelScope}
-        onopen={anchor => onprovenance?.(path, anchor)}
-      />
+      {#if !bare}
+        <ProvenanceDot
+          resolved={current}
+          {levelScope}
+          onopen={anchor => onprovenance?.(path, anchor)}
+        />
+      {/if}
     </div>
 
     {#if choiceBlurb}
       <div class="blurb">{choiceBlurb}</div>
     {/if}
 
-    {#if canReset}
+    {#if bare}
+      <!-- the caller owns the explanation -->
+    {:else if canReset}
       <div class="src {levelScope ? 'map' : 'you'}">
         <i class="pd {levelScope ? 'map' : 'you'}"></i>
         {levelScope ? 'Just for this map' : 'You changed this'}

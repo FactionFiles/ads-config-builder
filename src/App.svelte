@@ -1,66 +1,107 @@
 <script lang="ts">
   import { meta, pages, type Scope } from './schema'
-  import { emptyDocument, toToml } from './lib/config'
-  import { resolveScope, resolveServer, type ResolvedRules } from './lib/resolve'
+  import { emptyDocument, toToml, type RulesScope } from './lib/config'
+  import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
   import SettingsPage from './lib/ui/SettingsPage.svelte'
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
+  import RotationPage from './lib/ui/RotationPage.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
-  // the page lives in the URL so a link can point at one, and the back button
-  // does what people expect
-  const pageFromHash = () => {
-    const id = location.hash.replace(/^#/, '')
-    return pages.some(p => p.id === id) ? id : (pages[0]?.id ?? '')
-  }
 
-  let currentPage = $state(pageFromHash())
+  // the page and the map being edited both live in the URL, so a link can point
+  // at one and the back button does what people expect
+  interface Route { page: string; map: number | null }
 
-  function go(id: string) {
-    currentPage = id
-    location.hash = id
-  }
-  let fileOpen = $state(true)
-  let popover = $state<{ scope: Scope; path: string; anchor: HTMLElement } | null>(null)
-
-  const page = $derived(pages.find(p => p.id === currentPage))
-
-  const baseRules = $derived<ResolvedRules>(
-    resolveScope({
-      gameType: doc.base.gameType,
-      mutators: doc.base.mutators,
-      manual: doc.base.manual,
-    })
-  )
-
-  const serverSettings = $derived<ResolvedRules>(resolveServer(doc.server))
-
-  const resolved = $derived<Record<Scope, ResolvedRules>>({ rules: baseRules, server: serverSettings })
-  const gameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
-  const fileText = $derived(toToml(doc))
-
-  function change(scope: Scope, path: string, value: unknown) {
-    if (scope === 'rules') doc.base.manual = { ...doc.base.manual, [path]: value }
-    else doc.server = { ...doc.server, [path]: value }
-  }
-
-  function reset(scope: Scope, path: string) {
-    if (scope === 'rules') {
-      const { [path]: _dropped, ...rest } = doc.base.manual
-      doc.base.manual = rest
-    } else {
-      const { [path]: _dropped, ...rest } = doc.server
-      doc.server = rest
+  function routeFromHash(): Route {
+    const raw = location.hash.replace(/^#/, '')
+    const scoped = raw.match(/^map\/(\d+)\/(.*)$/)
+    const page = scoped ? scoped[2] : raw
+    return {
+      page: pages.some(p => p.id === page) ? page : (pages[0]?.id ?? ''),
+      map: scoped ? Number(scoped[1]) : null,
     }
   }
 
+  let route = $state(routeFromHash())
+
+  function go(page: string, map: number | null = null) {
+    location.hash = map === null ? page : `map/${map}/${page}`
+  }
+
+  let fileOpen = $state(true)
+  let popover = $state<{ scope: Scope; path: string; anchor: HTMLElement } | null>(null)
+
+  // a map only has game rules, so scoping into one from a server page lands on
+  // the first rules page rather than on a page that does not exist there
+  const rulesPages = $derived(pages.filter(p => p.scope === 'rules'))
+  const level = $derived(route.map !== null ? doc.levels[route.map] : undefined)
+  const page = $derived.by(() => {
+    const found = pages.find(p => p.id === route.page)
+    if (!level) return found
+    return found?.scope === 'rules' ? found : rulesPages[0]
+  })
+
+  function resolve(scope: RulesScope, base?: ResolvedRules): ResolvedRules {
+    return resolveScope({
+      base,
+      gameType: scope.manual.game_type as string | undefined,
+      mutators: scope.mutators,
+      manual: scope.manual,
+    })
+  }
+
+  const baseRules = $derived<ResolvedRules>(resolve(doc.base))
+  const levelRules = $derived<ResolvedRules[]>(doc.levels.map(l => resolve(l.rules, baseRules)))
+  const serverSettings = $derived<ResolvedRules>(resolveServer(doc.server))
+
+  const activeScope = $derived<RulesScope>(level ? level.rules : doc.base)
+  const activeRules = $derived<ResolvedRules>(
+    level && route.map !== null ? levelRules[route.map] ?? baseRules : baseRules
+  )
+
+  const resolved = $derived<Record<Scope, ResolvedRules>>({ rules: activeRules, server: serverSettings })
+  const gameType = $derived((activeRules.get('game_type')?.value as string) ?? '')
+  const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
+  const fileText = $derived(toToml(doc))
+
+  function editScope(edit: (scope: RulesScope) => RulesScope) {
+    if (route.map === null) doc.base = edit(doc.base)
+    else doc.levels[route.map] = { ...doc.levels[route.map], rules: edit(doc.levels[route.map].rules) }
+  }
+
+  function change(scope: Scope, path: string, value: unknown) {
+    if (scope === 'server') doc.server = { ...doc.server, [path]: value }
+    else editScope(s => ({ ...s, manual: { ...s.manual, [path]: value } }))
+  }
+
+  function reset(scope: Scope, path: string) {
+    if (scope === 'server') {
+      const { [path]: _dropped, ...rest } = doc.server
+      doc.server = rest
+      return
+    }
+    editScope(s => {
+      const { [path]: _dropped, ...rest } = s.manual
+      return { ...s, manual: rest }
+    })
+  }
+
+  function setMutators(next: MutatorDeclaration[]) {
+    editScope(s => ({ ...s, mutators: next }))
+  }
+
+  // how many maps get their own sidebar entry before the list is cut short
+  const NAV_MAPS = 4
+  const navMaps = $derived(doc.levels.slice(0, NAV_MAPS))
+
   function groupsOf(kind: 'server' | 'rules' | 'other') {
-    return pages.filter(p => p.scope === kind)
+    return pages.filter(p => p.scope === kind && p.id !== 'rotation')
   }
 </script>
 
 <svelte:window
-  onhashchange={() => (currentPage = pageFromHash())}
+  onhashchange={() => (route = routeFromHash())}
   onclick={e => {
     const el = e.target as HTMLElement
     if (!el.closest('.pop') && !el.closest('.prov')) popover = null
@@ -80,49 +121,106 @@
   <nav class="nav">
     <div class="scope">The whole server</div>
     {#each groupsOf('server') as p (p.id)}
-      <button type="button" class="ni" class:on={p.id === currentPage} onclick={() => go(p.id)}>
-        {p.title}
-      </button>
+      <button
+        type="button"
+        class="ni"
+        class:on={!level && p.id === route.page}
+        onclick={() => go(p.id)}
+      >{p.title}</button>
     {/each}
 
-    <div class="scope">All maps</div>
+    <div class="scope">
+      Game rules &middot; {level ? level.filename : 'all maps'}
+    </div>
     {#each groupsOf('rules') as p (p.id)}
-      <button type="button" class="ni" class:on={p.id === currentPage} onclick={() => go(p.id)}>
-        {p.title}
-      </button>
+      <button
+        type="button"
+        class="ni"
+        class:on={p.id === page?.id}
+        onclick={() => go(p.id, route.map)}
+      >{p.title}</button>
     {/each}
+
+    <div class="scope">Map rotation</div>
+    <button
+      type="button"
+      class="ni"
+      class:on={!level && route.page === 'rotation'}
+      onclick={() => go('rotation')}
+    >
+      All maps
+      {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
+    </button>
+    {#each navMaps as map, i (map.filename + i)}
+      <button
+        type="button"
+        class="ni sub"
+        class:on={route.map === i}
+        onclick={() => go(page?.scope === 'rules' ? route.page : rulesPages[0].id, i)}
+      >{map.filename}</button>
+    {/each}
+    {#if doc.levels.length > NAV_MAPS}
+      <button type="button" class="ni sub more" onclick={() => go('rotation')}>
+        {doc.levels.length - NAV_MAPS} more...
+      </button>
+    {/if}
 
     {#if groupsOf('other').length}
       <div class="scope">Everything else</div>
       {#each groupsOf('other') as p (p.id)}
-        <button type="button" class="ni" class:on={p.id === currentPage} onclick={() => go(p.id)}>
-          {p.title}
-        </button>
+        <button
+          type="button"
+          class="ni"
+          class:on={!level && p.id === route.page}
+          onclick={() => go(p.id)}
+        >{p.title}</button>
       {/each}
     {/if}
   </nav>
 
   <main class="main">
-    {#if page}
+    {#if level}
+      <h2>{level.filename}</h2>
+      <p class="blurb">
+        Number {(route.map ?? 0) + 1} in the rotation. These are the same pages as
+        <b>Game rules</b>, for this one map. Anything you leave alone stays the
+        same as every other map.
+      </p>
+    {:else if page}
       <h2>{page.title}</h2>
       {#if page.blurb}<p class="blurb">{page.blurb}</p>{/if}
-      {#if page.id === 'rules-mutators'}
-        <MutatorsPage
-          declared={doc.base.mutators}
-          resolved={baseRules}
-          {gameType}
-          onchange={next => (doc.base.mutators = next)}
-        />
-      {:else}
-        <SettingsPage
-          page={page.id}
-          {gameType}
-          {resolved}
-          onchange={change}
-          onreset={reset}
-          onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
-        />
-      {/if}
+    {/if}
+
+    {#if page?.id === 'rotation'}
+      <RotationPage
+        levels={doc.levels}
+        base={doc.base}
+        {baseRules}
+        {levelRules}
+        onchange={next => (doc.levels = next)}
+        onopen={i => go(rulesPages[0].id, i)}
+        onopenbase={() => go(rulesPages[0].id)}
+      />
+    {:else if page?.id === 'rules-mutators'}
+      <MutatorsPage
+        declared={activeScope.mutators}
+        levelScope={level !== undefined}
+        inherited={level ? doc.base.mutators : []}
+        modeCleared={level !== undefined && gameType !== baseGameType}
+        resolved={activeRules}
+        {gameType}
+        onchange={setMutators}
+      />
+    {:else if page}
+      <SettingsPage
+        page={page.id}
+        {gameType}
+        {resolved}
+        levelScope={level !== undefined}
+        onchange={change}
+        onreset={reset}
+        onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
+      />
     {/if}
   </main>
 
@@ -194,12 +292,15 @@
     text-transform: uppercase;
     color: var(--ink-3);
     margin: 18px 8px 6px;
+    overflow-wrap: anywhere;
   }
 
   .scope:first-child { margin-top: 0; }
 
   .ni {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     width: 100%;
     text-align: left;
     border: 0;
@@ -219,15 +320,33 @@
     font-weight: 500;
   }
 
+  .ni.sub {
+    padding-left: 18px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .ni.more { color: var(--ink-3); }
+
+  .ni .ct {
+    margin-left: auto;
+    font-size: 11.5px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ni.on .ct { color: inherit; opacity: .7; }
+
   .main {
     overflow-y: auto;
     padding: 28px 32px 80px;
-    max-width: 860px;
+    max-width: 900px;
   }
 
   .main h2 {
     font-size: 21px;
     margin-bottom: 4px;
+    overflow-wrap: anywhere;
   }
 
   .blurb {

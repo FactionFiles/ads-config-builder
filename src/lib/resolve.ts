@@ -234,12 +234,11 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   // changes, so a level that repeats the base game type does not reset anything
   const baseGameType = input.base ? (input.base.get('game_type')?.value as string | undefined) : undefined
   const gameType = input.gameType ?? baseGameType ?? gametypes.gametypes[0].name
+  if (input.gameType) contribute(out, 'game_type', { layer: 'manual', value: input.gameType })
+  else if (isBase) {
+    contribute(out, 'game_type', { layer: 'default', value: gameType, source: 'Alpine default' })
+  }
   if (isBase || (input.gameType && input.gameType !== baseGameType)) {
-    contribute(out, 'game_type', {
-      layer: input.gameType ? 'manual' : 'default',
-      value: gameType,
-      source: input.gameType ? undefined : 'Alpine default',
-    })
     applyGameTypeDefaults(out, gameType)
   }
 
@@ -254,10 +253,29 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   }
 
   for (const [path, value] of Object.entries(input.manual ?? {})) {
+    // the game type is not layered like the rest - it decides which defaults ran
+    // in the first place, so it is contributed above rather than here
+    if (path === 'game_type') continue
     contribute(out, path, { layer: 'manual', value })
   }
 
   return out
+}
+
+/**
+ * The mutators actually running in a level scope. A level that changes the game
+ * mode starts from a cleared mutator state, because rebuilding a mode's defaults
+ * would leave a half-applied mutator behind - so only that level's own
+ * declarations count there. Otherwise the level's declarations stack on the
+ * base's, with one for the same mutator replacing the base's.
+ */
+export function effectiveMutators(
+  base: MutatorDeclaration[],
+  level: MutatorDeclaration[],
+  modeChanged: boolean,
+): MutatorDeclaration[] {
+  if (modeChanged) return level
+  return [...base.filter(b => !level.some(l => l.name === b.name)), ...level]
 }
 
 /** paths this scope changed relative to what it inherited */

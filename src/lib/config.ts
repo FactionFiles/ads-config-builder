@@ -11,7 +11,6 @@ import type { MutatorDeclaration } from './resolve'
 export type ManualKeys = Record<string, unknown>
 
 export interface RulesScope {
-  gameType?: string
   /** preset file names, applied in order */
   presets: string[]
   mutators: MutatorDeclaration[]
@@ -43,6 +42,29 @@ export function emptyDocument(): ConfigDocument {
   return { server: {}, base: emptyScope(), levels: [], unknown: {} }
 }
 
+export function emptyLevel(filename: string): LevelEntry {
+  return { filename, rules: emptyScope() }
+}
+
+/**
+ * A pasted rotation turned into level entries. People paste all sorts of things
+ * - a numbered list, a column out of a spreadsheet, the lines of somebody else's
+ * config - so anything that is not the file name is stripped rather than
+ * rejected.
+ */
+export function parseLevelList(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map(line => line.trim()
+      .replace(/^[-*\d.)\s]+/, '')
+      .replace(/^["']|["'],?$/g, '')
+      .replace(/^filename\s*=\s*/, '')
+      .replace(/^["']|["']$/g, '')
+      .trim())
+    .filter(name => name.length > 0)
+    .map(name => (name.includes('.') ? name : name + '.rfl'))
+}
+
 /** turn flat dotted paths back into the nested tables TOML wants */
 function nest(flat: ManualKeys): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -65,7 +87,6 @@ function scopeToToml(scope: RulesScope): Record<string, unknown> {
   if (scope.presets.length) out.rules_presets = scope.presets
 
   const rules = nest(scope.manual)
-  if (scope.gameType) rules.game_type = scope.gameType
   if (scope.mutators.length) {
     rules.mutators = scope.mutators.map(m => ({ name: m.name, ...(m.options ?? {}) }))
   }
@@ -92,3 +113,4 @@ export function toToml(doc: ConfigDocument): string {
 
   return stringify(root) + '\n'
 }
+

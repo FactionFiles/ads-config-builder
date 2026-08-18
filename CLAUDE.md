@@ -36,12 +36,13 @@ npm run check          svelte-check plus tsc
   the codebase is a Windows game patch. Every extractor fails loudly with the
   pattern that stopped matching rather than quietly emitting less.
 - `tools/check-schema.mjs` - the anti-drift check. Fails on a setting with no
-  authored entry, an authored entry for a setting that no longer exists, or a
-  mutator with no effects entry.
+  authored entry, an authored entry for a setting that no longer exists, a
+  mutator with no effects entry, or a value the source allows with no name.
 - `tools/extract-tables.mjs` - one-shot, run by hand. Produces `gamedata/*.json`
   from the game's own `tables.vpp`. Those names are not in the Alpine repo.
 - `schema/authored/` - the hand-written layer: labels, help text, page
-  assignment, and what each mutator does. TOML because a human edits it.
+  assignment, a name for each value a setting can take, and what each mutator
+  does. TOML because a human edits it.
 - `src/schema/` - types and the loader the UI imports.
 - `src/lib/resolve.ts` - the layering, and the trail the provenance UI renders.
 - `src/lib/config.ts` - the document the user edits, plus reading and writing

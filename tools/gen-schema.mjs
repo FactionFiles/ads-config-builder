@@ -443,7 +443,9 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
 
     const assign = consequent.match(/([A-Za-z_]\w*)((?:\.\w+)+)\s*(?:=|\()/)
     if (assign) {
-      const path = assign[2].replace(/^\./, '')
+      // a length-capped string is written with .assign(...) rather than =, so the
+      // member is one segment up from what the assignment names
+      const path = assign[2].replace(/^\./, '').replace(/\.assign$/, '')
       const target = resolveTarget(structs, structName, path)
       const inline = readInlineConstraints(consequent)
       if (target) {
@@ -515,6 +517,11 @@ function readInlineConstraints(consequent) {
       if (hi.ok) out.max = hi.value
     }
   }
+
+  // a string length cap is a trim where it is read, not a clamp in a setter
+  const trim = consequent.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*(\d+)\s*\)/)
+  if (trim) out.maxLength = Number(trim[1])
+
   return out
 }
 
@@ -967,6 +974,36 @@ export function extractPresetKeys(sources) {
   return uniq
 }
 
+// Which commands an admin profile may be granted. The config parser only checks
+// a name against this list, so the list itself lives with the rcon code rather
+// than with the config keys - and without it the admin page would be a free-text
+// box for a value the server silently drops.
+export function extractRconCommands(sources) {
+  const at = sources.serverCpp.search(/\bg_rcon_cmd_masterlist\s*=/)
+  expect(at !== -1, 'The rcon command masterlist is gone',
+    'Expected `const std::vector<std::string> g_rcon_cmd_masterlist = {` in multi/server.cpp')
+  const body = bodyAt(sources.serverCpp, at)
+  const commands = [...body.matchAll(/"([\w.]+)"/g)].map(m => m[1])
+  expect(commands.length > 5, 'Too few rcon commands', `Found ${commands.join(', ') || 'none'}`)
+  return commands
+}
+
+// What the old-style single rcon password can do. Setting it conjures a profile
+// nobody wrote, so a page that only listed the written ones would be describing
+// a server that is not the one being configured.
+export function extractLegacyRconCommands(sources, masterlist) {
+  const at = sources.dediCpp.search(/\bg_legacy_rcon_allowed_commands\s*=/)
+  expect(at !== -1, 'The legacy rcon command list is gone',
+    'Expected `const std::vector<std::string> g_legacy_rcon_allowed_commands = {` in multi/dedi_cfg.cpp')
+  const body = bodyAt(sources.dediCpp, at)
+  const commands = [...body.matchAll(/"([\w.]+)"/g)].map(m => m[1])
+  expect(commands.length > 5, 'Too few legacy rcon commands', `Found ${commands.join(', ') || 'none'}`)
+  // the server drops anything not on the master list, so this does the same. it
+  // is returned in master list order so every command list in the tool reads the
+  // same way, whoever wrote it
+  return masterlist.filter(c => commands.includes(c))
+}
+
 // ---------------------------------------------------------------------------
 // labels the server already uses
 // ---------------------------------------------------------------------------
@@ -1084,6 +1121,17 @@ function main() {
   const botKeys = extractKeys(sources.dediCpp, structs, 'parse_bot_config_table', 'ServerBotConfig')
   server.arrays.push(...extractInlineArrays(sources, new Set(server.arrays.map(a => a.key))))
 
+  // the commands an admin profile may run are named in the rcon code, so the
+  // key that lists them is only a set of choices once the two are put together
+  const rconCommands = extractRconCommands(sources)
+  const allowed = server.arrays.find(a => a.key === 'rcon_profiles')
+    ?.keys?.find(k => k.key === 'allowed_commands')
+  expect(allowed, 'rcon_profiles no longer has an allowed_commands key',
+    'Expected it in parse_rcon_profile')
+  allowed.itemType = 'string'
+  allowed.choices = rconCommands
+  const legacyRconCommands = extractLegacyRconCommands(sources, rconCommands)
+
   // game_type is the one rules key resolved by a lookup rather than a member
   const gt = rulesKeys.find(k => k.key === 'game_type')
   expect(gt, 'The game_type key is gone', 'Expected it at the top of parse_server_rules')
@@ -1141,6 +1189,7 @@ function main() {
       levelKeys,
       presetKeys,
       botKeys,
+      legacyRconCommands,
       // one canonical path per authored entry. the nested key sets live under
       // the key that carries them, so a bot profile's `player_name` cannot
       // collide with a top-level setting of the same name.
@@ -1161,6 +1210,7 @@ function main() {
   console.log(`  ${scalarCount} rules settings, ${server.scalars.length} server settings`)
   console.log(`  ${gametypes.length} game types, ${mutators.length} mutators`)
   console.log(`  ${Object.keys(printLabels).length} labels lifted from print_rules`)
+  console.log(`  ${rconCommands.length} rcon commands, ${legacyRconCommands.length} of them legacy`)
   console.log(`  wrote ${written.length} files to schema/generated/`)
 }
 

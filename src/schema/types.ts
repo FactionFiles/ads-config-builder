@@ -50,6 +50,10 @@ export interface ArrayKey {
   kind: 'array'
   item?: { key: string; type: ScalarType | null; cppType: string }[]
   keys?: SchemaKey[]
+  /** the type of a plain list of values, as opposed to a list of tables */
+  itemType?: ScalarType
+  /** the values the server accepts, where it checks them against a list */
+  choices?: string[]
   complex?: boolean
   requires?: Guard[]
 }
@@ -134,6 +138,8 @@ export interface ServerSchema {
   levelKeys: string[]
   presetKeys: string[]
   botKeys: SchemaKey[]
+  /** what the old-style single rcon password is allowed to run */
+  legacyRconCommands: string[]
   flat: string[]
 }
 

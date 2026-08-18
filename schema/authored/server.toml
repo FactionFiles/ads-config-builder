@@ -529,6 +529,34 @@ page = "admin"
 label = "Commands this profile may run"
 help = "Pick exactly what this profile can do, for instance kicking and changing the map but not editing the rules."
 
+# the command names come from the rcon master list in the Alpine source, so this
+# only has to say what each one does. anything not on that list is refused.
+["rcon_profiles.allowed_commands".choiceLabels]
+info = "Print what the server is running"
+say = "Send a chat message as the server"
+kick = "Kick a player"
+ban = "Ban a player"
+ban_ip = "Ban an address"
+unban_last = "Undo the most recent ban"
+level = "Load a map"
+map = "Load a map, the other name for the same command"
+map_ext = "Add time to the round in progress"
+map_rest = "Restart the map in progress"
+map_next = "Skip to the next map"
+map_rand = "Jump to a random map in the rotation"
+map_prev = "Go back to the map before this one"
+maxfps = "Change the server frame rate limit"
+sv_caplimit = "Change the capture limit"
+sv_fraglimit = "Change the kill limit"
+sv_gametype = "Change the game mode, and optionally the map with it"
+sv_netfps = "Change how many updates a second the server sends players"
+gt = "Change the game mode, the short name for sv_gametype"
+sv_geolimit = "Change the geomod limit"
+sv_pass = "Change the password needed to join"
+sv_timelimit = "Change the time limit"
+download_level = "Fetch a map from FactionFiles onto the server"
+sv_loadconfig = "Reload this config file without restarting"
+
 # ---------------------------------------------------------------- presets
 
 ["base"]

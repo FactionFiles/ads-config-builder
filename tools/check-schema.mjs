@@ -102,6 +102,38 @@ function checkModes(label, path, entry) {
   }
 }
 
+// generated choices, by the same dotted path the authored layer keys off. a key
+// whose valid values the source states is not free text, so the authored layer
+// owes each of them a name the user can read.
+function choicesByPath(keys, prefix = '', into = new Map()) {
+  for (const key of keys) {
+    const path = prefix + key.key
+    if (key.choices) into.set(path, key.choices)
+    if (key.keys) choicesByPath(key.keys, path + '.', into)
+  }
+  return into
+}
+
+const generatedChoices = {
+  rules: choicesByPath(rules.keys),
+  server: choicesByPath([...server.keys, ...server.tables, ...server.arrays]),
+}
+
+function checkChoiceLabels(label, path, entry) {
+  const choices = generatedChoices[label]?.get(path)
+  if (!choices) return
+  const labels = entry.choiceLabels ?? {}
+  const missing = choices.filter(c => !labels[c])
+  if (missing.length) {
+    problem(`${label}: choices with no name`, `${path} -> ${missing.join(', ')}`)
+  }
+  for (const named of Object.keys(labels)) {
+    if (!choices.includes(named)) {
+      problem(`${label}: names a choice that no longer exists`, `${path} -> "${named}"`)
+    }
+  }
+}
+
 function crossCheck(label, generatedPaths, authored) {
   if (!authored) return
   const have = new Set(Object.keys(authored))
@@ -115,9 +147,13 @@ function crossCheck(label, generatedPaths, authored) {
       problem(`${label}: entry points at an unknown page`, `${path} -> "${entry.page}"`)
     }
     checkModes(label, path, entry)
-    if (label === 'rules' && path === 'game_type' && entry.choiceLabels) {
-      problem('rules: game_type carries hand-written mode names',
-        'the mode names come from multi_gametype_help_text, so drop game_type.choiceLabels')
+    if (label === 'rules' && path === 'game_type') {
+      if (entry.choiceLabels) {
+        problem('rules: game_type carries hand-written mode names',
+          'the mode names come from multi_gametype_help_text, so drop game_type.choiceLabels')
+      }
+    } else {
+      checkChoiceLabels(label, path, entry)
     }
   }
   const generated = new Set(generatedPaths)

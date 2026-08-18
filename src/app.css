@@ -1,0 +1,245 @@
+/* design tokens, carried over from the approved prototype in design/prototype.html.
+   color in this tool means provenance and nothing else - chrome uses --graphite. */
+:root {
+  --bg: #F6F5F2;
+  --surface: #FFFFFF;
+  --surface-2: #FBFAF7;
+  --sunk: #F0EEE9;
+
+  --ink: #1B1D21;
+  --ink-2: #585D64;
+  --ink-3: #8B9098;
+
+  --line: #E5E3DC;
+  --line-2: #D1CEC6;
+
+  --graphite: #22262B;
+  --on-graphite: #FBFAF7;
+
+  /* provenance: which layer set a value */
+  --p-def: #B4B1A9;
+  --p-preset: #0D7A70;
+  --p-mut: #A8336A;
+  --p-you: #A96E14;
+  --p-map: #6741C8;
+
+  --p-preset-b: #E0F0EE;
+  --p-mut-b: #F8E5EE;
+  --p-you-b: #F8EDDC;
+  --p-map-b: #EDE8FA;
+
+  --err: #B3261E;
+  --err-b: #FBE9E7;
+
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --sh: 0 1px 2px rgba(20, 18, 14, .06), 0 10px 28px -14px rgba(20, 18, 14, .25);
+
+  --nav-w: 238px;
+  --file-w: 320px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { height: 100%; }
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--graphite);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   settings fields. one renderer drives every setting, which is what stops the
+   rules form ever existing twice the way it did in the old builder.
+   --------------------------------------------------------------------------- */
+
+.fr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 210px;
+  gap: 20px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fr:last-child { border-bottom: 0; }
+
+.fr .lab {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fr .help {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  max-width: 52ch;
+}
+
+.fr .warn {
+  font-size: 12px;
+  color: var(--err);
+  margin-top: 4px;
+  max-width: 52ch;
+}
+
+/* a setting the server ignores until its sibling is on */
+.fr.inert .lab,
+.fr.inert .help { color: var(--ink-3); }
+.fr.inert .ctlwrap { opacity: .55; }
+
+.ctlwrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.ctl {
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13.5px;
+  background: var(--surface);
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ctl input {
+  border: 0;
+  background: none;
+  padding: 0;
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ctl input:focus { outline: none; }
+
+.ctl .unit {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+select.ctl { cursor: pointer; }
+
+.sw {
+  width: 36px;
+  height: 21px;
+  border-radius: 11px;
+  background: var(--line-2);
+  position: relative;
+  flex: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.sw::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: left .15s;
+}
+
+.sw.on { background: var(--p-you); }
+.sw.on::after { left: 18px; }
+
+.fr .src {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.fr .src.you    { color: var(--p-you); }
+.fr .src.preset { color: var(--p-preset); }
+.fr .src.mut    { color: var(--p-mut); }
+.fr .src.map    { color: var(--p-map); }
+
+.fr .src .rst {
+  color: var(--ink-3);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 11.5px;
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.pd {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+  background: var(--p-def);
+}
+
+.pd.preset { background: var(--p-preset); }
+.pd.mut    { background: var(--p-mut); }
+.pd.you    { background: var(--p-you); }
+.pd.map    { background: var(--p-map); }
+
+/* group heading inside a settings page */
+.gh {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 26px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.gh:first-of-type { margin-top: 0; }
+
+.gh::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}

@@ -3,7 +3,8 @@
 # Hand-written, because these effects live inside C++ function bodies in
 # game_patch/multi/mutators.cpp and cannot be parsed reliably. Keys in `sets`
 # are real config paths; anything with no config key to point at goes in
-# `notes` instead. A stale entry here only makes a provenance popover
+# `notes` instead. A set carries either a literal `value` or a `fromOption`
+# naming the mutator option the value comes from. A stale entry here only makes a provenance popover
 # under-explain - it never changes what gets written to the config file.
 
 [meta]
@@ -378,52 +379,52 @@ notes = [
 
 [[scorelimit.sets]]
 key = "individual_kill_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Deathmatch and Wipeout."
 
 [[scorelimit.sets]]
 key = "team_kill_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Team Deathmatch."
 
 [[scorelimit.sets]]
 key = "cap_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Capture the Flag."
 
 [[scorelimit.sets]]
 key = "koth_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in King of the Hill."
 
 [[scorelimit.sets]]
 key = "dc_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Damage Control."
 
 [[scorelimit.sets]]
 key = "pit_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Pit."
 
 [[scorelimit.sets]]
 key = "gg_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Gun Game."
 
 [[scorelimit.sets]]
 key = "bag_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Bagman."
 
 [[scorelimit.sets]]
 key = "tbag_score_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Team Bagman."
 
 [[scorelimit.sets]]
 key = "sal_cap_limit"
-value = "the Score limit option"
+fromOption = "score_limit"
 note = "Used in Salvage."
 
 
@@ -440,4 +441,4 @@ notes = [
 
 [[idealplayers.sets]]
 key = "ideal_player_count"
-value = "the Ideal players option"
+fromOption = "ideal_players"

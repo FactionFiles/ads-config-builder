@@ -3,6 +3,7 @@
   import { emptyDocument, toToml } from './lib/config'
   import { resolveScope, resolveServer, type ResolvedRules } from './lib/resolve'
   import SettingsPage from './lib/ui/SettingsPage.svelte'
+  import MutatorsPage from './lib/ui/MutatorsPage.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
@@ -105,14 +106,23 @@
     {#if page}
       <h2>{page.title}</h2>
       {#if page.blurb}<p class="blurb">{page.blurb}</p>{/if}
-      <SettingsPage
-        page={page.id}
-        {gameType}
-        {resolved}
-        onchange={change}
-        onreset={reset}
-        onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
-      />
+      {#if page.id === 'rules-mutators'}
+        <MutatorsPage
+          declared={doc.base.mutators}
+          resolved={baseRules}
+          {gameType}
+          onchange={next => (doc.base.mutators = next)}
+        />
+      {:else}
+        <SettingsPage
+          page={page.id}
+          {gameType}
+          {resolved}
+          onchange={change}
+          onreset={reset}
+          onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
+        />
+      {/if}
     {/if}
   </main>
 

@@ -265,18 +265,60 @@ Facts established from the Alpine source, worth not re-deriving:
   existing twice. TOML emit round-trips identically and matches Alpine's shape.
 - **M4 substantially done.** `src/lib/resolve.ts` implements the layering with a
   full per-setting trail, and `ProvenancePopover.svelte` renders it.
-- Nothing is committed yet.
+- **M6 done.** `src/lib/ui/MutatorsPage.svelte` is the card grid: add and remove,
+  per-mutator options, the client version floor, and the mutators the mode in play
+  cannot use shown greyed with the reason. A mutator option that feeds a setting
+  names it with `fromOption`, so Score Limit Override and Ideal Player Count
+  Override resolve to real numbers with proper provenance instead of prose - and
+  the score limit follows the mode, since each mode is scored by its own key.
 
 ### Next, in order
 
-1. **Mode relevance.** Settings that only apply to one game mode (the Bagman and
-   Salvage timings, the CTF flag rules, the Gun Game ladder) currently show in
-   every mode. The score limits are already filtered, because `scoreLimitKey` in
-   `gametypes.json` says which one is live - but the rest cannot be derived
-   without guessing from key prefixes, which is exactly the kind of guess this
-   project avoids. It needs a `modes = ["bag", "tbag"]` hint per authored entry,
-   plus a check that every named mode exists.
-2. M5 rotation sheet, M6 mutators page, M7 import round-trip.
+1. M5 rotation sheet, M7 import round-trip.
+2. M8 remaining pages: presets (the base rules field on Mode & scoring is still a
+   bare text box), bots, admin profiles, voting, idle, problems.
+
+### Mode relevance, and where the answer comes from
+
+A setting that does nothing in the mode being played is hidden, and the source of
+that answer is layered the same way everything else in this tool is:
+
+- **Generated**, where Alpine states it: the per-mode score limits come from
+  `get_score_limit`, and the rounds settings from `gt_type_uses_rounds`. The
+  authored layer is forbidden from restating either - `check-schema` rejects a
+  hand-written hint on those keys.
+- **Authored**, everywhere else, read off the code that consumes the setting
+  rather than off the key name. Three forms, at most one per entry: `modes` for
+  the modes it works in, `notModes` for the modes it does nothing in when that is
+  the shorter list, and `teamOnly = true` for anything gated on the mode having
+  teams. `notModes` and `teamOnly` exist so that a game mode added upstream is
+  included by default rather than silently dropping out of a stale list.
+
+A setting the mode ignores is still shown, greyed and annotated, when this scope
+sets it by hand - a value that is in the file must never be invisible.
+
+Alpine's own gating is sometimes behavioral rather than a guard: Gun Game hides
+every level item, so the pickup settings are dead there without any code testing
+them. Those cases are gated too, and each one carries the file and line it was
+read from in the research notes.
+
+### Upstream findings from that pass
+
+None of these block the builder; they are worth reporting to Alpine.
+
+- **Overtime is silently dead in four modes.** Pit and Wipeout are excluded
+  structurally by `gt_uses_rounds`, Gun Game by an explicit "cannot be tied" case,
+  and Run by the default branch of `round_is_tied`. Nothing warns an operator who
+  sets `overtime.enabled` on a Pit server.
+- **`overtime.tie_when_hill_contested` is King of the Hill only**, despite four
+  modes having hills and the key name naming none of them. Damage Control's tie
+  test is a bare score comparison; Revolt and Escalation ignore the flag.
+- **Wipeout and Salvage count as team types** and Gun Game does not, which decides
+  every team-gated setting and is not obvious from the mode list.
+- **`weapon_stay_exemptions` is never cleared between layers** - the `.clear()` is
+  commented out - so Super Rail's exemption accumulates.
+- **The Capture the Flag mode description says "Steal the the enemy flag".** The
+  tool shows the game's own wording, so the typo shows through.
 
 ### Things worth knowing that the plan did not anticipate
 

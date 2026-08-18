@@ -15,7 +15,8 @@
 // scope.
 
 import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
-import type { DefaultOp, ScalarKey, SchemaKey } from '../schema/types'
+import type { DefaultOp, Mutator, ScalarKey, SchemaKey } from '../schema/types'
+import { railGunName } from './gamedata'
 
 export type Layer =
   | 'default'      // Alpine's built-in value
@@ -143,19 +144,43 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
 
   for (const set of effect.sets ?? []) {
     const schema = findScalar(set.key)
+    const value = set.fromOption === undefined
+      ? set.value
+      : optionValue(mutator, decl, set.fromOption, into.get(set.key)?.value)
     // a `sets` entry whose value is not a value of the right type is a prose
     // description of something we cannot compute - record it as such rather than
     // writing a bogus value into the setting
-    const usable = schema ? valueMatchesType(set.value, schema.type) : false
+    const usable = schema ? valueMatchesType(value, schema.type) : false
     contribute(into, set.key, usable
-      ? { layer: 'mutator', value: set.value, source: mutator.label }
+      ? { layer: 'mutator', value, source: mutator.label }
       : {
           layer: 'mutator',
           value: into.get(set.key)?.value,
           source: mutator.label,
-          description: typeof set.value === 'string' ? set.value : set.note,
+          description: typeof value === 'string' ? value : set.note,
         })
   }
+}
+
+/**
+ * What a mutator option is set to. An option the user has not touched falls back
+ * to its declared default, and the two options declared as `currentValue` fall
+ * back to whatever the setting already resolved to - which is what the server
+ * does, and is why turning those mutators on changes nothing by itself.
+ */
+export function optionValue(
+  mutator: Mutator,
+  decl: MutatorDeclaration,
+  name: string,
+  currentValue?: unknown,
+): unknown {
+  const declared = decl.options?.[name]
+  if (declared !== undefined) return declared
+  const option = mutator.options.find(o => o.name === name)
+  if (!option) return undefined
+  if (option.defaultFrom === 'currentValue') return currentValue
+  if (option.defaultFrom === 'railGun') return railGunName
+  return option.default
 }
 
 function valueMatchesType(value: unknown, type: ScalarKey['type']): boolean {

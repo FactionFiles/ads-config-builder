@@ -33,3 +33,11 @@ export function tableFor(lookup: 'weapon' | 'item' | 'character'): GameDataEntry
  * never be the featured one.
  */
 export const weaponsWithPickup = weapons.filter(w => w.pickupItem != null)
+
+/**
+ * The rail driver. The game keeps a dedicated global for it that mutator
+ * defaults are read from, and that global is filled in from the weapon table
+ * rather than from anything the Alpine repo states - so the name lives here,
+ * beside the table it came from.
+ */
+export const railGunName = weapons.find(w => w.name === 'rail_gun')?.name ?? ''

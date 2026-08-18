@@ -1,0 +1,142 @@
+[
+  {
+    "name": "enviro_parker",
+    "display": "Envirosuit Parker",
+    "index": 0,
+    "entityType": "miner1",
+    "animType": "miner1"
+  },
+  {
+    "name": "scientist_parker",
+    "display": "Scientist Parker",
+    "index": 1,
+    "entityType": "parker_sci",
+    "animType": "miner1"
+  },
+  {
+    "name": "exec_parker",
+    "display": "Executive Parker",
+    "index": 2,
+    "entityType": "parker_suit",
+    "animType": "miner1"
+  },
+  {
+    "name": "guard2",
+    "display": "Ultor Guard 2",
+    "index": 3,
+    "entityType": "multi_guard2",
+    "animType": "miner1"
+  },
+  {
+    "name": "env_guard",
+    "display": "Envirosuit Guard",
+    "index": 4,
+    "entityType": "env_guard",
+    "animType": "miner1"
+  },
+  {
+    "name": "elite",
+    "display": "Elite Guard",
+    "index": 5,
+    "entityType": "elite",
+    "animType": "miner1"
+  },
+  {
+    "name": "riot_guard",
+    "display": "Riot Guard",
+    "index": 6,
+    "entityType": "riot_guard",
+    "animType": "miner1"
+  },
+  {
+    "name": "nurse",
+    "display": "Nurse",
+    "index": 7,
+    "entityType": "nurse1",
+    "animType": "multi_female"
+  },
+  {
+    "name": "female_miner",
+    "display": "Female Miner",
+    "index": 8,
+    "entityType": "miner3",
+    "animType": "multi_female"
+  },
+  {
+    "name": "female_admin",
+    "display": "Female Administrator 1",
+    "index": 9,
+    "entityType": "admin_fem",
+    "animType": "multi_female"
+  },
+  {
+    "name": "masako",
+    "display": "Masako",
+    "index": 10,
+    "entityType": "masako",
+    "animType": "multi_female"
+  },
+  {
+    "name": "eos",
+    "display": "Eos",
+    "index": 11,
+    "entityType": "eos",
+    "animType": "multi_female"
+  },
+  {
+    "name": "merc_grunt",
+    "display": "Grunt Mercenary",
+    "index": 12,
+    "entityType": "merc_grunt",
+    "animType": "multi_merc"
+  },
+  {
+    "name": "tech",
+    "display": "Technician",
+    "index": 13,
+    "entityType": "tech1",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "scientist",
+    "display": "Scientist",
+    "index": 14,
+    "entityType": "ult_scientist",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "medic1",
+    "display": "Medic",
+    "index": 15,
+    "entityType": "medic1",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "env_scientist1",
+    "display": "Envirosuit Scientist 1",
+    "index": 16,
+    "entityType": "env_scientist",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "hendrix",
+    "display": "Hendrix",
+    "index": 17,
+    "entityType": "comp_tech",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "gryphon",
+    "display": "Gryphon",
+    "index": 18,
+    "entityType": "admin_male",
+    "animType": "multi_civilian"
+  },
+  {
+    "name": "fat_admin",
+    "display": "Big Administrator 2",
+    "index": 19,
+    "entityType": "admin_male2",
+    "animType": "multi_civilian"
+  }
+]

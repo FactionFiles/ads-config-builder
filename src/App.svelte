@@ -1,13 +1,15 @@
 <script lang="ts">
   import { meta, pages, type Scope } from './schema'
   import {
-    emptyDocument, fromToml, toToml, type ImportReport, type RulesScope,
+    emptyDocument, fromToml, toPresetToml, toToml, type ImportReport, type RulesScope,
   } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
   import SettingsPage from './lib/ui/SettingsPage.svelte'
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
   import RotationPage from './lib/ui/RotationPage.svelte'
   import AdminPage from './lib/ui/AdminPage.svelte'
+  import PresetsPage from './lib/ui/PresetsPage.svelte'
+  import PresetList from './lib/ui/PresetList.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
@@ -57,13 +59,23 @@
     }
   }
 
-  function download() {
-    const url = URL.createObjectURL(new Blob([fileText], { type: 'application/toml' }))
+  function save(text: string, name: string) {
+    const url = URL.createObjectURL(new Blob([text], { type: 'application/toml' }))
     const link = document.createElement('a')
     link.href = url
-    link.download = fileName
+    link.download = name
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  function download() {
+    save(fileText, fileName)
+  }
+
+  // a preset is the rules on their own, named after the config it came from so
+  // two of them in one folder do not collide
+  function savePreset() {
+    save(toPresetToml(doc.base), fileName.replace(/\.toml$/i, '') + '-rules.toml')
   }
 
   /** the same key can turn up in several scopes, and saying so twice helps nobody */
@@ -292,6 +304,13 @@
         onopen={i => go(rulesPages[0].id, i)}
         onopenbase={() => go(rulesPages[0].id)}
       />
+    {:else if page?.id === 'presets'}
+      <PresetsPage
+        aliases={doc.presetAliases}
+        canSave={Object.keys(doc.base.manual).length > 0 || doc.base.mutators.length > 0}
+        onchange={next => (doc.presetAliases = next)}
+        onsave={savePreset}
+      />
     {:else if page?.id === 'admin'}
       <AdminPage
         profiles={doc.rconProfiles}
@@ -309,6 +328,14 @@
         onchange={setMutators}
       />
     {:else if page}
+      {#if page.id === 'rules-mode'}
+        <PresetList
+          presets={activeScope.presets}
+          aliases={doc.presetAliases}
+          levelScope={level !== undefined}
+          onchange={next => editScope(s => ({ ...s, presets: next }))}
+        />
+      {/if}
       <SettingsPage
         page={page.id}
         {gameType}

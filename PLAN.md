@@ -293,14 +293,52 @@ Facts established from the Alpine source, worth not re-deriving:
   arrays with no editor yet - the file comes back byte-identical apart from key
   order, and is stable on a second pass.
 
+- **M8 started: admin profiles and presets are in.**
+  - *Advanced admin access* is `src/lib/ui/AdminPage.svelte`. The page is named
+    that way because most servers want the single `rcon_password` on Passwords &
+    access instead, and the two pages now point at each other rather than leaving
+    an operator to guess which one they need. It is: a card per profile, the
+    fields rendered by the shared renderer off the schema, and the grants as a
+    checkbox grid. The command names are generated - the config parser only
+    checks a name against `g_rcon_cmd_masterlist` in `multi/server.cpp`, so that
+    list is now extracted and the authored layer owes each command a plain-English
+    name, which `check-schema` enforces the same way it enforces labels. The page
+    also shows the profile the server invents for you when `rcon_password` is
+    set, since a page listing only the written ones would be describing a
+    different server.
+  - *Presets* split in two, because a preset applies to a scope but is named
+    globally. The list of presets a scope pulls in sits at the top of Mode &
+    scoring, where it works for the game rules and for one map alike, and it
+    replaces the stray text box the page used to render for `base`. The Presets
+    page itself carries the shortcuts, the export, and the honest note that this
+    tool does not read preset files - so a setting a preset changes still shows
+    its default here.
+  - Both are out of the `unknown` bucket now: `rcon_profiles` and
+    `rules_preset_aliases` are modeled, and anything inside them the tool does not
+    know is still kept verbatim per entry.
+  - A settings page now renders only a scalar this file holds. It had been giving
+    a text box to every array with no editor yet, and to the keys the authored
+    layer describes for other documents - a bot profile's fields, a preset's -
+    so editing the bots page wrote a table where Alpine wants a list of file
+    names. Those settings are hidden until their editors land rather than
+    editable into a broken config; an imported config still carries them
+    verbatim, and the import banner still names them.
+
 ### Next, in order
 
-1. M8 remaining pages: presets (the base rules field on Mode & scoring is still a
-   bare text box), bots, admin profiles, voting, idle, problems. Several of those
-   are the arrays `fromToml` currently parks in `unknown` - `rcon_profiles`,
-   `bot_profiles`, `gg_tiers`, `spawn_loadout`, `item_replacements`,
-   `delayed_items` - so each page that lands shortens the "kept as it came in"
-   line the import banner shows.
+1. The rest of M8: the rules list editors, then bots, then problems.
+   - The list editors are one shared component over eight rules arrays -
+     `spawn_loadout`, `spawn_loadout_blue`, `gg_tiers`, `item_replacements`,
+     `item_respawn_time_overrides`, `delayed_items`, `weapon_stay_exemptions`,
+     `spawn_selection.dynamic_respawn_items`. All of them are rows of a small
+     record, mostly a weapon or item name plus a number, and all of them are
+     still parked in `unknown`.
+   - Bots is deliberately shallow for now: the join code and the list of profile
+     file names. A bot profile is a separate TOML document with 45 personality
+     fields, 11 skill fields and 8 quirks, none of which the generator extracts
+     yet; editing them would make this a two-document tool and is its own
+     milestone.
+   - Problems needs no schema work. It reads the document and the resolver.
 2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
 3. M9 map picker, blocked below. M10 CI and deploy.
 
@@ -352,6 +390,15 @@ None of these block the builder; they are worth reporting to Alpine.
   rules keys are not cleared with it, so the map keeps half of what Instagib did
   while Instagib itself is off. The tool models this and warns on the map's
   mutators page and in the rotation sheet's Mutators column.
+
+- **An old-style `rcon_password` conjures a profile nobody wrote.** The server
+  builds a profile named `legacy` from it, with a fixed 18-command list, unless a
+  written profile already uses that same password. The admin page shows it as a
+  card of its own rather than letting the written profiles imply they are the
+  whole story.
+- **`map` and `gt` are aliases**, of `level` and `sv_gametype`. Both are on the
+  rcon master list, so a permissions grid that named them literally would look
+  like it was offering four abilities where there are two.
 
 ### Things worth knowing that the plan did not anticipate
 

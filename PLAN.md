@@ -285,13 +285,24 @@ Facts established from the Alpine source, worth not re-deriving:
   working but much worse config - the same key repeated in every `[[levels]]`,
   and no inheritance for a map added later - so that case is caught and offered
   the base rules instead rather than being silently allowed.
+- **M7 done.** `fromToml` in `src/lib/config.ts` opens a config somebody else
+  wrote. Nothing is thrown away: a key with no editor here and a key from a newer
+  Alpine both land in a per-scope `unknown` bucket and are written back out.
+  Verified on a fixture carrying an unknown root table, an unknown key inside a
+  known table, an unknown rules key, an unknown key inside `[[levels]]`, and the
+  arrays with no editor yet - the file comes back byte-identical apart from key
+  order, and is stable on a second pass.
 
 ### Next, in order
 
-1. M7 import round-trip.
-2. M8 remaining pages: presets (the base rules field on Mode & scoring is still a
-   bare text box), bots, admin profiles, voting, idle, problems.
-3. A parity pass against `old.html`, then delete it and `design/prototype.html`.
+1. M8 remaining pages: presets (the base rules field on Mode & scoring is still a
+   bare text box), bots, admin profiles, voting, idle, problems. Several of those
+   are the arrays `fromToml` currently parks in `unknown` - `rcon_profiles`,
+   `bot_profiles`, `gg_tiers`, `spawn_loadout`, `item_replacements`,
+   `delayed_items` - so each page that lands shortens the "kept as it came in"
+   line the import banner shows.
+2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
+3. M9 map picker, blocked below. M10 CI and deploy.
 
 ### Mode relevance, and where the answer comes from
 

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { meta, pages, type Scope } from './schema'
-  import { emptyDocument, toToml, type RulesScope } from './lib/config'
+  import {
+    emptyDocument, fromToml, toToml, type ImportReport, type RulesScope,
+  } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
   import SettingsPage from './lib/ui/SettingsPage.svelte'
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
@@ -31,6 +33,42 @@
 
   let fileOpen = $state(true)
   let popover = $state<{ scope: Scope; path: string; anchor: HTMLElement } | null>(null)
+
+  let fileName = $state('ads.toml')
+  let fileInput = $state<HTMLInputElement | null>(null)
+  let imported = $state<ImportReport | null>(null)
+  let importError = $state<string | null>(null)
+
+  async function openFile(e: Event & { currentTarget: HTMLInputElement }) {
+    const picked = e.currentTarget.files?.[0]
+    e.currentTarget.value = ''
+    if (!picked) return
+    try {
+      const report = fromToml(await picked.text())
+      doc = report.doc
+      fileName = picked.name
+      imported = report
+      importError = null
+      location.hash = pages[0].id
+    } catch (err) {
+      imported = null
+      importError = err instanceof Error ? err.message : String(err)
+    }
+  }
+
+  function download() {
+    const url = URL.createObjectURL(new Blob([fileText], { type: 'application/toml' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /** the same key can turn up in several scopes, and saying so twice helps nobody */
+  function once(paths: string[]) {
+    return [...new Set(paths)]
+  }
 
   // a map only has game rules, so scoping into one from a server page lands on
   // the first rules page rather than on a page that does not exist there
@@ -113,6 +151,15 @@
     <strong>Alpine Faction server config</strong>
     <span class="sp"></span>
     <span class="ver">Alpine {meta.alpineVersion} &middot; ads_version {meta.adsVersion}</span>
+    <input
+      type="file"
+      accept=".toml,text/plain"
+      bind:this={fileInput}
+      onchange={openFile}
+      hidden
+    />
+    <button type="button" class="ghost" onclick={() => fileInput?.click()}>Open a config</button>
+    <button type="button" class="ghost" onclick={download}>Download</button>
     <button type="button" class="ghost" onclick={() => (fileOpen = !fileOpen)}>
       {fileOpen ? 'Hide' : 'Show'} config file
     </button>
@@ -179,6 +226,49 @@
   </nav>
 
   <main class="main">
+    {#if importError}
+      <div class="notice bad">
+        <div>
+          <b>That file could not be read.</b>
+          {importError}
+        </div>
+        <button type="button" class="x" aria-label="Dismiss" onclick={() => (importError = null)}>
+          &times;
+        </button>
+      </div>
+    {/if}
+
+    {#if imported}
+      {@const kept = once(imported.kept)}
+      {@const strange = once(imported.unrecognized)}
+      <div class="notice">
+        <div>
+          <b>Opened {fileName}.</b>
+          {#if imported.fromVersion !== null && imported.fromVersion !== meta.adsVersion}
+            It was written for ads_version {imported.fromVersion}; downloading
+            writes version {meta.adsVersion}.
+          {/if}
+          {#if kept.length}
+            <br />{kept.length}
+            {kept.length === 1 ? 'setting has' : 'settings have'} no editor here yet
+            and {kept.length === 1 ? 'was' : 'were'} kept exactly as {kept.length === 1 ? 'it' : 'they'} came in:
+            <span class="keys">{kept.join(', ')}</span>.
+          {/if}
+          {#if strange.length}
+            <br />{strange.length}
+            {strange.length === 1 ? 'key was' : 'keys were'} not recognized, and
+            {strange.length === 1 ? 'is' : 'are'} kept too:
+            <span class="keys">{strange.join(', ')}</span>.
+          {/if}
+          <br />Downloading writes the file out fresh, so comments and the order
+          you had things in are not kept.
+        </div>
+        <button type="button" class="x" aria-label="Dismiss" onclick={() => (imported = null)}>
+          &times;
+        </button>
+      </div>
+    {/if}
+
     {#if level}
       <h2>{level.filename}</h2>
       <p class="blurb">
@@ -347,6 +437,39 @@
     font-size: 21px;
     margin-bottom: 4px;
     overflow-wrap: anywhere;
+  }
+
+  .notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 20px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    line-height: 1.6;
+  }
+
+  .notice.bad { border-color: var(--err); background: var(--err-b); }
+
+  .notice .keys {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+
+  .notice .x {
+    margin-left: auto;
+    border: 0;
+    background: none;
+    color: var(--ink-3);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
   }
 
   .blurb {

@@ -44,6 +44,10 @@ npm run check          svelte-check plus tsc
   assignment, and what each mutator does. TOML because a human edits it.
 - `src/schema/` - types and the loader the UI imports.
 - `src/lib/resolve.ts` - the layering, and the trail the provenance UI renders.
+- `src/lib/config.ts` - the document the user edits, plus reading and writing
+  `ads.toml`. Anything it cannot model is kept verbatim rather than dropped.
+- `src/lib/format.ts` - the one place a stored value becomes words, so a setting
+  shown in a table and the same setting shown in its own field always agree.
 - `design/prototype.html` - the approved prototype, kept as a port reference.
   Delete it once the app reaches parity.
 

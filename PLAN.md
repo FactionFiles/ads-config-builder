@@ -187,25 +187,27 @@ export so we never eat something a newer Alpine added.
 **M8 - Remaining pages.** Bots, admin/rcon profiles, voting, idle, presets,
 problems/diagnostics. Parity pass against `old.html`, then delete it.
 
-**M9 - Map picker.** Blocked on FactionFiles. See below.
+**M9 - Map picker.** Search the archive, add a map by name, flag a rotation entry
+the autodownloader cannot serve. Done; see the status log.
 
 **M10 - CI and deploy.** Pick a host, ~30 lines of pipeline config, deploy `dist/`.
 
-## Blocked
+## What FactionFiles answered
 
-**M9 depends on FactionFiles adding API surface.** In priority order:
+M9 was blocked on the site adding API surface. It has:
+`autodl.factionfiles.com/maps/v1/` serves `search.php`, `have.php` and
+`categories.php`, all readable cross-origin with a wildcard, none of them
+wanting a key, a custom header or a user agent. `docs/factionfiles-map-api.md`
+is the handoff that asked; the contract they wrote back is `site/doc/map-api.md`
+in the FactionFiles repo, and that is the authority on the wire shapes.
 
-1. **A CORS header allowing the built page's origin.** Nothing else matters without
-   it - the page is static, so the browser makes the request directly and will
-   refuse to read the response otherwise. This is the difference between the feature
-   existing and not existing.
-2. A search endpoint returning JSON per map: `.rfl` file name, display name, author,
-   description, file size, upload date, thumbnail URL, download URL.
-3. The mode a map was built for, and its intended player count, if known. This is
-   what lets the builder warn that a CTF map is scheduled as Deathmatch.
-4. Pagination, so a broad search does not pull the whole archive.
-
-The origin in (1) cannot be finalized until the host is picked in M10.
+Two things worth remembering about their data. A search only offers maps the
+site lists, while `have.php` answers for everything the autodownloader serves,
+which is about a tenth more - so a name the picker never showed can still be
+fine in a rotation. And their categories are the site's own, not game types:
+there is no category for half the modes, and a map is reusable anyway, so a
+category sits next to a scheduled mode for the person to read rather than
+feeding a warning.
 
 ## Risks
 
@@ -387,10 +389,30 @@ Facts established from the Alpine source, worth not re-deriving:
   - `spawn_loadout_blue` was documented backwards: it replaces the kit for the
     blue team rather than adding to it. Fixed in the authored text.
 
+- **M9: the map picker, and the first check that asks anyone anything.**
+  FactionFiles answered the handoff with three endpoints under
+  `autodl.factionfiles.com/maps/v1/`: a search, a batch "do you have these"
+  check, and the category list. Every response is readable cross-origin, none of
+  them wants a key or a header, so the page calls them directly the way the
+  design assumed.
+  - `src/lib/maps.ts` is the only place that knows the wire shapes. It caches per
+    query and per level name for the session, so a rotation checked after one map
+    is added asks about one name. A search also answers for the names it returned,
+    since everything the picker offers is something the autodownloader serves.
+  - The picker is a panel in the rotation sheet, not a replacement for typing a
+    name. The archive carries maps the site does not list, so the text box stays
+    below the results and says why it is still there.
+  - The first diagnostic that leaves the machine: a rotation entry the
+    autodownloader does not carry is marked in the sheet and counted underneath
+    it. It fails quiet - not knowing looks like nothing at all, because an
+    unreachable archive must never read as a broken config.
+
 ### Next, in order
 
 1. The rest of M8: problems, then a parity pass.
    - Problems needs no schema work. It reads the document and the resolver.
+   - The autodownloader check is already answered for; the page reads
+     `rotationCheck` rather than asking FactionFiles again.
    - One thing the kit work leaves behind: the weapon-stay exemptions are seeded
      by the parser with the Fusion Rocket Launcher before it reads the array, and
      the tool still says so in help text rather than showing it as an inherited
@@ -398,7 +420,8 @@ Facts established from the Alpine source, worth not re-deriving:
      the generator would capture the seeding call, and the resolver would apply
      it as a layer under everything else.
 2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
-3. M9 map picker, blocked below. M10 CI and deploy.
+3. M10 CI and deploy. Nothing is blocking it now that the origin does not have
+   to be registered anywhere.
 
 Smaller things noticed and not done: `gg_final_weapon` is a weapon name in a
 plain text box, for the same reason `gg_tiers` was - the check is in the game

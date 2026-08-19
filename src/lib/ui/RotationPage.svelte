@@ -7,7 +7,9 @@
   import { emptyLevel, parseLevelList, type LevelEntry, type RulesScope } from '../config'
   import { formatValue } from '../format'
   import { effectiveMutators, type Resolved, type ResolvedRules } from '../resolve'
+  import { rotationCheck } from '../mapcheck.svelte'
   import Field from './Field.svelte'
+  import MapPicker from './MapPicker.svelte'
   import SettingPicker from './SettingPicker.svelte'
 
   interface Props {
@@ -76,6 +78,17 @@
   )
 
   const totalChanged = $derived(rows.filter(r => r.changed > 0).length)
+
+  /** what is already here, so the picker can say so rather than offer it twice */
+  const taken = $derived(new Set(levels.map(level => level.filename.toLowerCase())))
+
+  // a map the autodownloader does not carry fails to download for everyone who
+  // joins on it, so the sheet asks about the rotation as it is edited
+  $effect(() => {
+    rotationCheck.schedule(levels.map(level => level.filename))
+  })
+
+  const absent = $derived(rotationCheck.absentAmong(levels.map(level => level.filename)))
 
   function headerFor(col: string) {
     return PSEUDO.find(p => p.id === col)?.label ?? textFor('rules', col).label
@@ -291,27 +304,31 @@
 {:else if panel === 'add'}
   <div class="panel">
     <h4>Add a map</h4>
-    <p class="ph">
-      The name of the level file on the server, such as <code>ctf_deathinstinct.rfl</code>.
-      Searching FactionFiles by name is not built yet.
-    </p>
-    <div class="acts">
-      <input
-        class="ctl grow"
-        type="text"
-        placeholder="level file name"
-        bind:value={newMap}
-        onkeydown={e => {
-          if (e.key !== 'Enter') return
-          addMaps(parseLevelList(newMap))
-          newMap = ''
-        }}
-      />
-      <button
-        type="button"
-        class="btn pri"
-        onclick={() => { addMaps(parseLevelList(newMap)); newMap = '' }}
-      >Add</button>
+    <MapPicker {taken} onpick={map => addMaps([map.rfl])} />
+    <div class="byhand">
+      <p class="ph">
+        Or type the file name, such as <code>ctf_deathinstinct.rfl</code>. The
+        autodownloader carries maps the site does not list, so a name that finds
+        nothing above can still be the right one.
+      </p>
+      <div class="acts">
+        <input
+          class="ctl grow"
+          type="text"
+          placeholder="level file name"
+          bind:value={newMap}
+          onkeydown={e => {
+            if (e.key !== 'Enter') return
+            addMaps(parseLevelList(newMap))
+            newMap = ''
+          }}
+        />
+        <button
+          type="button"
+          class="btn pri"
+          onclick={() => { addMaps(parseLevelList(newMap)); newMap = '' }}
+        >Add</button>
+      </div>
     </div>
   </div>
 {/if}
@@ -372,7 +389,14 @@
               ></button>
             </td>
             <td class="n">{row.index + 1}</td>
-            <td class="mapname">{row.name}</td>
+            <td class="mapname">
+              {row.name}
+              {#if rotationCheck.statusOf(row.name) === 'absent'}
+                <span class="nodl" title="FactionFiles does not carry this level, so a player who joins without it already installed cannot download it.">
+                  no auto-download
+                </span>
+              {/if}
+            </td>
             {#each columns as col (col)}
               {@const cell = cellFor(row, col)}
               <td><span class="v {cell.kind}">{cell.text}</span></td>
@@ -393,6 +417,17 @@
 
   <div class="sheetfoot">
     <span><strong>same</strong> means this map uses your game rules unchanged.</span>
+    {#if absent.length}
+      <span class="nodlnote">
+        <strong>{absent.length}</strong>
+        {absent.length === 1 ? 'map is' : 'maps are'} not on the FactionFiles
+        autodownloader. Players who do not already have
+        {absent.length === 1 ? 'it' : 'them'} cannot download
+        {absent.length === 1 ? 'it' : 'them'} on the way in.
+      </span>
+    {:else if rotationCheck.offline}
+      <span class="quiet">FactionFiles could not be reached, so nothing here was checked against the archive.</span>
+    {/if}
   </div>
 {/if}
 
@@ -643,6 +678,34 @@
   }
 
   .sheetfoot strong { color: var(--ink); }
+
+  .byhand {
+    margin-top: 14px;
+    padding-top: 13px;
+    border-top: 1px solid var(--line);
+  }
+
+  .nodl {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--err-b);
+    color: var(--err);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .sheetfoot .nodlnote,
+  .sheetfoot .quiet {
+    display: block;
+    margin-top: 5px;
+  }
+
+  .sheetfoot .nodlnote,
+  .sheetfoot .nodlnote strong { color: var(--err); }
+
+  .sheetfoot .quiet { color: var(--ink-3); }
 
   .link {
     border: 0;

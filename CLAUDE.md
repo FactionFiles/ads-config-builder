@@ -52,6 +52,11 @@ npm run check          svelte-check plus tsc
   earlier layer built without restating the list.
 - `src/lib/config.ts` - the document the user edits, plus reading and writing
   `ads.toml`. Anything it cannot model is kept verbatim rather than dropped.
+- `src/lib/maps.ts` - the FactionFiles archive, queried live from the browser.
+  The only place that knows their wire shapes, and the only place that caches
+  them. `src/lib/mapcheck.svelte.ts` holds what the autodownloader said about the
+  rotation, for the sheet to mark and the problems page to read. Every call fails
+  soft: an unreachable archive must never read as a broken config.
 - `src/lib/format.ts` - the one place a stored value becomes words, so a setting
   shown in a table and the same setting shown in its own field always agree.
 - `design/prototype.html` - the approved prototype, kept as a port reference.

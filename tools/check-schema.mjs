@@ -44,6 +44,14 @@ const server = loadGenerated('server.json')
 const mutators = loadGenerated('mutators.json')
 const gametypes = loadGenerated('gametypes.json')
 
+// the game data tables, which the loadout the game types hand out is stated in
+// terms of - a weapon name in the Alpine source that no longer names a weapon
+// would leave the tool showing a kit the server does not give out
+const weapons = JSON.parse(readFileSync(join(ROOT, 'gamedata/weapons.json'), 'utf8'))
+const weaponNamed = name =>
+  weapons.find(w => normalName(w.name) === normalName(String(name ?? '')))
+const normalName = s => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
 const pagesFile = loadAuthored('pages.toml')
 const authoredRules = loadAuthored('rules.toml')
 const authoredServer = loadAuthored('server.toml')
@@ -230,6 +238,7 @@ if (effects) {
       if (set.value === undefined && set.fromOption === undefined) {
         problem('mutator effect has neither a value nor a fromOption', `${m.name} -> "${set.key}"`)
       }
+      if (Array.isArray(set.value)) checkReplacementList(m.name, set)
       if (set.fromOption !== undefined && !optionNames.has(set.fromOption)) {
         problem('mutator effect reads an option that does not exist',
           `${m.name} -> "${set.key}" reads "${set.fromOption}"` +
@@ -243,6 +252,59 @@ if (effects) {
     if (!names.has(name)) problem('effects entry for a mutator that no longer exists', name)
   }
 }
+
+// a mutator that replaces a list rather than setting a value. the entries are
+// written the way the config file writes them, so they have to key off the same
+// field and name things the game has.
+function checkReplacementList(name, set) {
+  const key = rules.keys.find(k => k.key === set.key)
+  const mergeKey = key?.kind === 'array' ? key.mergeKey : undefined
+  if (!mergeKey) {
+    problem('mutator effect replaces a list that does not merge by a key', `${name} -> "${set.key}"`)
+    return
+  }
+  const lookup = key.item.find(f => f.key === mergeKey)?.lookup
+  for (const row of set.value) {
+    const id = row?.[mergeKey]
+    if (typeof id !== 'string' || id === '') {
+      problem('mutator effect list entry with nothing to key it by',
+        `${name} -> "${set.key}" wants a ${mergeKey}`)
+      continue
+    }
+    if (lookup === 'weapon' && !weaponNamed(id)) {
+      problem('mutator effect list entry names a weapon the game does not have', `${name}: ${id}`)
+    }
+  }
+}
+
+function checkLoadoutOps(label, ops) {
+  for (const op of ops ?? []) {
+    if (op.op === 'loadoutAdd') {
+      if (!weaponNamed(op.weapon)) {
+        problem('game type kit names a weapon the game does not have', `${label}: ${op.weapon}`)
+        continue
+      }
+      if (op.ammo === null && !op.ammoFrom) {
+        problem('game type kit entry with no reserve ammo', `${label}: ${op.weapon}`)
+      }
+    }
+    if (!op.ammoFrom) continue
+    const source = op.ammoFrom.weapon ? weaponNamed(op.ammoFrom.weapon) : weapons[0]
+    if (!source) {
+      problem('reserve ammo read from a weapon the game does not have',
+        `${label}: ${op.ammoFrom.weapon}`)
+    }
+    else if (source[op.ammoFrom.field] === undefined) {
+      problem('reserve ammo read from a weapon table column that is gone',
+        `${label}: ${op.ammoFrom.field}`)
+    }
+  }
+}
+
+checkLoadoutOps('every mode', gametypes.defaults.common)
+checkLoadoutOps('modes with no case of their own', gametypes.defaults.fallback)
+checkLoadoutOps('after the mode', gametypes.defaults.after)
+for (const [mode, ops] of Object.entries(gametypes.defaults.perType)) checkLoadoutOps(mode, ops)
 
 const modeRestricted = [
   ...Object.values(authoredRules ?? {}),

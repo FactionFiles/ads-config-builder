@@ -61,6 +61,12 @@ export interface ArrayKey {
   complex?: boolean
   /** the parser hands the whole array to this function, so we cannot read it */
   via?: string
+  /**
+   * The field entries are keyed by, where the parser folds each entry into what
+   * an earlier layer left rather than replacing the list. Naming that key again
+   * changes the fields the entry carries and leaves the rest alone.
+   */
+  mergeKey?: string
   requires?: Guard[]
 }
 
@@ -70,6 +76,10 @@ export interface ArrayItemField {
   type: ScalarType | null
   cppType: string
   lookup?: LookupTable
+  /** an entry may leave it out, which restates the entry rather than zeroing it */
+  optional?: boolean
+  /** what the parser reads in place of a field the entry does not carry */
+  default?: unknown
 }
 
 export type SchemaKey = ScalarKey | TableKey | ArrayKey
@@ -96,11 +106,26 @@ export interface GameType {
   scoreLimitKey: string | null
 }
 
+/**
+ * Reserve ammo the source states as a column of the weapon table rather than as
+ * a number. The table only exists at runtime, so the generator passes on which
+ * column to read instead of a value.
+ */
+export interface StockReserve {
+  /** the weapon it is read from, where the source names one rather than using the spawn weapon */
+  weapon?: string
+  field: string
+  /** it is multiplied by the number of spare clips the spawn weapon comes with */
+  perClip?: boolean
+}
+
 /** one assignment made by the game type defaults layer */
 export type DefaultOp =
   | { op: 'set'; target: string; key: string | null; value: unknown; expr?: string }
-  | { op: 'loadoutAdd'; weapon: string | null; ammoExpr: string | null; blueTeam: boolean; enabled: boolean }
-  | { op: 'loadoutClear' }
+  | { op: 'loadoutAdd'; weapon: string | null; ammo: number | null; ammoFrom?: StockReserve; blueTeam: boolean; enabled: boolean }
+  | { op: 'loadoutClear'; blueTeam: boolean }
+  /** completes the kit with the weapon the mode spawns players holding */
+  | { op: 'loadoutSpawnWeapon'; ammoFrom: StockReserve }
 
 export interface GameTypesSchema {
   gametypes: GameType[]
@@ -108,6 +133,10 @@ export interface GameTypesSchema {
     /** applied to every mode before its own case */
     common: DefaultOp[]
     perType: Record<string, DefaultOp[]>
+    /** for a mode with no case of its own, which is most of the ordinary ones */
+    fallback: DefaultOp[]
+    /** applied after the mode's own case */
+    after: DefaultOp[]
   }
 }
 

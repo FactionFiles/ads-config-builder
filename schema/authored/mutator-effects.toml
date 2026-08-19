@@ -4,8 +4,12 @@
 # game_patch/multi/mutators.cpp and cannot be parsed reliably. Keys in `sets`
 # are real config paths; anything with no config key to point at goes in
 # `notes` instead. A set carries either a literal `value` or a `fromOption`
-# naming the mutator option the value comes from. A stale entry here only makes a provenance popover
-# under-explain - it never changes what gets written to the config file.
+# naming the mutator option the value comes from. A `value` that is a list of
+# entries replaces a list setting outright, the way a mutator that builds its own
+# spawn kit clears what the game mode handed out; an entry that names no reserve
+# ammo gets the weapon's own, as the source does. A stale entry here only makes a
+# provenance popover under-explain - it never changes what gets written to the
+# config file.
 
 [meta]
 apply_order_note = "When several mutators are on at once they are applied in a fixed order that does not depend on the order you list them in: Pogo, Dodging, Skiing, Low Gravity, Weird Gun Game, Humans vs. Bots, Jetpacks, Gibbing, Flaming Enemies, Big Craters, Super Rail, Delayed Supers, Armored, Super Drain, Vampire, Arena, One Weapon, Instagib, Score Limit Override, Ideal Player Count Override. Where two mutators touch the same setting, the later one in that list wins. Anything you set by hand in the same scope wins over every mutator."
@@ -24,11 +28,12 @@ notes = [
 
 [[instagib.sets]]
 key = "spawn_loadout"
-value = "rail gun only"
+value = [{ weapon_name = "rail_gun", ammo = 1 }]
+note = "The whole kit is replaced, so nothing the game mode handed out is left."
 
 [[instagib.sets]]
 key = "spawn_loadout_blue"
-value = "cleared"
+value = []
 note = "Any separate blue team loadout is dropped, so both teams get the same thing."
 
 [[instagib.sets]]
@@ -67,11 +72,12 @@ notes = [
 
 [[oneweapon.sets]]
 key = "spawn_loadout"
-value = "control baton only"
+value = [{ weapon_name = "Riot Stick" }]
+note = "The whole kit is replaced, so players have to pick the featured weapon up."
 
 [[oneweapon.sets]]
 key = "spawn_loadout_blue"
-value = "cleared"
+value = []
 note = "Any separate blue team loadout is dropped, so both teams get the same thing."
 
 [[oneweapon.sets]]
@@ -127,11 +133,12 @@ value = 0.5
 
 [[arena.sets]]
 key = "spawn_loadout"
-value = "control baton and assault rifle"
+value = [{ weapon_name = "Riot Stick" }, { weapon_name = "Assault Rifle", ammo = 999 }]
+note = "The whole kit is replaced, so nothing the game mode handed out is left."
 
 [[arena.sets]]
 key = "spawn_loadout_blue"
-value = "cleared"
+value = []
 note = "Any separate blue team loadout is dropped, so both teams get the same thing."
 
 [[arena.sets]]

@@ -37,8 +37,9 @@ npm run check          svelte-check plus tsc
   pattern that stopped matching rather than quietly emitting less.
 - `tools/check-schema.mjs` - the anti-drift check. Fails on a setting with no
   authored entry, an authored entry for a setting that no longer exists, a
-  mutator with no effects entry, a value the source allows with no name, or a
-  column of a list setting with no heading.
+  mutator with no effects entry, a value the source allows with no name, a
+  column of a list setting with no heading, or a name the source states that the
+  game's own tables no longer hold.
 - `tools/extract-tables.mjs` - one-shot, run by hand. Produces `gamedata/*.json`
   from the game's own `tables.vpp`. Those names are not in the Alpine repo.
 - `schema/authored/` - the hand-written layer: labels, help text, page
@@ -46,6 +47,9 @@ npm run check          svelte-check plus tsc
   of a list setting, and what each mutator does. TOML because a human edits it.
 - `src/schema/` - types and the loader the UI imports.
 - `src/lib/resolve.ts` - the layering, and the trail the provenance UI renders.
+  Some list keys are folded together rather than replaced, keyed by one field the
+  generator reads out of the parser, so a scope can change one entry of a list an
+  earlier layer built without restating the list.
 - `src/lib/config.ts` - the document the user edits, plus reading and writing
   `ads.toml`. Anything it cannot model is kept verbatim rather than dropped.
 - `src/lib/format.ts` - the one place a stored value becomes words, so a setting

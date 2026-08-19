@@ -279,7 +279,7 @@ export function parseStructs(src) {
       const params = splitTopLevelArgs(km[2])
         .map(p => p.match(/([A-Za-z_]\w*)\s*$/)?.[1])
         .filter(Boolean)
-      structs[name].methods[km[1]] = { params, lookups: lookupsByRoot(methodBody, params) }
+      structs[name].methods[km[1]] = { params, body: methodBody, lookups: lookupsByRoot(methodBody, params) }
     }
   }
   return structs
@@ -631,7 +631,26 @@ function extractArrayShape(block, structs, structName, key) {
       const found = fields.find(f => f.key === field)
       if (found) found.lookup = lookup
     }
-    return { item: fields }
+    const locals = localFields(block)
+    for (const [local, field] of locals) {
+      const found = fields.find(f => f.key === field)
+      if (!found) continue
+      // a field the parser asks whether the entry even carried. an entry that
+      // leaves it out is restating the rest, not asking for a zero.
+      if (new RegExp(`\\b${local}\\s*\\.\\s*has_value\\s*\\(`).test(block)) found.optional = true
+      const fallback = block.match(new RegExp(`\\b${local}\\s*\\.\\s*value_or\\s*\\(([^)]*)\\)`))
+      if (fallback) {
+        const lit = parseLiteral(fallback[1])
+        if (lit.ok) found.default = lit.value
+      }
+    }
+    // the same fallback written where the field is read rather than where it is used
+    for (const m of block.matchAll(/\[\s*"(\w+)"\s*\][^;[\]]*?\.\s*value_or\s*(?:<[^>]+>)?\s*\(([^)]*)\)/g)) {
+      const found = fields.find(f => f.key === m[1])
+      const lit = parseLiteral(m[2])
+      if (found && lit.ok && found.default === undefined) found.default = lit.value
+    }
+    return { item: fields, ...mergeKeyOf(block, fields, locals) }
   }
 
   // entries that are values rather than tables: a plain list, or - where the
@@ -651,6 +670,32 @@ function extractArrayShape(block, structs, structName, key) {
     'Expected either `(*tbl)["field"].value<T>()` entries or a nested array of values')
 }
 
+/** the local each field of an entry was read into, which is what later code names */
+function localFields(block) {
+  const out = new Map()
+  for (const m of block.matchAll(/\b(?:auto|[\w:<>]+)\s+(\w+)\s*=\s*\(?\s*\*?\s*\w+\s*\)?\s*\[\s*"(\w+)"\s*\]/g)) {
+    out.set(m[1], m[2])
+  }
+  return out
+}
+
+/**
+ * The field entries are keyed by, where the parser folds each one into what is
+ * already there instead of replacing the list. Naming that key again in a later
+ * scope changes the fields it carries and leaves the rest, which is what lets a
+ * map turn one weapon of an inherited kit off without restating the kit.
+ */
+function mergeKeyOf(block, fields, locals) {
+  const call = block.match(/\.\s*add\s*\(([^;]*)\)\s*;/)
+  if (!call) return {}
+  const first = splitTopLevelArgs(call[1])[0] ?? ''
+  for (const [local, field] of locals) {
+    if (!new RegExp(`\\b${local}\\b`).test(first)) continue
+    if (fields.some(f => f.key === field)) return { mergeKey: field }
+  }
+  return {}
+}
+
 /**
  * Which fields of an array entry name something out of the game's own tables.
  * The check is at the call site for some keys and inside the method the value is
@@ -658,11 +703,7 @@ function extractArrayShape(block, structs, structName, key) {
  * is a name typed wrong.
  */
 function itemLookups(block, structs, structName) {
-  // the local each field was read into, which is what a later check names
-  const fieldOf = new Map()
-  for (const m of block.matchAll(/\b(?:auto|[\w:<>]+)\s+(\w+)\s*=\s*\(?\s*\*?\s*\w+\s*\)?\s*\[\s*"(\w+)"\s*\]/g)) {
-    fieldOf.set(m[1], m[2])
-  }
+  const fieldOf = localFields(block)
 
   const out = new Map()
   for (const [local, lookup] of lookupsByRoot(block, [...fieldOf.keys()])) {
@@ -822,6 +863,7 @@ export function extractGameTypeDefaults(sources, structs) {
   const common = readDefaultOps(body.slice(0, switchAt), structs)
   expect(common.length > 0, 'No common game type defaults', 'The preamble before the switch produced no operations')
 
+  const switchOpen = body.indexOf('{', switchAt)
   const switchBody = bodyAt(body, switchAt)
   const perType = {}
   const caseRe = /case\s+rf::NetGameType::(NG_TYPE_\w+)\s*:\s*\{/g
@@ -832,30 +874,57 @@ export function extractGameTypeDefaults(sources, structs) {
   expect(Object.keys(perType).length > 0, 'No game type default cases',
     'The switch in apply_defaults_for_game_type matched no `case rf::NetGameType::X: {`')
 
-  return { common, perType }
+  // the modes with no case of their own still get the default arm, and those are
+  // the ordinary ones - deathmatch and capture the flag among them
+  const defaultAt = switchBody.search(/\bdefault\s*:\s*\{/)
+  expect(defaultAt !== -1, 'The game type switch has no default arm',
+    'Expected `default: {` for the modes with no case of their own')
+  const fallback = readDefaultOps(bodyAt(switchBody, defaultAt), structs)
+
+  // the tail completes the kit with whichever weapon the mode spawns players
+  // holding, so it runs after the case rather than with the preamble
+  const tail = body.slice(switchOpen + switchBody.length + 2)
+  const after = readDefaultOps(tail, structs)
+  expect(after.some(op => op.op === 'loadoutSpawnWeapon'),
+    'The loadout no longer completes with the spawn weapon',
+    'Expected `spawn_loadout.add(rules.default_player_weapon.weapon_name, rules.stock_spawn_weapon_reserve(), ...)` after the switch')
+
+  return { common, perType, fallback, after }
 }
 
 function readDefaultOps(block, structs) {
+  const consts = blockConstants(block)
   const ops = []
   for (const stmt of block.split(';')) {
-    const s = stmt.trim()
-    if (!s.startsWith('rules.')) continue
-    const path = s.slice('rules.'.length)
+    // the statement may sit inside an `if` that spans the same chunk, so it is
+    // found by where it starts rather than by the chunk starting with it
+    const at = stmt.match(/(?:^|[{}\n])[ \t]*rules\.(.*)$/s)
+    if (!at) continue
+    const path = at[1].trim()
 
     const add = path.match(/^spawn_loadout\.add\s*\((.*)\)$/s)
     if (add) {
       const args = splitTopLevelArgs(add[1])
       const weapon = parseLiteral(args[0] ?? '')
+      // the kit is completed with the spawn weapon rather than a named one, and
+      // the reserve that comes with it is the stock grant
+      if (!weapon.ok && /default_player_weapon\.weapon_name/.test(args[0] ?? '')) {
+        ops.push({ op: 'loadoutSpawnWeapon', ammoFrom: readReserve(args[1] ?? '', consts, structs).from })
+        continue
+      }
+      const reserve = readReserve(args[1] ?? '', consts, structs)
       ops.push({
         op: 'loadoutAdd',
         weapon: weapon.ok ? weapon.value : null,
-        ammoExpr: args[1]?.trim() ?? null,
+        ammo: reserve.ammo ?? null,
+        ...(reserve.from ? { ammoFrom: reserve.from } : {}),
         blueTeam: args[2]?.trim() === 'true',
         enabled: args[3]?.trim() !== 'false',
       })
       continue
     }
-    if (/^spawn_loadout\.\w+\.clear\s*\(\s*\)$/.test(path)) { ops.push({ op: 'loadoutClear' }); continue }
+    const clear = path.match(/^spawn_loadout\.(\w+)\.clear\s*\(\s*\)$/)
+    if (clear) { ops.push({ op: 'loadoutClear', blueTeam: clear[1].startsWith('blue') }); continue }
 
     const call = path.match(/^([\w.]*?)\.?(\w+)\s*\((.*)\)$/s)
     if (call && call[2].startsWith('set_')) {
@@ -873,6 +942,56 @@ function readDefaultOps(block, structs) {
     }
   }
   return ops
+}
+
+/** the constants a block declares for its own use, as the loadout reserves are */
+function blockConstants(block) {
+  const out = {}
+  for (const m of block.matchAll(/\bconstexpr\s+[\w:]+\s+(\w+)\s*=\s*([^;]+);/g)) {
+    const lit = parseLiteral(m[2])
+    if (lit.ok) out[m[1]] = lit.value
+  }
+  return out
+}
+
+/**
+ * The reserve ammo an entry of the kit comes with. The source states it as a
+ * number, as a constant beside it, or as a field of the weapon table - and the
+ * table is only there at runtime, so that last one is passed on as a reference
+ * for the tool to read against the game data rather than resolved here.
+ */
+function readReserve(expr, consts, structs) {
+  const raw = expr.trim()
+  const lit = parseLiteral(raw)
+  if (lit.ok && typeof lit.value === 'number') return { ammo: lit.value }
+  if (consts[raw] !== undefined) return { ammo: consts[raw] }
+
+  const call = raw.match(/^(?:[\w:.]*(?:::|\.))?(\w+)\s*\(\s*\)$/)
+  const method = call && structs.AlpineServerConfigRules?.methods?.[call[1]]
+  if (method) {
+    const from = readReserveExpr(method.body)
+    if (from) return { from }
+  }
+
+  fail(`Could not read the reserve ammo \`${raw}\``,
+    'Expected a number, a constant declared beside it, or a method reading the weapon table')
+}
+
+/** a weapon table field the game reads a reserve out of, as a reference to it */
+function readReserveExpr(body) {
+  const named = body.match(/rf::weapon_types\s*\[\s*rf::(\w+?)_weapon_type\s*\]\s*\.\s*(\w+)/)
+  if (named) return { weapon: named[1], field: camelCase(named[2]) }
+
+  // the spawn weapon is whichever one the mode chose, so it is named by the
+  // rules rather than by the expression, and its reserve counts the clips
+  const spawn = body.match(/rf::weapon_types\s*\[[^\]]*\.index\s*\]\s*\.\s*(\w+)\s*\*\s*[\w.]*\bnum_clips\b/)
+  if (spawn) return { field: camelCase(spawn[1]), perClip: true }
+
+  return undefined
+}
+
+function camelCase(name) {
+  return name.replace(/_(\w)/g, (_, c) => c.toUpperCase())
 }
 
 // ---------------------------------------------------------------------------
@@ -1321,6 +1440,8 @@ function main() {
             .filter(g => gametypeDefaults.perType[g.enum])
             .map(g => [g.names[0], resolveOps(gametypeDefaults.perType[g.enum])])
         ),
+        fallback: resolveOps(gametypeDefaults.fallback),
+        after: resolveOps(gametypeDefaults.after),
       },
     }),
     writeJson('mutators.json', { mutators, applyOrder }),

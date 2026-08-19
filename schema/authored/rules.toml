@@ -410,7 +410,7 @@ help = "Zero means always use this item's place, however many spawn points the m
 ["spawn_loadout"]
 page = "rules-spawn"
 label = "Everything players spawn with"
-help = "Weapons handed out on spawn, on top of the kit the game mode already gives; turn a row off to take one of that kit's weapons back out."
+help = "Everything a player is holding the moment they spawn. The weapons the game mode hands out are already listed; turn one off to take it back out, or add weapons of your own."
 notModes = ["gg"]
 
 ["spawn_loadout".fields.weapon_name]
@@ -427,8 +427,8 @@ help = "Turn this off to take a weapon back out of the kit the game mode hands o
 
 ["spawn_loadout_blue"]
 page = "rules-spawn"
-label = "Blue team spawn kit"
-help = "Weapons for the blue team only, for asymmetric attack and defense games; they get these as well as everything above."
+label = "A different kit for the blue team"
+help = "For attack and defense games, where the two sides are not meant to be even. Leave this empty and both teams get the kit above; put anything in it and the blue team gets this instead of that one, not as well as it."
 teamOnly = true
 
 ["spawn_loadout_blue".fields.weapon_name]
@@ -441,7 +441,7 @@ help = "How much ammunition comes with it, on top of what is loaded."
 
 ["spawn_loadout_blue".fields.include]
 label = "Give it out"
-help = "Turn this off to take a weapon back out of the kit blue team would otherwise get."
+help = "Turn this off to keep a weapon in the list without handing it out."
 
 ["force_character"]
 page = "rules-spawn"

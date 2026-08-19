@@ -262,8 +262,60 @@ export function parseStructs(src) {
       const analyzed = argName ? analyzeSetter(setBody, argName, structs[name].members) : null
       structs[name].setters[setter] = analyzed ?? { opaque: true }
     }
+
+    // the other methods, for the name checks they hold. an array key is often
+    // read by handing each entry to one of these, so the answer to "is this
+    // field a weapon name" lives in the method rather than at the call site.
+    structs[name].methods = {}
+    const methodRe = /(?:^|\n)\s*(?:[A-Za-z_][\w:<>\s*&,]*\s+)?([a-z_]\w*)\s*\(([^)]*)\)\s*(?:const\s*)?(?:noexcept\s*)?\{/g
+    let km
+    let past = 0
+    while ((km = methodRe.exec(body)) !== null) {
+      if (km.index < past) continue
+      if (['if', 'for', 'while', 'switch', 'return', 'catch', 'else', 'do'].includes(km[1])) continue
+      const open = km.index + km[0].length - 1
+      const methodBody = bodyAt(body, open)
+      past = open + methodBody.length + 2
+      const params = splitTopLevelArgs(km[2])
+        .map(p => p.match(/([A-Za-z_]\w*)\s*$/)?.[1])
+        .filter(Boolean)
+      structs[name].methods[km[1]] = { params, lookups: lookupsByRoot(methodBody, params) }
+    }
   }
   return structs
+}
+
+const LOOKUP_CALL = /\b(?:rf::)?(weapon_lookup_type|item_lookup_type|multi_find_character)\s*\(([^;)]*)\)/g
+
+function lookupKind(fn) {
+  return fn.includes('weapon') ? 'weapon' : fn.includes('character') ? 'character' : 'item'
+}
+
+// which of `roots` each local carries, so a value that has been copied into
+// another variable before it is checked is still traced back to where it came in
+function taintOrigins(body, roots) {
+  const origin = new Map(roots.map(r => [r, r]))
+  for (const m of body.matchAll(/(?:^|\n|\{)\s*(?:[A-Za-z_][\w:<>\s*&]*\s+)?([A-Za-z_]\w*)\s*(?:=|\{)\s*([^;]+);/g)) {
+    const [, name, expr] = m
+    if (origin.has(name)) continue
+    for (const [known, root] of origin) {
+      if (new RegExp(`\\b${known}\\b`).test(expr)) { origin.set(name, root); break }
+    }
+  }
+  return origin
+}
+
+/** roots a game data lookup is run on, as root name -> which table */
+function lookupsByRoot(body, roots) {
+  const out = new Map()
+  if (!roots.length) return out
+  const origin = taintOrigins(body, roots)
+  for (const m of body.matchAll(LOOKUP_CALL)) {
+    for (const [name, root] of origin) {
+      if (new RegExp(`\\b${name}\\b`).test(m[2])) { out.set(root, lookupKind(m[1])); break }
+    }
+  }
+  return out
 }
 
 // blank out anything inside a nested { } so member scanning does not walk into
@@ -421,7 +473,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
     const base = requires ? { requires } : {}
 
     if (kind === 'as_array') {
-      keys.push({ key, kind: 'array', item: extractItemFields(consequent), ...base })
+      keys.push({ key, kind: 'array', ...extractArrayShape(consequent, structs, structName, key), ...base })
       continue
     }
 
@@ -472,7 +524,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
       keys.push({
         key: call[1],
         kind: 'array',
-        item: extractItemFields(l.body),
+        ...extractArrayShape(l.body, structs, structName, call[1]),
         ...(requires ? { requires } : {}),
       })
     }
@@ -557,7 +609,13 @@ function subStructFor(cpp, structs, consequent, structName) {
 }
 
 // fields read off each element of an array-of-tables
-function extractItemFields(block) {
+/**
+ * The shape of one entry in an array key: the fields of a table, or a list of
+ * values where the entries are not tables. An array whose shape does not come
+ * out of this is one the UI would draw as an empty editor, so it stops the
+ * build rather than shipping a list nobody can fill in.
+ */
+function extractArrayShape(block, structs, structName, key) {
   const fields = []
   const re = /\[\s*"(\w+)"\s*\]\s*\.\s*(?:value<([^>]+)>|value_or<([^>]+)>)/g
   let m
@@ -567,7 +625,85 @@ function extractItemFields(block) {
       fields.push({ key: m[1], cppType, type: normalizeType(cppType) })
     }
   }
-  return fields
+
+  if (fields.length) {
+    for (const [field, lookup] of itemLookups(block, structs, structName)) {
+      const found = fields.find(f => f.key === field)
+      if (found) found.lookup = lookup
+    }
+    return { item: fields }
+  }
+
+  // entries that are values rather than tables: a plain list, or - where the
+  // entries are themselves arrays - a list of lists, as the Gun Game ladder is
+  const element = block.match(/\.\s*value<([^>]+)>/)
+  if (element) {
+    const itemType = normalizeType(element[1].trim())
+    return /\.\s*as_array\s*\(\s*\)/.test(block) ? { itemsAreLists: true, itemType } : { itemType }
+  }
+
+  // handed off whole to a function of its own, as the mutator declarations are.
+  // what the entries hold is that function's business rather than this key's.
+  const via = block.match(/\b(\w+)\s*\(\s*\*\s*\w+\s*,/)
+  if (via) return { complex: true, via: via[1] }
+
+  expect(false, `Could not read the shape of the ${key} array`,
+    'Expected either `(*tbl)["field"].value<T>()` entries or a nested array of values')
+}
+
+/**
+ * Which fields of an array entry name something out of the game's own tables.
+ * The check is at the call site for some keys and inside the method the value is
+ * handed to for others, so both are followed - a weapon name shown as a text box
+ * is a name typed wrong.
+ */
+function itemLookups(block, structs, structName) {
+  // the local each field was read into, which is what a later check names
+  const fieldOf = new Map()
+  for (const m of block.matchAll(/\b(?:auto|[\w:<>]+)\s+(\w+)\s*=\s*\(?\s*\*?\s*\w+\s*\)?\s*\[\s*"(\w+)"\s*\]/g)) {
+    fieldOf.set(m[1], m[2])
+  }
+
+  const out = new Map()
+  for (const [local, lookup] of lookupsByRoot(block, [...fieldOf.keys()])) {
+    out.set(fieldOf.get(local), lookup)
+  }
+
+  for (const m of block.matchAll(/\b(\w+(?:\.\w+)*)\.(\w+)\s*\(/g)) {
+    const method = resolveStruct(structs, structName, m[1].split('.').slice(1).join('.'))?.methods?.[m[2]]
+    if (!method || method.lookups.size === 0) continue
+    const args = callArgs(block.slice(m.index + m[1].length + 1), m[2]) ?? []
+    args.forEach((arg, i) => {
+      const lookup = method.lookups.get(method.params[i])
+      if (!lookup) return
+      for (const [local, field] of fieldOf) {
+        if (new RegExp(`\\b${local}\\b`).test(arg)) out.set(field, lookup)
+      }
+    })
+  }
+  return out
+}
+
+/** the struct a member path lands on, for following a call into its method */
+function resolveStruct(structs, structName, path) {
+  let cur = structs[structName]
+  for (const part of path ? path.split('.') : []) {
+    const member = cur?.members[part]
+    cur = member ? structs[member.type] : undefined
+  }
+  return cur
+}
+
+// The Gun Game ladder is stored as written and resolved when the tiers are
+// built, so the table its names belong to is named there rather than in the
+// config parser.
+export function extractTierLookup(sources) {
+  const body = funcBody(sources.gungameCpp, /\bvoid\s+resolve_tier_weapons\s*\(\s*\)\s*\{/, 'resolve_tier_weapons')
+  const uses = body.includes('gungame_tiers')
+  const call = body.match(LOOKUP_CALL)
+  expect(uses && call, 'resolve_tier_weapons no longer resolves the configured tiers',
+    'Expected gungame_tiers and a name lookup in multi/gungame.cpp')
+  return lookupKind(call[0])
 }
 
 // ---------------------------------------------------------------------------
@@ -1096,6 +1232,7 @@ function main() {
     mutatorsH: S('game_patch/multi/mutators.h'),
     serverCpp: S('game_patch/multi/server.cpp'),
     gametypeCpp: S('game_patch/multi/gametype.cpp'),
+    gungameCpp: S('game_patch/multi/gungame.cpp'),
     multiH: S('game_patch/rf/multi.h'),
     versionH: read('common/include/common/version/version.h'),
   }
@@ -1128,9 +1265,14 @@ function main() {
     ?.keys?.find(k => k.key === 'allowed_commands')
   expect(allowed, 'rcon_profiles no longer has an allowed_commands key',
     'Expected it in parse_rcon_profile')
-  allowed.itemType = 'string'
   allowed.choices = rconCommands
   const legacyRconCommands = extractLegacyRconCommands(sources, rconCommands)
+
+  // the Gun Game ladder is weapon names, but nothing checks that until the game
+  // builds the tiers, so the check lives with the code that uses them
+  const tiers = rulesKeys.find(k => k.key === 'gg_tiers')
+  expect(tiers, 'The gg_tiers key is gone', 'Expected it in parse_server_rules')
+  tiers.lookup = extractTierLookup(sources)
 
   // game_type is the one rules key resolved by a lookup rather than a member
   const gt = rulesKeys.find(k => k.key === 'game_type')

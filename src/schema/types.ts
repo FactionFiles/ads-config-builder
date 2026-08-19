@@ -48,14 +48,28 @@ export interface TableKey {
 export interface ArrayKey {
   key: string
   kind: 'array'
-  item?: { key: string; type: ScalarType | null; cppType: string }[]
+  item?: ArrayItemField[]
   keys?: SchemaKey[]
   /** the type of a plain list of values, as opposed to a list of tables */
   itemType?: ScalarType
+  /** each entry is itself a list of itemType values, as the Gun Game ladder is */
+  itemsAreLists?: boolean
+  /** the table a plain list of names is resolved against */
+  lookup?: LookupTable
   /** the values the server accepts, where it checks them against a list */
   choices?: string[]
   complex?: boolean
+  /** the parser hands the whole array to this function, so we cannot read it */
+  via?: string
   requires?: Guard[]
+}
+
+/** one column of a list of tables */
+export interface ArrayItemField {
+  key: string
+  type: ScalarType | null
+  cppType: string
+  lookup?: LookupTable
 }
 
 export type SchemaKey = ScalarKey | TableKey | ArrayKey
@@ -164,6 +178,8 @@ export interface AuthoredEntry {
   display?: string
   uncertain?: boolean
   choiceLabels?: Record<string, string>
+  /** what each column of a list setting is called */
+  fields?: Record<string, AuthoredField>
   /** the modes this setting has any effect in; absent means every mode */
   modes?: string[]
   /** the modes it has no effect in - safer than a long `modes` list, since a
@@ -171,6 +187,18 @@ export interface AuthoredEntry {
   notModes?: string[]
   /** it only does anything in modes that have teams, whichever those are */
   teamOnly?: boolean
+}
+
+/** the hand-authored half of one column of a list setting */
+export interface AuthoredField {
+  label: string
+  help?: string
+  unit?: string
+  display?: string
+  /** names to offer where the parser does not check the field itself */
+  lookup?: LookupTable
+  /** what leaving it empty means, where empty is a real answer */
+  emptyLabel?: string
 }
 
 export interface Page {

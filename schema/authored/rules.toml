@@ -399,17 +399,49 @@ page = "rules-spawn"
 label = "Items that create spawn points"
 help = "Which pickups get turned into extra spawn points, and how few real spawn points a map has to have before each one counts."
 
+["spawn_selection.dynamic_respawn_items".fields.item_name]
+label = "Pickup"
+help = "The item whose place on the map becomes an extra spawn point."
+
+["spawn_selection.dynamic_respawn_items".fields.min_respawn_points]
+label = "Only on maps with fewer spawns than"
+help = "Zero means always use this item's place, however many spawn points the map already has."
+
 ["spawn_loadout"]
 page = "rules-spawn"
 label = "Everything players spawn with"
-help = "The full list of weapons and ammunition handed out on spawn; leave it alone to use the game mode's normal kit."
+help = "Weapons handed out on spawn, on top of the kit the game mode already gives; turn a row off to take one of that kit's weapons back out."
 notModes = ["gg"]
+
+["spawn_loadout".fields.weapon_name]
+label = "Weapon"
+help = "The weapon players are given."
+
+["spawn_loadout".fields.ammo]
+label = "Spare ammo"
+help = "How much ammunition comes with it, on top of what is loaded."
+
+["spawn_loadout".fields.include]
+label = "Give it out"
+help = "Turn this off to take a weapon back out of the kit the game mode hands out."
 
 ["spawn_loadout_blue"]
 page = "rules-spawn"
 label = "Blue team spawn kit"
-help = "A different set of weapons for the blue team only, for asymmetric attack and defense games."
+help = "Weapons for the blue team only, for asymmetric attack and defense games; they get these as well as everything above."
 teamOnly = true
+
+["spawn_loadout_blue".fields.weapon_name]
+label = "Weapon"
+help = "The weapon blue team players are given."
+
+["spawn_loadout_blue".fields.ammo]
+label = "Spare ammo"
+help = "How much ammunition comes with it, on top of what is loaded."
+
+["spawn_loadout_blue".fields.include]
+label = "Give it out"
+help = "Turn this off to take a weapon back out of the kit blue team would otherwise get."
 
 ["force_character"]
 page = "rules-spawn"
@@ -437,8 +469,16 @@ notModes = ["gg"]
 ["weapon_stay_exemptions"]
 page = "rules-weapons"
 label = "Weapons that do not stay"
-help = "Weapons listed here still disappear when taken, which is the usual way to stop everyone carrying the strongest gun at once."
+help = "Weapons listed here still disappear when taken, which is the usual way to stop everyone carrying the strongest gun at once. The Fusion Rocket Launcher is treated this way already; add it here and turn the switch off to let it stay."
 notModes = ["gg"]
+
+["weapon_stay_exemptions".fields.weapon_name]
+label = "Weapon"
+help = "The weapon this rule is about."
+
+["weapon_stay_exemptions".fields.exempt]
+label = "Disappears when taken"
+help = "Turn this off to let a weapon stay after all, which is how you undo an exemption a preset set."
 
 ["drop_weapons"]
 page = "rules-weapons"
@@ -475,17 +515,41 @@ label = "Replace items around the map"
 help = "Swap one pickup for another everywhere it appears, for example turning every medkit into armor; leave the replacement blank to remove the item entirely."
 notModes = ["gg"]
 
+["item_replacements".fields.original]
+label = "Item on the map"
+help = "The pickup as the map has it."
+
+["item_replacements".fields.replacement]
+label = "Turns into"
+help = "What players find there instead."
+lookup = "item"
+emptyLabel = "Nothing, take it out"
+
 ["item_respawn_time_overrides"]
 page = "rules-weapons"
 label = "Change how fast items come back"
 help = "Override the respawn time of individual pickups, usually to slow down the strongest ones."
 notModes = ["gg"]
 
+["item_respawn_time_overrides".fields.item_name]
+label = "Pickup"
+help = "The item whose respawn time changes."
+
+["item_respawn_time_overrides".fields.respawn_ms]
+label = "Comes back after"
+unit = "milliseconds"
+display = "seconds"
+help = "How long the map waits before putting this item back."
+
 ["delayed_items"]
 page = "rules-weapons"
 label = "Items that are not there at the start"
 help = "These pickups are hidden when a map loads and only appear after their first respawn time has passed, so nobody can rush them."
 notModes = ["gg"]
+
+["delayed_items".fields.item_name]
+label = "Pickup"
+help = "The item that is missing until its first respawn."
 
 # ---------------------------------------------------------------- damage and physics
 

@@ -119,6 +119,52 @@ const generatedChoices = {
   server: choicesByPath([...server.keys, ...server.tables, ...server.arrays]),
 }
 
+// generated array item fields, keyed the same way. a list is drawn as a table,
+// so every column the file can hold owes the user a heading.
+function itemFieldsByPath(keys, prefix = '', into = new Map()) {
+  for (const key of keys) {
+    const path = prefix + key.key
+    if (key.item?.length) into.set(path, key.item)
+    if (key.keys) itemFieldsByPath(key.keys, path + '.', into)
+  }
+  return into
+}
+
+const generatedFields = {
+  rules: itemFieldsByPath(rules.keys),
+  server: itemFieldsByPath([...server.keys, ...server.tables, ...server.arrays]),
+}
+
+const lookupTables = ['weapon', 'item', 'character']
+
+function checkFieldLabels(label, path, entry) {
+  const fields = generatedFields[label]?.get(path)
+  const authoredFields = entry.fields ?? {}
+  if (!fields) {
+    if (entry.fields) problem(`${label}: names columns on a setting that has none`, path)
+    return
+  }
+  for (const field of fields) {
+    const named = authoredFields[field.key]
+    if (!named?.label) { problem(`${label}: list column with no name`, `${path} -> ${field.key}`); continue }
+    if (named.lookup === undefined) continue
+    // the parser already says which table a name is checked against, so an
+    // authored one is either a second copy of that or a claim about a field the
+    // source does not check - only the second is worth having
+    if (field.lookup) {
+      problem(`${label}: restates a lookup the source already states`, `${path} -> ${field.key}`)
+    } else if (!lookupTables.includes(named.lookup)) {
+      problem(`${label}: column names an unknown game data table`,
+        `${path} -> ${field.key} -> "${named.lookup}" (known: ${lookupTables.join(', ')})`)
+    }
+  }
+  for (const named of Object.keys(authoredFields)) {
+    if (!fields.some(f => f.key === named)) {
+      problem(`${label}: names a list column that no longer exists`, `${path} -> "${named}"`)
+    }
+  }
+}
+
 function checkChoiceLabels(label, path, entry) {
   const choices = generatedChoices[label]?.get(path)
   if (!choices) return
@@ -155,6 +201,7 @@ function crossCheck(label, generatedPaths, authored) {
     } else {
       checkChoiceLabels(label, path, entry)
     }
+    checkFieldLabels(label, path, entry)
   }
   const generated = new Set(generatedPaths)
   for (const path of have) {

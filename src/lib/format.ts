@@ -50,6 +50,24 @@ export function labelForChoice(scope: Scope, path: string, value: string): strin
   return value
 }
 
+/**
+ * A list as one phrase. Where the entries are records there is nothing to print
+ * but the field they are keyed by, and where they are not even keyed by one, all
+ * that is left to say is how many there are.
+ */
+function listOf(scope: Scope, path: string, value: unknown[]): string {
+  if (value.every(entry => typeof entry !== 'object' || entry === null)) return value.join(', ')
+  const schema = schemaFor(scope, path)
+  const list = schema?.kind === 'array' ? schema : undefined
+  const key = list?.mergeKey
+  if (!key) return value.length === 1 ? '1 entry' : `${value.length} entries`
+  const column = list?.item?.find(f => f.key === key)
+  return value
+    .map(entry => String((entry as Record<string, unknown>)[key] ?? ''))
+    .map(name => (column?.lookup ? tableFor(column.lookup).find(e => e.name === name)?.display ?? name : name))
+    .join(', ')
+}
+
 /** a setting's value as one short phrase, for a table cell or a summary line */
 export function formatValue(scope: Scope, path: string, value: unknown): string {
   if (value === undefined || value === null) return 'not set'
@@ -61,6 +79,6 @@ export function formatValue(scope: Scope, path: string, value: unknown): string 
     const unit = unitFor(text)
     return unit ? `${shown} ${unit}` : shown
   }
-  if (Array.isArray(value)) return value.length ? value.join(', ') : 'none'
+  if (Array.isArray(value)) return value.length ? listOf(scope, path, value) : 'none'
   return String(value)
 }

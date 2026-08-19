@@ -8,6 +8,8 @@
     page: string
     /** resolved values per scope, since a page can hold settings from both */
     resolved: Record<Scope, ResolvedRules>
+    /** the keys each scope holds itself, for a list that merges rather than replaces */
+    manual: Record<Scope, Record<string, unknown>>
     /** the game mode in play, which decides which settings have any effect */
     gameType: string
     levelScope?: boolean
@@ -16,7 +18,7 @@
     onprovenance?: (scope: Scope, path: string, anchor: HTMLElement) => void
   }
 
-  const { page, resolved, gameType, levelScope = false, onchange, onreset, onprovenance }: Props = $props()
+  const { page, resolved, manual, gameType, levelScope = false, onchange, onreset, onprovenance }: Props = $props()
 
   interface Entry { scope: Scope; path: string; offMode?: string; editor?: Editor }
 
@@ -105,6 +107,7 @@
         scope={entry.scope}
         path={entry.path}
         resolved={resolved[entry.scope]}
+        manual={manual[entry.scope][entry.path]}
         {levelScope}
         offMode={entry.offMode}
         onchange={(path, value) => onchange?.(entry.scope, path, value)}

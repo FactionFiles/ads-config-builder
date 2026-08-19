@@ -112,6 +112,9 @@
   )
 
   const resolved = $derived<Record<Scope, ResolvedRules>>({ rules: activeRules, server: serverSettings })
+  const manual = $derived<Record<Scope, Record<string, unknown>>>({
+    rules: activeScope.manual, server: doc.server,
+  })
   const gameType = $derived((activeRules.get('game_type')?.value as string) ?? '')
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
@@ -340,6 +343,7 @@
         page={page.id}
         {gameType}
         {resolved}
+        {manual}
         levelScope={level !== undefined}
         onchange={change}
         onreset={reset}

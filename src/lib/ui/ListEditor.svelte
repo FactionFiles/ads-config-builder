@@ -10,13 +10,15 @@
   } from '../../schema/types'
   import { toDisplay, toFile, unitFor } from '../format'
   import { tableFor } from '../gamedata'
-  import type { ResolvedRules } from '../resolve'
-  import ProvenanceDot from './ProvenanceDot.svelte'
+  import { rowSources, type ResolvedRules, type RowOrigin } from '../resolve'
+  import ProvenanceDot, { labelFor, toneFor } from './ProvenanceDot.svelte'
 
   interface Props {
     scope: Scope
     path: string
     resolved: ResolvedRules
+    /** the rows this scope holds itself, which is what an edit is written into */
+    manual?: unknown
     levelScope?: boolean
     /** set when the mode in play ignores this setting, worded for the user */
     offMode?: string
@@ -26,7 +28,7 @@
   }
 
   const {
-    scope, path, resolved, levelScope = false, offMode, onchange, onreset, onprovenance,
+    scope, path, resolved, manual, levelScope = false, offMode, onchange, onreset, onprovenance,
   }: Props = $props()
 
   interface Column {
@@ -62,6 +64,40 @@
 
   const canReset = $derived(current?.layer === 'manual')
 
+  // Some lists are folded together rather than replaced: each layer names the
+  // entries it cares about, keyed by one field, and the rest stays as the layer
+  // under it left it. Those show every layer's rows, and an edit to one this
+  // scope did not write picks it up by naming it.
+  const mergeKey = $derived(schema.mergeKey)
+  const mine = $derived(Array.isArray(manual) ? (manual as Record<string, unknown>[]) : [])
+  const origins = $derived<RowOrigin[]>(rowSources(current, mergeKey))
+
+  const sameId = (a: unknown, b: unknown) =>
+    typeof a === 'string' && typeof b === 'string' ? a.toLowerCase() === b.toLowerCase() : a === b
+
+  function isMine(row: unknown): boolean {
+    if (!mergeKey) return true
+    const id = (row as Record<string, unknown>)?.[mergeKey]
+    return mine.some(r => sameId(r[mergeKey], id))
+  }
+
+  /** what a row's own dot says, since a merged list holds several layers at once */
+  function rowTone(row: unknown, origin: RowOrigin | undefined) {
+    return toneFor(origin?.by?.layer, isMine(row) && levelScope)
+  }
+
+  function rowTitle(row: unknown, origin: RowOrigin | undefined) {
+    const by = origin?.by
+    return 'Set by ' + labelFor(by?.layer, isMine(row) && levelScope)
+      + (by?.source ? `: ${by.source}` : '')
+  }
+
+  // taking your entry back out leaves whatever the layers under it hold, which
+  // is a different thing from the row going away
+  function removeLabel(origin: RowOrigin | undefined) {
+    return origin?.first && origin.first !== origin.by ? 'Reset' : 'Remove'
+  }
+
   // an empty list means the same thing as no list at all, so clearing the last
   // row takes the key out of the file rather than writing an empty one
   function set(next: unknown[]) {
@@ -72,17 +108,44 @@
   function blank(): Record<string, unknown> {
     const out: Record<string, unknown> = {}
     for (const column of columns) {
-      out[column.key] = column.type === 'bool' ? true : column.type === 'string' ? '' : 0
+      out[column.key] = column.lookup
+        ? unusedName(column)
+        : column.type === 'bool' ? true : column.type === 'string' ? '' : 0
     }
     return out
   }
 
+  /** the first name the list does not already hold, since one entry means one name */
+  function unusedName(column: Column): string {
+    const table = tableFor(column.lookup!)
+    const taken = rows.map(row => String(cellValue(row, column.key) ?? '').toLowerCase())
+    return (table.find(e => !taken.includes(e.name.toLowerCase())) ?? table[0])?.name ?? ''
+  }
+
   function editRow(index: number, key: string, value: unknown) {
-    set(rows.map((row, i) => (i === index ? { ...(row as object), [key]: value } : row)))
+    if (!mergeKey) {
+      set(rows.map((row, i) => (i === index ? { ...(row as object), [key]: value } : row)))
+      return
+    }
+    const id = (rows[index] as Record<string, unknown>)[mergeKey]
+    const at = mine.findIndex(r => sameId(r[mergeKey], id))
+    // an entry that names only the key and the field being changed leaves every
+    // other field as it was inherited, rather than pinning it to what it is now
+    if (at === -1) set([...mine, { [mergeKey]: id, [key]: value }])
+    else set(mine.map((row, i) => (i === at ? { ...row, [key]: value } : row)))
   }
 
   function removeRow(index: number) {
-    set(rows.filter((_, i) => i !== index))
+    if (!mergeKey) {
+      set(rows.filter((_, i) => i !== index))
+      return
+    }
+    const id = (rows[index] as Record<string, unknown>)[mergeKey]
+    set(mine.filter(row => !sameId(row[mergeKey], id)))
+  }
+
+  function addRow() {
+    set(mergeKey ? [...mine, blank()] : [...rows, blank()])
   }
 
   function move(index: number, by: number) {
@@ -96,6 +159,13 @@
 
   function cellValue(row: unknown, key: string): unknown {
     return key ? (row as Record<string, unknown>)?.[key] : row
+  }
+
+  /** what a name is called, for a column this scope cannot change the name in */
+  function nameOf(column: Column, value: unknown): string {
+    const shown = typeof value === 'string' ? value : ''
+    if (!column.lookup) return shown
+    return tableFor(column.lookup).find(e => e.name === shown)?.display ?? shown
   }
 
   /** the names this column offers, with anything unknown kept rather than lost */
@@ -203,26 +273,38 @@
         </thead>
         <tbody>
           {#each rows as row, i (i)}
+            {@const own = isMine(row)}
             <tr>
               {#each columns as column (column.key)}
                 <td>
-                  {@render cell(
-                    column,
-                    cellValue(row, column.key),
-                    value => editRow(i, column.key, value),
-                    `${column.text.label}, row ${i + 1}`,
-                  )}
+                  {#if !own && column.key === mergeKey}
+                    <span class="held">{nameOf(column, cellValue(row, column.key))}</span>
+                  {:else}
+                    {@render cell(
+                      column,
+                      cellValue(row, column.key),
+                      value => editRow(i, column.key, value),
+                      `${column.text.label}, row ${i + 1}`,
+                    )}
+                  {/if}
                 </td>
               {/each}
               <td class="acts">
-                <button type="button" class="btn" onclick={() => removeRow(i)}>Remove</button>
+                {#if mergeKey}
+                  <i class="pd {rowTone(row, origins[i])}" title={rowTitle(row, origins[i])}></i>
+                {/if}
+                {#if own}
+                  <button type="button" class="btn" onclick={() => removeRow(i)}>
+                    {removeLabel(origins[i])}
+                  </button>
+                {/if}
               </td>
             </tr>
           {/each}
         </tbody>
       </table>
     {/if}
-    <button type="button" class="btn addbtn" onclick={() => set([...rows, blank()])}>
+    <button type="button" class="btn addbtn" onclick={addRow}>
       Add a row
     </button>
   {:else if schema.itemsAreLists}
@@ -286,7 +368,9 @@
     <div class="src {levelScope ? 'map' : 'you'}">
       <i class="pd {levelScope ? 'map' : 'you'}"></i>
       {levelScope ? 'Just for this map' : 'You changed this'}
-      <button type="button" class="rst" onclick={() => onreset?.(path)}>clear the list</button>
+      <button type="button" class="rst" onclick={() => onreset?.(path)}>
+        {mergeKey ? 'undo every change here' : 'clear the list'}
+      </button>
     </div>
   {/if}
 </div>
@@ -333,7 +417,19 @@
     vertical-align: middle;
   }
 
-  .rows td.acts { padding-right: 0; }
+  .rows td.acts {
+    padding-right: 0;
+    white-space: nowrap;
+  }
+
+  .rows td.acts .pd { margin-right: 8px; }
+
+  /* a row that came from a layer under this one: the name is not this scope's to
+     change, but what the kit does with it is */
+  .held {
+    font-size: 13px;
+    color: var(--ink-3);
+  }
 
   .row {
     display: flex;

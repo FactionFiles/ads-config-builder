@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { textFor, type Scope } from '../../schema'
+  import { schemaFor, textFor, type Scope } from '../../schema'
   import type { Contribution, Layer, Resolved } from '../resolve'
 
   interface Props {
@@ -47,6 +47,11 @@
     return String(value)
   }
 
+  // a list that is folded together rather than replaced has no layer whose value
+  // was thrown away, so nothing in its trail is crossed out
+  const schema = $derived(schemaFor(scope, path))
+  const merged = $derived(schema?.kind === 'array' && schema.mergeKey !== undefined)
+
   const trail = $derived(resolved?.trail ?? [])
   const canReset = $derived(resolved?.layer === 'manual')
 </script>
@@ -62,7 +67,7 @@
       <i class="pd {toneFor(contribution.layer)}"></i>
       <span>{describe(contribution)}</span>
       <span class="v">
-        {#if i === trail.length - 1}
+        {#if i === trail.length - 1 || merged}
           {show(contribution.value)}
         {:else}
           <s>{show(contribution.value)}</s>

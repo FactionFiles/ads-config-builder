@@ -350,18 +350,53 @@ Facts established from the Alpine source, worth not re-deriving:
   - Everything above is out of `unknown` now, so opening a config no longer
     reports these as carried-through-but-uneditable.
 
+- **M8: a spawn kit is a layered value, not a list you write from scratch.** Some
+  list keys are not replaced layer by layer the way a single value is. Alpine
+  parses them by handing each entry to the list it already has, keyed by one
+  field, so a later layer that names one entry changes that entry and leaves the
+  rest. The generator now reads which lists work that way and which field they
+  are keyed by, straight out of the parse block, so the resolver folds every
+  layer together instead of the newest one winning. Three keys qualify: the two
+  spawn kits and the weapon-stay exemptions.
+  - This is what makes the kit a game mode hands out visible. The mode's rows
+    show as inherited, greyed, with the mode's dot and no name field to change;
+    turning one off or giving it different ammo writes an entry naming just that
+    weapon and the one field, so the kit is never copied into the file. The
+    button on your own row says Reset where something underneath would come back
+    and Remove where nothing would.
+  - The reserve ammo the modes hand out was an expression. Two are constants
+    declared beside the call, and the third reads the weapon table, which only
+    exists at runtime - so the generator passes on which column to read rather
+    than a number, and `check-schema` fails if that column or the weapon it names
+    stops existing. The same reference covers the spawn weapon, whose reserve
+    counts the spare clips.
+  - Two things the extractor had been missing came out of this: the `default:`
+    arm of the game type switch, which is what deathmatch, capture the flag,
+    team deathmatch and bagman actually run, and the tail after the switch that
+    completes the kit with the mode's spawn weapon. Both are applied now, so a
+    deathmatch kit reads Control Baton and 12mm pistol rather than the baton
+    alone.
+  - The three mutators with a kit of their own state it as rows now rather than
+    as prose, and a mutator's list replaces rather than folds in, which is what
+    the source does. Instagib on a deathmatch server shows one rail driver, not
+    the mode's kit with a note beside it.
+  - A field an entry may leave out is marked as such by the generator, from the
+    parser asking whether the entry carried one at all. That is the difference
+    between "no spare ammo" and "the ammo it already had", and it is why turning
+    a weapon off does not pin its ammo to whatever it happens to be now.
+  - `spawn_loadout_blue` was documented backwards: it replaces the kit for the
+    blue team rather than adding to it. Fixed in the authored text.
+
 ### Next, in order
 
-1. The rest of M8: loadouts properly, then problems.
-   - The spawn loadouts are editable, but a scope's list is added to the kit the
-     game mode hands out, and the tool does not show that kit. The game type
-     defaults carry `loadoutClear` and `loadoutAdd` ops the resolver skips, and
-     their ammo is an expression - `stock_riot_stick_reserve()`, `pit_reserve`,
-     `wo_reserve` - that the generator would have to resolve to a number. Doing
-     that turns the loadout into a layered value like every other setting, with
-     the mode's rows shown as inherited. Until then the help text says plainly
-     that a row is added to the mode's kit.
+1. The rest of M8: problems, then a parity pass.
    - Problems needs no schema work. It reads the document and the resolver.
+   - One thing the kit work leaves behind: the weapon-stay exemptions are seeded
+     by the parser with the Fusion Rocket Launcher before it reads the array, and
+     the tool still says so in help text rather than showing it as an inherited
+     row. It is the same shape of fix as the game mode kits and now a small one -
+     the generator would capture the seeding call, and the resolver would apply
+     it as a layer under everything else.
 2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
 3. M9 map picker, blocked below. M10 CI and deploy.
 

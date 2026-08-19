@@ -1,5 +1,25 @@
+<script module lang="ts">
+  import type { Layer } from '../resolve'
+
+  /** the color a layer owns. shared, because a list shows one per row as well */
+  export function toneFor(layer: Layer | undefined, level: boolean) {
+    if (layer === 'preset') return 'preset'
+    if (layer === 'mutator') return 'mut'
+    if (layer === 'manual') return level ? 'map' : 'you'
+    return ''
+  }
+
+  export function labelFor(layer: Layer | undefined, level: boolean) {
+    if (layer === 'preset') return 'a preset'
+    if (layer === 'mutator') return 'a mutator'
+    if (layer === 'manual') return level ? 'this map only' : 'you'
+    if (layer === 'gametype') return "the game mode's defaults"
+    return 'the Alpine default'
+  }
+</script>
+
 <script lang="ts">
-  import type { Layer, Resolved } from '../resolve'
+  import type { Resolved } from '../resolve'
 
   interface Props {
     resolved: Resolved | undefined
@@ -9,21 +29,6 @@
   }
 
   const { resolved, levelScope = false, onopen }: Props = $props()
-
-  function toneFor(layer: Layer | undefined, level: boolean) {
-    if (layer === 'preset') return 'preset'
-    if (layer === 'mutator') return 'mut'
-    if (layer === 'manual') return level ? 'map' : 'you'
-    return ''
-  }
-
-  function labelFor(layer: Layer | undefined, level: boolean) {
-    if (layer === 'preset') return 'a preset'
-    if (layer === 'mutator') return 'a mutator'
-    if (layer === 'manual') return level ? 'this map only' : 'you'
-    if (layer === 'gametype') return "the game mode's defaults"
-    return 'the Alpine default'
-  }
 
   // a value this map did not touch still came from somewhere, so the dot keeps
   // showing whoever set it for every map rather than going blank

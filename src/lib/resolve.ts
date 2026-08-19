@@ -15,8 +15,8 @@
 // scope.
 
 import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
-import type { DefaultOp, Mutator, ScalarKey, SchemaKey } from '../schema/types'
-import { railGunName } from './gamedata'
+import type { ArrayKey, DefaultOp, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
+import { railGunName, reserveAmmo } from './gamedata'
 
 export type Layer =
   | 'default'      // Alpine's built-in value
@@ -136,18 +136,186 @@ export function resolveEntry(root: SchemaKey, fields: Record<string, unknown>): 
   return out
 }
 
-function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
-  const apply = (ops: DefaultOp[]) => {
-    for (const op of ops) {
-      // loadout operations are not scalar settings; the loadout editor reads
-      // them from the schema directly rather than through the resolver
-      if (op.op !== 'set' || !op.key) continue
-      contribute(into, op.key, { layer: 'gametype', value: op.value, source: gameType })
+// ---------------------------------------------------------------------------
+// Lists that are folded together rather than replaced. Alpine parses some list
+// keys by handing each entry to the list it already has, keyed by one field, so
+// a later layer that names one entry changes that entry and leaves the rest -
+// which is what lets a map turn one weapon of a game mode's spawn kit off
+// without restating the kit. Which lists work that way comes from the parser.
+// ---------------------------------------------------------------------------
+
+/** one entry of a merged list, with every field the file can hold filled in */
+type Row = Record<string, unknown>
+
+const mergedLists = rulesSchema.keys
+  .filter((key): key is ArrayKey => key.kind === 'array' && key.mergeKey !== undefined)
+
+const SPAWN_KIT = 'spawn_loadout'
+
+/**
+ * The reserve the stock spawn grant hands out, as the Alpine source states it.
+ * It is read off the game type defaults rather than written down again here, so
+ * the source stays the one place it is stated.
+ */
+const stockSpawnReserve = gametypes.defaults.after
+  .find(op => op.op === 'loadoutSpawnWeapon')?.ammoFrom
+
+// entries are keyed by the name they resolve to, and the game resolves a name
+// without case, so two spellings of one weapon are one entry
+function sameId(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return a === b
+  return a.toLowerCase() === b.toLowerCase()
+}
+
+function listAt(path: string): ArrayKey | undefined {
+  return mergedLists.find(list => list.key === path)
+}
+
+function rowsAt(into: ResolvedRules, path: string): Row[] {
+  const value = into.get(path)?.value
+  return Array.isArray(value) ? (value as Row[]) : []
+}
+
+/** one layer's word on one entry, folded into what the layers under it left */
+function withRow(list: ArrayKey, rows: Row[], edit: Row): Row[] {
+  const key = list.mergeKey!
+  const at = rows.findIndex(row => sameId(row[key], edit[key]))
+  const previous = at === -1 ? undefined : rows[at]
+
+  const next: Row = {}
+  for (const field of list.item ?? []) {
+    // a field the entry leaves out keeps what the layer under it left, where the
+    // parser asks whether the entry carried one at all, and otherwise falls back
+    // to whatever the parser reads in its place
+    const value = edit[field.key] !== undefined ? edit[field.key]
+      : field.optional && previous?.[field.key] !== undefined ? previous[field.key]
+      : field.default !== undefined ? field.default
+      : previous?.[field.key]
+    if (value !== undefined) next[field.key] = value
+  }
+
+  return at === -1 ? [...rows, next] : rows.map((row, i) => (i === at ? next : row))
+}
+
+// a layer that leaves a list exactly as it found it did not touch it, and saying
+// so in the trail would make the popover list layers that did nothing
+function setRows(into: ResolvedRules, path: string, rows: Row[], c: Omit<Contribution, 'value'>) {
+  if (JSON.stringify(rowsAt(into, path)) === JSON.stringify(rows)) return
+  contribute(into, path, { ...c, value: rows })
+}
+
+/** an entry as a layer wrote it, or null for one with nothing to key it by */
+function readRow(list: ArrayKey, entry: unknown): Row | null {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
+  const row = entry as Row
+  const id = row[list.mergeKey!]
+  // a name the game does not know is kept rather than dropped, so it stays
+  // visible in the editor where it can be corrected
+  return typeof id === 'string' && id !== '' ? row : null
+}
+
+/** the spare clips the spawn weapon comes with, which its reserve counts */
+function clipsOf(into: ResolvedRules): number {
+  const clips = into.get('spawn_weapon.clips')?.value
+  return typeof clips === 'number' ? clips : 0
+}
+
+/** the weapon the scope spawns players holding, as an entry of the kit */
+function spawnWeaponRow(into: ResolvedRules, from: StockReserve | undefined): Row | null {
+  const name = into.get('spawn_weapon.weapon_name')?.value
+  if (typeof name !== 'string' || !name || !from) return null
+  return { weapon_name: name, ammo: reserveAmmo(from, name, clipsOf(into)), include: true }
+}
+
+/**
+ * The merged list keys of one scope. Alpine reads the spawn weapon before the
+ * kit entries, and naming a different one takes the weapon the mode chose back
+ * out of the kit, so the order here is the order there.
+ */
+function applyListKeys(
+  into: ResolvedRules,
+  values: Record<string, unknown>,
+  previousWeapon: string,
+  c: Omit<Contribution, 'value'>,
+) {
+  const kit = listAt(SPAWN_KIT)
+  if (kit && ('spawn_weapon.weapon_name' in values || 'spawn_weapon.clips' in values)) {
+    const row = spawnWeaponRow(into, stockSpawnReserve)
+    if (row) {
+      const rows = rowsAt(into, SPAWN_KIT)
+      const kept = previousWeapon && !sameId(previousWeapon, row.weapon_name)
+        ? rows.filter(existing => !sameId(existing.weapon_name, previousWeapon))
+        : rows
+      setRows(into, SPAWN_KIT, withRow(kit, kept, row), c)
     }
   }
+
+  for (const list of mergedLists) {
+    const entries = values[list.key]
+    if (!Array.isArray(entries)) continue
+    let rows = rowsAt(into, list.key)
+    for (const entry of entries) {
+      const edit = readRow(list, entry)
+      if (edit) rows = withRow(list, rows, edit)
+    }
+    setRows(into, list.key, rows, c)
+  }
+}
+
+/** everything one layer of ordinary keys says, merged lists included */
+function applyValues(
+  into: ResolvedRules,
+  values: Record<string, unknown>,
+  c: Omit<Contribution, 'value'>,
+) {
+  const previousWeapon = (into.get('spawn_weapon.weapon_name')?.value as string) ?? ''
+  for (const [path, value] of Object.entries(values)) {
+    // the game type decides which defaults ran in the first place, and a merged
+    // list is not this layer's alone, so both are handled on their own
+    if (path === 'game_type' || listAt(path)) continue
+    contribute(into, path, { ...c, value })
+  }
+  applyListKeys(into, values, previousWeapon, c)
+}
+
+function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
+  const c = { layer: 'gametype' as const, source: gameType }
+
+  const apply = (ops: DefaultOp[]) => {
+    for (const op of ops) {
+      if (op.op === 'set') {
+        if (op.key) contribute(into, op.key, { ...c, value: op.value })
+        continue
+      }
+      const kit = listAt(op.op !== 'loadoutSpawnWeapon' && op.blueTeam ? 'spawn_loadout_blue' : SPAWN_KIT)
+      if (!kit) continue
+      if (op.op === 'loadoutClear') {
+        setRows(into, kit.key, [], c)
+        continue
+      }
+      if (op.op === 'loadoutSpawnWeapon') {
+        // the case above may have placed the spawn weapon already, with a
+        // reserve of its own choosing that this must not overwrite
+        const row = spawnWeaponRow(into, op.ammoFrom)
+        const rows = rowsAt(into, kit.key)
+        if (row && !rows.some(existing => sameId(existing.weapon_name, row.weapon_name))) {
+          setRows(into, kit.key, withRow(kit, rows, row), c)
+        }
+        continue
+      }
+      if (!op.weapon) continue
+      const ammo = op.ammo ?? (op.ammoFrom ? reserveAmmo(op.ammoFrom, op.weapon, clipsOf(into)) : 0)
+      setRows(into, kit.key, withRow(kit, rowsAt(into, kit.key), {
+        weapon_name: op.weapon, ammo, include: op.enabled,
+      }), c)
+    }
+  }
+
   apply(gametypes.defaults.common)
-  const perType = gametypes.defaults.perType[gameType]
-  if (perType) apply(perType)
+  // a mode with no case of its own still gets the arm that covers the rest,
+  // which is where deathmatch and capture the flag get their spawn weapon
+  apply(gametypes.defaults.perType[gameType] ?? gametypes.defaults.fallback)
+  apply(gametypes.defaults.after)
 }
 
 function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
@@ -157,6 +325,13 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
   if (!effect) return
 
   for (const set of effect.sets ?? []) {
+    // a mutator with a kit of its own builds it from nothing rather than adding
+    // to what the mode handed out, so its list replaces rather than folds in
+    const list = listAt(set.key)
+    if (list && Array.isArray(set.value)) {
+      setRows(into, set.key, mutatorRows(list, set.value), { layer: 'mutator', source: mutator.label })
+      continue
+    }
     const schema = findScalar(set.key)
     const value = set.fromOption === undefined
       ? set.value
@@ -174,6 +349,24 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
           description: typeof value === 'string' ? value : set.note,
         })
   }
+}
+
+/**
+ * A list a mutator builds for itself. An entry of a spawn kit that names no
+ * reserve ammo gets the weapon's own, which is the figure the source hands those
+ * entries out of the weapon table.
+ */
+function mutatorRows(list: ArrayKey, entries: unknown[]): Row[] {
+  let rows: Row[] = []
+  for (const entry of entries) {
+    const edit = readRow(list, entry)
+    if (!edit) continue
+    if (list.key === SPAWN_KIT && edit.ammo === undefined && stockSpawnReserve) {
+      edit.ammo = reserveAmmo({ field: stockSpawnReserve.field }, String(edit.weapon_name), 1)
+    }
+    rows = withRow(list, rows, edit)
+  }
+  return rows
 }
 
 /**
@@ -257,21 +450,14 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   }
 
   for (const preset of input.presets ?? []) {
-    for (const [path, value] of Object.entries(preset.values)) {
-      contribute(out, path, { layer: 'preset', value, source: preset.name })
-    }
+    applyValues(out, preset.values, { layer: 'preset', source: preset.name })
   }
 
   for (const decl of orderMutators(input.mutators ?? [])) {
     applyMutator(out, decl)
   }
 
-  for (const [path, value] of Object.entries(input.manual ?? {})) {
-    // the game type is not layered like the rest - it decides which defaults ran
-    // in the first place, so it is contributed above rather than here
-    if (path === 'game_type') continue
-    contribute(out, path, { layer: 'manual', value })
-  }
+  applyValues(out, input.manual ?? {}, { layer: 'manual' })
 
   return out
 }
@@ -290,6 +476,46 @@ export function effectiveMutators(
 ): MutatorDeclaration[] {
   if (modeChanged) return level
   return [...base.filter(b => !level.some(l => l.name === b.name)), ...level]
+}
+
+/** where one row of a resolved list came from */
+export interface RowOrigin {
+  /** the layer that left the row the way it is now */
+  by?: Contribution
+  /** the first layer to name it at all, which is what a later layer folded into */
+  first?: Contribution
+}
+
+/**
+ * Which layer each row of a list owes its current state to. A row no later layer
+ * touched still shows the one that put it there, which is what lets the kit a
+ * game mode hands out read as the mode's rather than as yours.
+ */
+export function rowSources(resolved: Resolved | undefined, mergeKey?: string): RowOrigin[] {
+  const rows = Array.isArray(resolved?.value) ? (resolved.value as unknown[]) : []
+  const lists = (resolved?.trail ?? [])
+    .filter(c => Array.isArray(c.value))
+    .map(c => ({ c, rows: c.value as Record<string, unknown>[] }))
+
+  const idOf = (row: unknown) =>
+    mergeKey ? String((row as Record<string, unknown>)?.[mergeKey]) : JSON.stringify(row)
+
+  return rows.map(row => {
+    const id = idOf(row)
+    const origin: RowOrigin = {}
+    let previous: string | undefined
+    for (const list of lists) {
+      const found = list.rows.find(r => idOf(r) === id)
+      // a layer that rebuilt the list from nothing dropped the row, so whatever
+      // put it back owns it rather than whoever had it before
+      if (!found) { previous = undefined; origin.first = undefined; continue }
+      const now = JSON.stringify(found)
+      if (!origin.first) origin.first = list.c
+      if (now !== previous) origin.by = list.c
+      previous = now
+    }
+    return origin
+  })
 }
 
 /** paths this scope changed relative to what it inherited */

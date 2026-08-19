@@ -90,6 +90,11 @@
 
   const absent = $derived(rotationCheck.absentAmong(levels.map(level => level.filename)))
 
+  // the examples are stock maps, so they are names anyone can type and watch
+  // work. bagman plays on the flag maps, everything else on the deathmatch ones
+  const CTF_MAPS = new Set(['ctf', 'bag', 'tbag'])
+  const stock = $derived(CTF_MAPS.has(baseMode) ? 'ctf' : 'dm')
+
   function headerFor(col: string) {
     return PSEUDO.find(p => p.id === col)?.label ?? textFor('rules', col).label
   }
@@ -289,7 +294,7 @@
       <code>.rfl</code> is added where it is missing.
     </p>
     <textarea class="ctl area" rows="7" bind:value={pasteText}
-      placeholder={'ctf_deathinstinct.rfl\ndm_glasshouse\nkoth_reactor'}></textarea>
+      placeholder={`${stock}02.rfl\n${stock}03\n${stock}04`}></textarea>
     <div class="acts">
       <span class="ph">{parseLevelList(pasteText).length} maps</span>
       <span class="sp"></span>
@@ -307,7 +312,7 @@
     <MapPicker {taken} onpick={map => addMaps([map.rfl])} />
     <div class="byhand">
       <p class="ph">
-        Or type the file name, such as <code>ctf_deathinstinct.rfl</code>. The
+        Or type the file name, such as <code>{stock}02.rfl</code>. The
         autodownloader carries maps the site does not list, so a name that finds
         nothing above can still be the right one.
       </p>

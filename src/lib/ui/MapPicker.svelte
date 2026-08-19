@@ -25,6 +25,8 @@
   let problem = $state('')
   let categories = $state<MapCategory[]>([])
   let searched = $state(false)
+  /** the archive ran out before the estimated total did */
+  let ended = $state(false)
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let inflight: AbortController | null = null
@@ -43,8 +45,13 @@
         query, category, limit: PAGE, offset, signal: controller.signal,
       })
       if (mine !== run) return
-      results = offset ? [...results, ...found.results] : found.results
+      // the archive counts files and the search counts level names, so the total
+      // reads a little high. a short page is the real end of the list
+      const seen = new Set(offset ? results.map(m => m.fileId) : [])
+      const fresh = found.results.filter(map => !seen.has(map.fileId))
+      results = offset ? [...results, ...fresh] : fresh
       total = found.total
+      ended = found.results.length < PAGE
       searched = true
     } catch (failure) {
       if (mine !== run || (failure instanceof DOMException && failure.name === 'AbortError')) return
@@ -53,6 +60,7 @@
       problem = failure instanceof Error ? failure.message : 'Could not reach FactionFiles.'
       results = []
       total = 0
+      ended = true
       searched = true
     } finally {
       if (mine === run) loading = false
@@ -82,7 +90,7 @@
   })
 
   const shown = $derived(results.length)
-  const more = $derived(total > shown)
+  const more = $derived(!ended && total > shown)
 
   function sizeOf(bytes: number) {
     if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
@@ -133,7 +141,7 @@
     </p>
   {:else if shown}
     <p class="ph count">
-      {total} {total === 1 ? 'map' : 'maps'}{shown < total ? `, showing ${shown}` : ''}
+      {ended ? shown : total} {(ended ? shown : total) === 1 ? 'map' : 'maps'}{more ? `, showing ${shown}` : ''}
     </p>
 
     <ul class="hits">
@@ -167,17 +175,15 @@
           </div>
         </li>
       {/each}
-    </ul>
 
-    {#if more}
-      <div class="acts">
-        <span class="sp"></span>
-        <button type="button" class="btn" disabled={loading} onclick={() => fetchPage(shown)}>
-          {loading ? 'Loading...' : `Show ${Math.min(PAGE, total - shown)} more`}
-        </button>
-        <span class="sp"></span>
-      </div>
-    {/if}
+      {#if more}
+        <li class="hit more">
+          <button type="button" class="btn" disabled={loading} onclick={() => fetchPage(shown)}>
+            {loading ? 'Loading...' : `Show ${Math.min(PAGE, total - shown)} more`}
+          </button>
+        </li>
+      {/if}
+    </ul>
   {/if}
 </div>
 
@@ -188,15 +194,6 @@
     margin: 0 0 10px;
     max-width: 62ch;
   }
-
-  .acts {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 11px;
-  }
-
-  .sp { flex: 1; }
 
   .link {
     color: var(--ink-3);
@@ -237,6 +234,16 @@
 
   .hit:last-child { border-bottom: none; }
   .hit:hover { background: var(--surface-2); }
+
+  /* the last row of the list rather than a control under it, so reaching the
+     end of what is loaded and asking for more is one movement */
+  .hit.more {
+    display: block;
+    text-align: center;
+    padding: 9px 12px;
+  }
+
+  .hit.more:hover { background: none; }
 
   .shot {
     width: 96px;

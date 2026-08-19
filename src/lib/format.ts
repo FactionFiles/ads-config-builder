@@ -7,20 +7,25 @@ import { choiceLabelsFor, schemaFor, textFor, type Scope } from '../schema'
 import type { AuthoredEntry, ScalarKey } from '../schema/types'
 import { tableFor } from './gamedata'
 
+/** anything that knows what unit it is stored in and what unit to show */
+type Measured = Pick<AuthoredEntry, 'unit' | 'display'>
+
 /** the file stores seconds where the user thinks in minutes, and so on */
-export function toDisplay(text: AuthoredEntry, value: unknown): unknown {
+export function toDisplay(text: Measured, value: unknown): unknown {
   if (typeof value !== 'number') return value
   if (text.display === 'minutes' && text.unit === 'seconds') return value / 60
+  if (text.display === 'seconds' && text.unit === 'milliseconds') return value / 1000
   return value
 }
 
-export function toFile(text: AuthoredEntry, value: number): number {
+export function toFile(text: Measured, value: number): number {
   if (text.display === 'minutes' && text.unit === 'seconds') return value * 60
+  if (text.display === 'seconds' && text.unit === 'milliseconds') return value * 1000
   return value
 }
 
 /** the unit next to the number, in whatever unit is being shown */
-export function unitFor(text: AuthoredEntry): string | undefined {
+export function unitFor(text: Measured): string | undefined {
   return text.display ?? text.unit
 }
 

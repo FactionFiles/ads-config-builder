@@ -2,6 +2,7 @@
   import { allEntries, appliesToMode, modesFor, modeTitles, schemaFor, textFor, type Scope } from '../../schema'
   import type { ResolvedRules } from '../resolve'
   import Field from './Field.svelte'
+  import ListEditor from './ListEditor.svelte'
 
   interface Props {
     page: string
@@ -17,7 +18,9 @@
 
   const { page, resolved, gameType, levelScope = false, onchange, onreset, onprovenance }: Props = $props()
 
-  interface Entry { scope: Scope; path: string; offMode?: string }
+  interface Entry { scope: Scope; path: string; offMode?: string; editor?: Editor }
+
+  type Editor = 'field' | 'list'
 
   // a setting the mode in play ignores. it is hidden unless this scope sets it
   // by hand, because a value that is in the file must never be invisible - it
@@ -35,12 +38,15 @@
     return key?.kind === 'scalar' && (key as { global?: boolean }).global === true
   }
 
-  // Only a scalar this config file actually holds gets a field. A table or list
-  // has a page of its own or none yet, and the authored layer also describes keys
-  // that belong to other documents - a bot profile, a preset - which are labeled
-  // for completeness and would be written into the wrong file from here.
-  function isEditable(scope: Scope, path: string) {
-    return schemaFor(scope, path)?.kind === 'scalar'
+  // Only a setting this config file actually holds gets an editor. A table is a
+  // group heading, and the authored layer also describes keys that belong to
+  // other documents - a bot profile, a preset - which are labeled for
+  // completeness and would be written into the wrong file from here.
+  function editorFor(scope: Scope, path: string): Editor | null {
+    const schema = schemaFor(scope, path)
+    if (schema?.kind === 'scalar') return 'field'
+    if (schema?.kind === 'array' && ((schema.item?.length ?? 0) > 0 || schema.itemType)) return 'list'
+    return null
   }
 
   interface Group { key: string; title: string; help: string; entries: Entry[] }
@@ -69,17 +75,20 @@
     }
 
     for (const entry of onPage) {
-      // a path that other paths hang off is a group heading, not a field
-      if ([...paths].some(p => p.startsWith(entry.path + '.'))) {
+      const editor = editorFor(entry.scope, entry.path)
+      // a path other paths hang off is a group heading, unless it is a setting
+      // in its own right - the list of bot profiles carries the keys of the file
+      // each one names, and is still a list of file names itself
+      if (!editor && [...paths].some(p => p.startsWith(entry.path + '.'))) {
         const g = group(entry.path, entry.scope)
         const text = textFor(entry.scope, entry.path)
         g.title = text.label
         g.help = text.help
         continue
       }
-      if (!isEditable(entry.scope, entry.path)) continue
+      if (!editor) continue
       const cut = entry.path.lastIndexOf('.')
-      group(cut === -1 ? '' : entry.path.slice(0, cut), entry.scope).entries.push(entry)
+      group(cut === -1 ? '' : entry.path.slice(0, cut), entry.scope).entries.push({ ...entry, editor })
     }
 
     return out.filter(g => g.entries.length > 0)
@@ -91,15 +100,28 @@
     <h3 class="gh">{group.title}</h3>
   {/if}
   {#each group.entries as entry (entry.path)}
-    <Field
-      scope={entry.scope}
-      path={entry.path}
-      resolved={resolved[entry.scope]}
-      {levelScope}
-      offMode={entry.offMode}
-      onchange={(path, value) => onchange?.(entry.scope, path, value)}
-      onreset={path => onreset?.(entry.scope, path)}
-      onprovenance={(path, anchor) => onprovenance?.(entry.scope, path, anchor)}
-    />
+    {#if entry.editor === 'list'}
+      <ListEditor
+        scope={entry.scope}
+        path={entry.path}
+        resolved={resolved[entry.scope]}
+        {levelScope}
+        offMode={entry.offMode}
+        onchange={(path, value) => onchange?.(entry.scope, path, value)}
+        onreset={path => onreset?.(entry.scope, path)}
+        onprovenance={(path, anchor) => onprovenance?.(entry.scope, path, anchor)}
+      />
+    {:else}
+      <Field
+        scope={entry.scope}
+        path={entry.path}
+        resolved={resolved[entry.scope]}
+        {levelScope}
+        offMode={entry.offMode}
+        onchange={(path, value) => onchange?.(entry.scope, path, value)}
+        onreset={path => onreset?.(entry.scope, path)}
+        onprovenance={(path, anchor) => onprovenance?.(entry.scope, path, anchor)}
+      />
+    {/if}
   {/each}
 {/each}

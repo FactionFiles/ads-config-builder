@@ -204,11 +204,17 @@ interface Split {
   unrecognized: string[]
 }
 
+/** a list this tool can edit, as opposed to one it can only carry through */
+function isEditableList(schema: SchemaKey | undefined): boolean {
+  return schema?.kind === 'array' && !schema.complex
+    && ((schema.item?.length ?? 0) > 0 || schema.itemType !== undefined)
+}
+
 function split(entries: [string, unknown][], index: Map<string, SchemaKey>): Split {
   const out: Split = { manual: {}, unknown: {}, kept: [], unrecognized: [] }
   for (const [path, value] of entries) {
     const schema = index.get(path)
-    if (schema?.kind === 'scalar') {
+    if (schema?.kind === 'scalar' || isEditableList(schema)) {
       out.manual[path] = value
       continue
     }

@@ -42,6 +42,8 @@
     if (value === true) return 'on'
     if (value === false) return 'off'
     if (value === '' || value === undefined) return 'not set'
+    // a list is too long to print in a popover, and a row of it is a record
+    if (Array.isArray(value)) return value.length === 1 ? '1 entry' : `${value.length} entries`
     return String(value)
   }
 

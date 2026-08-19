@@ -324,23 +324,51 @@ Facts established from the Alpine source, worth not re-deriving:
     editable into a broken config; an imported config still carries them
     verbatim, and the import banner still names them.
 
+- **M8: the list settings are editable.** One component, `ListEditor.svelte`,
+  covers every list in the tool, because the three shapes differ only in what one
+  row holds: a small record per row (seven rules arrays), a bare name per row
+  (the bot profile files), and a group of names per row (the Gun Game ladder,
+  which is the only key in the config that is a list of lists). The generator now
+  reads which shape an array is rather than assuming the first, and an array
+  whose shape it cannot read stops the build - the old extractor quietly emitted
+  an empty field list, which is how `gg_tiers` had gone unnoticed.
+  - A name field is a picker, not a text box, because the generator now finds the
+    game data lookup that validates it. The check is at the call site for the
+    spawn loadouts and inside the struct method the value is handed to for the
+    rest, so the parser follows a call into the method and traces which parameter
+    is checked. `gg_tiers` is the exception in the other direction: nothing checks
+    it until the game builds the tiers, so that one lookup is read from
+    `multi/gungame.cpp` and fails loudly if that code stops resolving them.
+  - The authored layer owes every column a heading, enforced the same way labels
+    are. A column may also name a game data table itself, for the one field the
+    parser takes on trust - the replacement in `item_replacements`, which is an
+    item name the server never checks. `check-schema` rejects an authored lookup
+    on a column the source already answers for.
+  - Bots came along with it: the page is the join code and the list of profile
+    file names, which is the whole of what `ads.toml` holds about bots. The
+    profile files themselves stay out of scope.
+  - Everything above is out of `unknown` now, so opening a config no longer
+    reports these as carried-through-but-uneditable.
+
 ### Next, in order
 
-1. The rest of M8: the rules list editors, then bots, then problems.
-   - The list editors are one shared component over eight rules arrays -
-     `spawn_loadout`, `spawn_loadout_blue`, `gg_tiers`, `item_replacements`,
-     `item_respawn_time_overrides`, `delayed_items`, `weapon_stay_exemptions`,
-     `spawn_selection.dynamic_respawn_items`. All of them are rows of a small
-     record, mostly a weapon or item name plus a number, and all of them are
-     still parked in `unknown`.
-   - Bots is deliberately shallow for now: the join code and the list of profile
-     file names. A bot profile is a separate TOML document with 45 personality
-     fields, 11 skill fields and 8 quirks, none of which the generator extracts
-     yet; editing them would make this a two-document tool and is its own
-     milestone.
+1. The rest of M8: loadouts properly, then problems.
+   - The spawn loadouts are editable, but a scope's list is added to the kit the
+     game mode hands out, and the tool does not show that kit. The game type
+     defaults carry `loadoutClear` and `loadoutAdd` ops the resolver skips, and
+     their ammo is an expression - `stock_riot_stick_reserve()`, `pit_reserve`,
+     `wo_reserve` - that the generator would have to resolve to a number. Doing
+     that turns the loadout into a layered value like every other setting, with
+     the mode's rows shown as inherited. Until then the help text says plainly
+     that a row is added to the mode's kit.
    - Problems needs no schema work. It reads the document and the resolver.
 2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
 3. M9 map picker, blocked below. M10 CI and deploy.
+
+Smaller things noticed and not done: `gg_final_weapon` is a weapon name in a
+plain text box, for the same reason `gg_tiers` was - the check is in the game
+code, not the parser - and the authored layer can now name a table for a list
+column but not for a scalar.
 
 ### Mode relevance, and where the answer comes from
 

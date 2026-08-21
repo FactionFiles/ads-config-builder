@@ -758,7 +758,7 @@
     top: 1px;
     width: 4px;
     height: 8px;
-    border: solid #fff;
+    border: solid var(--on-accent);
     border-width: 0 2px 2px 0;
     transform: rotate(42deg);
   }

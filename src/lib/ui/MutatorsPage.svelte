@@ -276,7 +276,7 @@
   .mcard.on .add {
     background: var(--p-mut);
     border-color: var(--p-mut);
-    color: #fff;
+    color: var(--on-accent);
   }
 
   .mcard .dd {

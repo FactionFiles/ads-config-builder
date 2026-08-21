@@ -69,6 +69,9 @@ npm run check          svelte-check plus tsc
   minutes. The audience is mostly non-technical server operators.
 - The only fixed-width type in the UI is the config file pane.
 - Color means provenance and nothing else. UI chrome uses `--graphite`.
+- The tool is dark only. The prototype carried a light palette beside the dark
+  one; this ships the dark values as the whole palette, so a token is never
+  defined twice and nothing has a light-mode branch to keep in step.
 - American English throughout, including in generated and authored text.
 - No unicode special characters in code, comments, or authored text. Use `->`.
 - Code comments are lowercase, short, and explain why rather than what.

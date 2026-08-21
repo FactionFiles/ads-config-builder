@@ -1,40 +1,47 @@
 /* design tokens, carried over from the approved prototype in design/prototype.html.
+   the prototype carried a light palette too - this tool ships dark only, so the
+   dark values are the whole palette rather than an override.
    color in this tool means provenance and nothing else - chrome uses --graphite. */
 :root {
-  --bg: #F6F5F2;
-  --surface: #FFFFFF;
-  --surface-2: #FBFAF7;
-  --sunk: #F0EEE9;
+  color-scheme: dark;
 
-  --ink: #1B1D21;
-  --ink-2: #585D64;
-  --ink-3: #8B9098;
+  --bg: #131518;
+  --surface: #1A1D21;
+  --surface-2: #171A1E;
+  --sunk: #101215;
 
-  --line: #E5E3DC;
-  --line-2: #D1CEC6;
+  --ink: #E9EAEC;
+  --ink-2: #A2A7AE;
+  --ink-3: #767C84;
 
-  --graphite: #22262B;
-  --on-graphite: #FBFAF7;
+  --line: #282C32;
+  --line-2: #373C44;
+
+  --graphite: #E9EAEC;
+  --on-graphite: #16181B;
 
   /* provenance: which layer set a value */
-  --p-def: #B4B1A9;
-  --p-preset: #0D7A70;
-  --p-mut: #A8336A;
-  --p-you: #A96E14;
-  --p-map: #6741C8;
+  --p-def: #5F646B;
+  --p-preset: #4FC9BC;
+  --p-mut: #EE85B3;
+  --p-you: #E0A24A;
+  --p-map: #A98CF5;
 
-  --p-preset-b: #E0F0EE;
-  --p-mut-b: #F8E5EE;
-  --p-you-b: #F8EDDC;
-  --p-map-b: #EDE8FA;
+  --p-preset-b: #123330;
+  --p-mut-b: #361D2A;
+  --p-you-b: #372A13;
+  --p-map-b: #241E3C;
 
-  --err: #B3261E;
-  --err-b: #FBE9E7;
+  /* the provenance colors are light enough to need dark type on top of them */
+  --on-accent: #16181B;
+
+  --err: #E8837B;
+  --err-b: #3A1E1C;
 
   --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --sh: 0 1px 2px rgba(20, 18, 14, .06), 0 10px 28px -14px rgba(20, 18, 14, .25);
+  --sh: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 28px -14px rgba(0, 0, 0, .6);
 
   --nav-w: 238px;
   --file-w: 320px;
@@ -68,6 +75,14 @@ button, input, select, textarea {
   font: inherit;
   color: inherit;
 }
+
+/* a tick box is chrome, so it follows graphite rather than the browser's accent */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
+
+::placeholder { color: var(--ink-3); opacity: 1; }
+
+/* the prototype's app frame kept its scrollbars out of the way */
+* { scrollbar-width: thin; }
 
 :focus-visible {
   outline: 2px solid var(--graphite);
@@ -271,7 +286,11 @@ select.ctl { cursor: pointer; }
   white-space: nowrap;
 }
 
-.btn:hover { background: var(--sunk); }
+.btn:hover {
+  background: var(--sunk);
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
 
 .btn.pri {
   background: var(--graphite);
@@ -279,7 +298,7 @@ select.ctl { cursor: pointer; }
   color: var(--on-graphite);
 }
 
-.btn.pri:hover { opacity: .88; }
+.btn.pri:hover { filter: brightness(.9); }
 
 .btn.pressed {
   background: var(--graphite);

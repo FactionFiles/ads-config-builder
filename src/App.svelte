@@ -174,9 +174,9 @@
       onchange={openFile}
       hidden
     />
-    <button type="button" class="ghost" onclick={() => fileInput?.click()}>Open a config</button>
-    <button type="button" class="ghost" onclick={download}>Download</button>
-    <button type="button" class="ghost" onclick={() => (fileOpen = !fileOpen)}>
+    <button type="button" class="btn" onclick={() => fileInput?.click()}>Open a config</button>
+    <button type="button" class="btn pri" onclick={download}>Download</button>
+    <button type="button" class="btn" onclick={() => (fileOpen = !fileOpen)}>
       {fileOpen ? 'Hide' : 'Show'} config file
     </button>
   </header>
@@ -373,6 +373,7 @@
 
 <style>
   .app {
+    background: var(--surface);
     display: grid;
     grid-template-columns: var(--nav-w) minmax(0, 1fr) auto;
     grid-template-rows: auto minmax(0, 1fr);
@@ -383,33 +384,28 @@
     grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    gap: 14px;
-    padding: 0 18px;
+    gap: 12px;
+    padding: 0 16px;
     height: 48px;
-    background: var(--graphite);
-    color: var(--on-graphite);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
     font-size: 14px;
   }
 
   .topbar .sp { flex: 1; }
-  .topbar .ver { font-size: 12px; opacity: .7; }
 
-  .ghost {
-    border: 1px solid rgba(255, 255, 255, .25);
-    background: none;
-    color: inherit;
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 12.5px;
-    cursor: pointer;
+  .topbar .ver {
+    font-size: 12px;
+    color: var(--ink-3);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 1px 9px;
   }
-
-  .ghost:hover { background: rgba(255, 255, 255, .1); }
 
   .nav {
     border-right: 1px solid var(--line);
     background: var(--surface-2);
-    padding: 16px 12px;
+    padding: 14px 0 20px;
     overflow-y: auto;
   }
 
@@ -419,11 +415,11 @@
     letter-spacing: .09em;
     text-transform: uppercase;
     color: var(--ink-3);
-    margin: 18px 8px 6px;
+    padding: 16px 16px 6px;
     overflow-wrap: anywhere;
   }
 
-  .scope:first-child { margin-top: 0; }
+  .scope:first-child { padding-top: 2px; }
 
   .ni {
     display: flex;
@@ -432,24 +428,28 @@
     width: 100%;
     text-align: left;
     border: 0;
+    border-left: 2px solid transparent;
     background: none;
-    border-radius: 6px;
-    padding: 6px 8px;
+    padding: 6px 16px;
     font-size: 13.5px;
     color: var(--ink-2);
     cursor: pointer;
   }
 
-  .ni:hover { background: var(--sunk); }
+  .ni:hover {
+    background: var(--sunk);
+    color: var(--ink);
+  }
 
   .ni.on {
-    background: var(--graphite);
-    color: var(--on-graphite);
-    font-weight: 500;
+    background: var(--surface);
+    border-left-color: var(--graphite);
+    color: var(--ink);
+    font-weight: 600;
   }
 
   .ni.sub {
-    padding-left: 18px;
+    padding-left: 28px;
     font-size: 13px;
     overflow-wrap: anywhere;
   }
@@ -462,8 +462,6 @@
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
   }
-
-  .ni.on .ct { color: inherit; opacity: .7; }
 
   .main {
     overflow-y: auto;
@@ -482,7 +480,7 @@
     align-items: flex-start;
     gap: 12px;
     border: 1px solid var(--line-2);
-    background: var(--surface);
+    background: var(--surface-2);
     border-radius: 8px;
     padding: 12px 14px;
     margin-bottom: 20px;
@@ -520,7 +518,7 @@
   .filepane {
     width: var(--file-w);
     border-left: 1px solid var(--line);
-    background: var(--surface);
+    background: var(--sunk);
     display: flex;
     flex-direction: column;
     overflow: hidden;

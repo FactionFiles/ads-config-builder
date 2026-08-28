@@ -67,6 +67,13 @@ export interface ArrayKey {
    * changes the fields the entry carries and leaves the rest alone.
    */
   mergeKey?: string
+  /**
+   * Rows the parser puts in before it reads the file, and puts in again for
+   * every scope it parses. Alpine keeps a stock behavior this way after
+   * patching it out of the game, which is why a scope that says nothing still
+   * gets the row - and why a scope underneath that turned it off does not.
+   */
+  seed?: Record<string, unknown>[]
   requires?: Guard[]
 }
 

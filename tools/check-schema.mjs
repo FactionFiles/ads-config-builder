@@ -277,6 +277,33 @@ function checkReplacementList(name, set) {
   }
 }
 
+/**
+ * A row the parser seeds into a list before reading the file. The name has to
+ * still be a weapon, for the same reason a kit's does: Alpine patches the stock
+ * fusion behavior out of the game and puts it back through this row, so a name
+ * that stopped resolving would leave the tool describing a weapon stay rule the
+ * server does not apply.
+ */
+function checkSeedRows(key) {
+  const mergeKey = key.mergeKey
+  for (const row of key.seed) {
+    if (!mergeKey || row[mergeKey] === undefined) {
+      problem('seeded list row with nothing to key it by', `${key.key} wants a ${mergeKey ?? 'merge key'}`)
+      continue
+    }
+    for (const [field, value] of Object.entries(row)) {
+      const column = key.item?.find(f => f.key === field)
+      if (!column) {
+        problem('seeded list row sets a column the list does not have', `${key.key} -> ${field}`)
+        continue
+      }
+      if (column.lookup === 'weapon' && !weaponNamed(value)) {
+        problem('seeded list row names a weapon the game does not have', `${key.key}: ${value}`)
+      }
+    }
+  }
+}
+
 function checkLoadoutOps(label, ops) {
   for (const op of ops ?? []) {
     if (op.op === 'loadoutAdd') {
@@ -300,6 +327,8 @@ function checkLoadoutOps(label, ops) {
     }
   }
 }
+
+for (const key of rules.keys) if (key.kind === 'array' && key.seed) checkSeedRows(key)
 
 checkLoadoutOps('every mode', gametypes.defaults.common)
 checkLoadoutOps('modes with no case of their own', gametypes.defaults.fallback)

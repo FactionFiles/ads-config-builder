@@ -13,12 +13,18 @@
     /** the game mode in play, which decides which settings have any effect */
     gameType: string
     levelScope?: boolean
+    /** what each map sets itself, for a row Alpine re-seeds per scope */
+    mapManual?: Record<string, unknown>[]
     onchange?: (scope: Scope, path: string, value: unknown) => void
+    onapplytoall?: (path: string, row: Record<string, unknown>) => void
     onreset?: (scope: Scope, path: string) => void
     onprovenance?: (scope: Scope, path: string, anchor: HTMLElement) => void
   }
 
-  const { page, resolved, manual, gameType, levelScope = false, onchange, onreset, onprovenance }: Props = $props()
+  const {
+    page, resolved, manual, gameType, levelScope = false, mapManual = [],
+    onchange, onreset, onprovenance, onapplytoall,
+  }: Props = $props()
 
   interface Entry { scope: Scope; path: string; offMode?: string; editor?: Editor }
 
@@ -109,10 +115,12 @@
         resolved={resolved[entry.scope]}
         manual={manual[entry.scope][entry.path]}
         {levelScope}
+        {mapManual}
         offMode={entry.offMode}
         onchange={(path, value) => onchange?.(entry.scope, path, value)}
         onreset={path => onreset?.(entry.scope, path)}
         onprovenance={(path, anchor) => onprovenance?.(entry.scope, path, anchor)}
+        {onapplytoall}
       />
     {:else}
       <Field

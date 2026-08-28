@@ -22,13 +22,18 @@
     levelScope?: boolean
     /** set when the mode in play ignores this setting, worded for the user */
     offMode?: string
+    /** what each map in the rotation sets itself, for a row Alpine re-seeds */
+    mapManual?: Record<string, unknown>[]
     onchange?: (path: string, value: unknown) => void
+    /** write one row into every map, for a row the base rules alone cannot hold */
+    onapplytoall?: (path: string, row: Record<string, unknown>) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
   }
 
   const {
-    scope, path, resolved, manual, levelScope = false, offMode, onchange, onreset, onprovenance,
+    scope, path, resolved, manual, levelScope = false, offMode, mapManual = [],
+    onchange, onreset, onprovenance, onapplytoall,
   }: Props = $props()
 
   interface Column {
@@ -96,6 +101,32 @@
   // is a different thing from the row going away
   function removeLabel(origin: RowOrigin | undefined) {
     return origin?.first && origin.first !== origin.by ? 'Reset' : 'Remove'
+  }
+
+  /**
+   * Maps that will lose this row.
+   *
+   * Some rows are put into the list by the parser itself, once for every scope
+   * it reads - which is how Alpine keeps the stock weapon stay rule for the
+   * Fusion Rocket Launcher after patching the game's own out. Because the
+   * seeding runs per scope, changing such a row in the game rules is undone for
+   * every map that does not change it too, so the row says so and offers the
+   * only thing that works.
+   */
+  function reseededOn(row: unknown): number {
+    if (levelScope || !mergeKey || !onapplytoall) return 0
+    const seed = (schema.seed ?? []).find(s => sameId(s[mergeKey], (row as Record<string, unknown>)?.[mergeKey]))
+    if (!seed || !isMine(row)) return 0
+    // a row set to what the seed would put back anyway loses nothing
+    const differs = Object.entries(seed).some(
+      ([field, value]) => field !== mergeKey && cellValue(row, field) !== value
+    )
+    if (!differs) return 0
+    const id = (row as Record<string, unknown>)[mergeKey]
+    return mapManual.filter(map => {
+      const held = map[path]
+      return !Array.isArray(held) || !held.some(r => sameId((r as Record<string, unknown>)?.[mergeKey], id))
+    }).length
   }
 
   // an empty list means the same thing as no list at all, so clearing the last
@@ -300,6 +331,22 @@
                 {/if}
               </td>
             </tr>
+            {@const missing = reseededOn(row)}
+            {#if missing}
+              <tr class="reseed">
+                <td colspan={columns.length + 1}>
+                  Alpine sets this row again at the start of every map, so on its own
+                  this does not reach {missing === mapManual.length ? 'any of them' : 'all of them'}.
+                  <button
+                    type="button"
+                    class="btn"
+                    onclick={() => onapplytoall?.(path, row as Record<string, unknown>)}
+                  >
+                    Set it on {missing === 1 ? 'the 1 map' : `all ${mapManual.length} maps`}
+                  </button>
+                </td>
+              </tr>
+            {/if}
           {/each}
         </tbody>
       </table>
@@ -376,6 +423,16 @@
 </div>
 
 <style>
+  .rows tr.reseed td {
+    border-top: 0;
+    padding: 0 0 10px;
+    font-size: 12px;
+    color: var(--err);
+    max-width: 60ch;
+  }
+
+  .rows tr.reseed .btn { margin-left: 8px; }
+
   .le {
     padding-bottom: 18px;
     border-bottom: 1px solid var(--line);

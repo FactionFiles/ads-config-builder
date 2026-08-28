@@ -92,6 +92,28 @@ export function parseLevelList(text: string): string[] {
     .map(name => (name.includes('.') ? name : name + '.rfl'))
 }
 
+/**
+ * One row of a merged list written into every map.
+ *
+ * Repeating a key across every map is normally the worse config, but a row the
+ * parser seeds once per scope is put back for each map, so the game rules alone
+ * cannot hold it and this is the only arrangement that works.
+ */
+export function withRowOnEveryLevel(
+  levels: LevelEntry[],
+  path: string,
+  mergeKey: string,
+  row: Record<string, unknown>,
+): LevelEntry[] {
+  return levels.map(level => {
+    const held = level.rules.manual[path]
+    const rows = Array.isArray(held) ? (held as Record<string, unknown>[]) : []
+    const at = rows.findIndex(r => r[mergeKey] === row[mergeKey])
+    const next = at === -1 ? [...rows, row] : rows.map((r, i) => (i === at ? row : r))
+    return { ...level, rules: { ...level.rules, manual: { ...level.rules.manual, [path]: next } } }
+  })
+}
+
 /** turn flat dotted paths back into the nested tables TOML wants */
 function nest(flat: ManualKeys): Record<string, unknown> {
   const out: Record<string, unknown> = {}

@@ -12,12 +12,13 @@
 
 import {
   appliesToMode, gametypesByName, modeTitles, modesFor, mutatorsByName,
-  rulesIndex, schemaFor, textFor, mutatorAllowsMode, type Scope,
+  rules as rulesSchema, rulesIndex, schemaFor, textFor, mutatorAllowsMode, type Scope,
 } from '../schema'
-import type { ScalarKey } from '../schema/types'
+import type { ArrayKey, ScalarKey } from '../schema/types'
 import type { ConfigDocument, ManualKeys, RulesScope } from './config'
 import { unsatisfiedGuard, type MutatorDeclaration, type ResolvedRules } from './resolve'
 import { formatValue } from './format'
+import { tableFor } from './gamedata'
 
 export type Severity =
   | 'broken'   // the server will not do this at all
@@ -298,6 +299,10 @@ function repeatedFindings(doc: ConfigDocument, out: Finding[]) {
 
   const first = doc.levels[0].rules.manual
   for (const path of Object.keys(first)) {
+    // a list Alpine seeds per scope has to be repeated on every map, so hoisting
+    // it into the game rules is the one thing that would not work
+    const schema = schemaFor('rules', path)
+    if (schema?.kind === 'array' && schema.seed) continue
     const value = JSON.stringify(first[path])
     const everywhere = doc.levels.every(l => JSON.stringify(l.rules.manual[path]) === value)
     if (!everywhere) continue
@@ -400,6 +405,62 @@ function clearedMutatorFindings(
   })
 }
 
+/**
+ * A list row the game rules change that Alpine puts back for every map.
+ *
+ * The parser seeds some rows before reading each scope, so a change made only
+ * in the game rules is undone for every map that does not repeat it. Nothing at
+ * runtime says so, and the settings page can only show it one map at a time, so
+ * it is worth saying plainly here.
+ */
+function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
+  if (!doc.levels.length) return
+
+  for (const key of rulesSchema.keys) {
+    if (key.kind !== 'array') continue
+    const list = key as ArrayKey
+    if (!list.seed || !list.mergeKey) continue
+
+    const mergeKey = list.mergeKey
+    const held = doc.base.manual[list.key]
+    if (!Array.isArray(held)) continue
+
+    for (const row of held as Record<string, unknown>[]) {
+      const seed = list.seed.find(s => s[mergeKey] === row[mergeKey])
+      if (!seed) continue
+      const differs = Object.entries(seed).some(([f, v]) => f !== mergeKey && row[f] !== v)
+      if (!differs) continue
+
+      const missing = doc.levels.filter(level => {
+        const own = level.rules.manual[list.key]
+        return !Array.isArray(own)
+          || !own.some(r => (r as Record<string, unknown>)?.[mergeKey] === row[mergeKey])
+      })
+      if (!missing.length) continue
+
+      const column = list.item?.find(f => f.key === mergeKey)
+      const id = String(row[mergeKey])
+      const name = column?.lookup
+        ? tableFor(column.lookup).find(e => e.name === id)?.display ?? id
+        : id
+
+      out.push({
+        id: `reseed:${list.key}:${String(row[mergeKey])}`,
+        severity: 'broken',
+        scope: BASE_SCOPE,
+        title: `What the game rules set for ${name} does not reach ${
+          missing.length === doc.levels.length ? 'any map' : 'every map'
+        }`,
+        detail: `Alpine adds its own ${name} row back at the start of every map, after the game `
+          + 'rules have been read, so a map keeps what you set here only if that map sets it too. '
+          + 'The weapons page can write it into every map for you.',
+        page: pageOf('rules', list.key),
+        items: missing.map((level, i) => level.filename || `Map ${i + 1}`),
+      })
+    }
+  }
+}
+
 const RANK: Record<Severity, number> = { broken: 0, ignored: 1, note: 2 }
 
 export function findProblems(input: CheckInput): Finding[] {
@@ -411,6 +472,7 @@ export function findProblems(input: CheckInput): Finding[] {
   const modeChanged = doc.levels.map((_, i) => modeOf(i) !== baseMode)
 
   rotationFindings(doc, absentMaps, out)
+  reseededRowFindings(doc, out)
   clearedMutatorFindings(doc, doc.base.mutators, modeChanged, out)
 
   settingFindings('server', doc.server, server, baseMode, SERVER_SCOPE, out)

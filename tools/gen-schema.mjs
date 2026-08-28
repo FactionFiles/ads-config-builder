@@ -473,7 +473,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
     const base = requires ? { requires } : {}
 
     if (kind === 'as_array') {
-      keys.push({ key, kind: 'array', ...extractArrayShape(consequent, structs, structName, key), ...base })
+      keys.push({ key, kind: 'array', ...extractArrayShape(consequent, body, structs, structName, key), ...base })
       continue
     }
 
@@ -524,7 +524,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
       keys.push({
         key: call[1],
         kind: 'array',
-        ...extractArrayShape(l.body, structs, structName, call[1]),
+        ...extractArrayShape(l.body, l.body, structs, structName, call[1]),
         ...(requires ? { requires } : {}),
       })
     }
@@ -615,7 +615,7 @@ function subStructFor(cpp, structs, consequent, structName) {
  * out of this is one the UI would draw as an empty editor, so it stops the
  * build rather than shipping a list nobody can fill in.
  */
-function extractArrayShape(block, structs, structName, key) {
+function extractArrayShape(block, body, structs, structName, key) {
   const fields = []
   const re = /\[\s*"(\w+)"\s*\]\s*\.\s*(?:value<([^>]+)>|value_or<([^>]+)>)/g
   let m
@@ -650,7 +650,7 @@ function extractArrayShape(block, structs, structName, key) {
       const lit = parseLiteral(m[2])
       if (found && lit.ok && found.default === undefined) found.default = lit.value
     }
-    return { item: fields, ...mergeKeyOf(block, fields, locals) }
+    return { item: fields, ...mergeKeyOf(block, fields, locals), ...seedRows(block, body, locals, key) }
   }
 
   // entries that are values rather than tables: a plain list, or - where the
@@ -677,6 +677,57 @@ function localFields(block) {
     out.set(m[1], m[2])
   }
   return out
+}
+
+/**
+ * Rows the parser puts into the list before it reads the file at all.
+ *
+ * Alpine uses this to keep a stock behavior it has patched out of the game: the
+ * Fusion Rocket Launcher is left out of weapon stay by the game itself, Alpine
+ * removes that hardcoded check so the exemption can be configured, and seeds the
+ * list with the same entry so a config that says nothing still behaves like
+ * stock. The rows are read off the same `add` call the merge key comes from, so
+ * a seeding call that stops looking like one stops the build rather than
+ * quietly dropping a row the tool would then claim does not exist.
+ */
+function seedRows(block, body, locals, key) {
+  const read = block.match(/([\w.]+)\s*\.\s*add\s*\(([^;]*)\)\s*;/)
+  if (!read) return {}
+  const receiver = read[1]
+
+  // which field of an entry each positional argument of `add` carries, learned
+  // from the call that reads the file rather than from the argument names
+  const columns = splitTopLevelArgs(read[2]).map(arg => {
+    for (const [local, field] of locals) {
+      if (new RegExp(`\\b${local}\\b`).test(arg)) return field
+    }
+    return null
+  })
+
+  const rows = []
+  const escaped = receiver.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  for (const m of body.matchAll(new RegExp(`${escaped}\\s*\\.\\s*add\\s*\\(([^;]*)\\)\\s*;`, 'g'))) {
+    const args = splitTopLevelArgs(m[1])
+    const values = args.map(parseLiteral)
+    // the call that reads the file is this same one with locals in place of
+    // literals, which is what tells the two apart
+    if (!values.every(v => v.ok)) continue
+
+    expect(args.length <= columns.length,
+      `A row seeded into ${key} sets more values than the parser reads back out`,
+      `The seeding call passes ${args.length} arguments where reading an entry passes ${columns.length}`)
+
+    const row = {}
+    args.forEach((_, i) => {
+      expect(columns[i] != null,
+        `Could not tell which column a row seeded into ${key} sets`,
+        `Argument ${i + 1} of ${receiver}.add did not name a field the parser reads from an entry`)
+      row[columns[i]] = values[i].value
+    })
+    rows.push(row)
+  }
+
+  return rows.length ? { seed: rows } : {}
 }
 
 /**

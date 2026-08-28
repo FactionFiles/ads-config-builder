@@ -462,14 +462,14 @@ help = "The character model everyone plays as."
 
 ["weapons_stay"]
 page = "rules-weapons"
-label = "Weapons stay after being picked up"
+label = "Weapon stay"
 help = "Leaves weapon pickups on the map for the next person instead of making everyone wait for a respawn."
 notModes = ["gg"]
 
 ["weapon_stay_exemptions"]
 page = "rules-weapons"
-label = "Weapons that do not stay"
-help = "Weapons listed here still disappear when taken, which is the usual way to stop everyone carrying the strongest gun at once. The Fusion Rocket Launcher is treated this way already; add it here and turn the switch off to let it stay."
+label = "Weapons without weapon stay"
+help = "Weapons listed here are left out of weapon stay, so they disappear when taken. That is the usual way to stop everyone carrying the strongest gun at once."
 notModes = ["gg"]
 
 ["weapon_stay_exemptions".fields.weapon_name]
@@ -477,8 +477,8 @@ label = "Weapon"
 help = "The weapon this rule is about."
 
 ["weapon_stay_exemptions".fields.exempt]
-label = "Disappears when taken"
-help = "Turn this off to let a weapon stay after all, which is how you undo an exemption a preset set."
+label = "Exempt from weapon stay"
+help = "On means the weapon is left out of weapon stay and disappears when taken. Turn it off to give it weapon stay, which the stock game never allowed for the Fusion Rocket Launcher."
 
 ["drop_weapons"]
 page = "rules-weapons"

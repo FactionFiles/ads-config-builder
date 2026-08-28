@@ -31,7 +31,7 @@ export interface Contribution {
   value: unknown
   /** preset file name, mutator name, or game mode name */
   source?: string
-  /** for a mutator whose effect is not a value we can compute */
+  /** why this layer did what it did, where the value alone does not say */
   description?: string
 }
 
@@ -278,6 +278,38 @@ function applyValues(
   applyListKeys(into, values, previousWeapon, c)
 }
 
+/**
+ * Rows the parser puts into a list before it reads the scope's own, once for
+ * every scope it parses.
+ *
+ * Alpine keeps the stock weapon stay rule for the Fusion Rocket Launcher this
+ * way: it patches the game's own hardcoded exemption out so the rule can be
+ * configured at all, then seeds the list with the same row so a config that
+ * says nothing still plays like stock. Because the seeding runs per scope
+ * rather than once, a map that says nothing gets the row put back - so turning
+ * it off in the base rules does not reach any map that has not turned it off
+ * too. That is upstream behavior, not a decision here, and the trail says so.
+ *
+ * `setRows` stays quiet when a layer changes nothing, so the seed only appears
+ * in the trail where it actually took something away.
+ */
+function applySeeds(into: ResolvedRules) {
+  for (const key of rulesSchema.keys) {
+    if (key.kind !== 'array') continue
+    const list = key as ArrayKey
+    if (!list.seed || !list.mergeKey) continue
+
+    let rows = rowsAt(into, list.key)
+    for (const seed of list.seed) rows = withRow(list, rows, seed)
+    setRows(into, list.key, rows, {
+      layer: 'default',
+      source: 'Alpine',
+      description: 'Alpine puts this row back at the start of every map, so a map keeps it '
+        + 'unless that map turns it off itself.',
+    })
+  }
+}
+
 function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
   const c = { layer: 'gametype' as const, source: gameType }
 
@@ -456,6 +488,8 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   for (const decl of orderMutators(input.mutators ?? [])) {
     applyMutator(out, decl)
   }
+
+  applySeeds(out)
 
   applyValues(out, input.manual ?? {}, { layer: 'manual' })
 

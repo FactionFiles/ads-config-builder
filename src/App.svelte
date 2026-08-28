@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { meta, pages, type Scope } from './schema'
+  import { meta, pages, schemaFor, type Scope } from './schema'
   import {
-    emptyDocument, fromToml, toPresetToml, toToml, type ImportReport, type RulesScope,
+    emptyDocument, fromToml, toPresetToml, toToml, withRowOnEveryLevel,
+    type ImportReport, type RulesScope,
   } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
   import { findProblems } from './lib/checks'
@@ -16,6 +17,7 @@
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
+
 
   // the page and the map being edited both live in the URL, so a link can point
   // at one and the back button does what people expect
@@ -158,6 +160,20 @@
       const { [path]: _dropped, ...rest } = s.manual
       return { ...s, manual: rest }
     })
+  }
+
+  /**
+   * Write one row of a list into every map.
+   *
+   * Repeating a key across every map is normally the worse config and the tool
+   * says so - but a row Alpine seeds per scope is put back for each map, so the
+   * base rules cannot hold it on their own and this is the only thing that works.
+   */
+  function applyRowToAllMaps(path: string, row: Record<string, unknown>) {
+    const key = schemaFor('rules', path)
+    const mergeKey = key?.kind === 'array' ? key.mergeKey : undefined
+    if (!mergeKey) return
+    doc.levels = withRowOnEveryLevel(doc.levels, path, mergeKey, row)
   }
 
   function setMutators(next: MutatorDeclaration[]) {
@@ -373,9 +389,11 @@
         {resolved}
         {manual}
         levelScope={level !== undefined}
+        mapManual={doc.levels.map(l => l.rules.manual)}
         onchange={change}
         onreset={reset}
         onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
+        onapplytoall={applyRowToAllMaps}
       />
     {/if}
   </main>

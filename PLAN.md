@@ -437,18 +437,37 @@ Facts established from the Alpine source, worth not re-deriving:
     derived list, because a badge disagreeing with the page it points at is worse
     than no badge.
 
+- **M8: the seeded rows, and the weapon stay wording.** The last thing the kit
+  work left behind. Some list rows are put there by the parser before it reads
+  the file at all, and the tool had been describing one in help text instead of
+  showing it.
+  - The generator reads them off the same `add` call the merge key comes from,
+    so a seeding call that stops looking like one stops the build. `check-schema`
+    holds the seeded name to the weapon table the same way it holds a kit's.
+  - The resolver applies them where the source does, after the mutators and
+    before the scope's own rows. Because a scope is resolved by one function
+    that runs per scope, the re-seeding falls out rather than being special
+    cased - and `setRows` stays quiet when a layer changes nothing, so the seed
+    only reaches the trail where it actually took something away.
+  - This is the first setting where the honest answer looks like a bug in the
+    tool: turn the exemption off in the game rules and every map still shows it
+    on, because that is what the server does. So the row that gets it wrong says
+    so and offers the only thing that works - writing itself into every map -
+    and the problems page says it again for anyone who never opens that page.
+    Repeating a key across every map is the one piece of advice the tool gives
+    in reverse here, so the "every map sets this" note skips a seeded list.
+  - Weapon stay is what RF calls it, so that is what the tool calls it now. The
+    exemption column had been "Disappears when taken", which is nobody's phrase.
+
 ### Next, in order
 
-1. The weapon-stay exemptions, the one thing the kit work left behind. The
-   parser seeds them with the Fusion Rocket Launcher before it reads the array,
-   and the tool still says so in help text rather than showing it as an
-   inherited row. Same shape of fix as the game mode kits and now a small one -
-   the generator would capture the seeding call, and the resolver would apply it
-   as a layer under everything else.
-2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
+1. A parity pass against `old.html`, then delete it and `design/prototype.html`.
    That closes M8.
-3. M10 CI and deploy. Nothing is blocking it now that the origin does not have
+2. M10 CI and deploy. Nothing is blocking it now that the origin does not have
    to be registered anywhere.
+3. Bump the `vendor/AlpineFaction` pin to 1.5.0 as a commit of its own, so
+   whatever `check-schema` flags is reviewed on its own rather than mixed into
+   feature work.
 
 Testing has an answer now that costs nothing: a scratch entry point built with
 `vite build --lib` and run under node imports the app's own modules with the
@@ -501,6 +520,18 @@ None of these block the builder; they are worth reporting to Alpine.
   every team-gated setting and is not obvious from the mode list.
 - **`weapon_stay_exemptions` is never cleared between layers** - the `.clear()` is
   commented out - so Super Rail's exemption accumulates.
+- **The Fusion Rocket Launcher exemption is re-seeded once per scope, which undoes
+  the operator.** `parse_server_rules` runs `add("shoulder_cannon", true)` before
+  it reads the key, and it runs for every preset, for the scope table and for the
+  scope's `[rules]` table. `add` overwrites the flag on a weapon already in the
+  list, so `exempt = false` in the base rules is put back to `true` for every map
+  that does not repeat it - and a level's resolved rules replace the active rules
+  wholesale, so that is what the server runs. Within one scope the operator still
+  wins, because the array is read immediately after the seeding. Alpine patched
+  the stock hardcoded exemption out (`init_alpine_dedicated_server`) precisely so
+  this could be configured, so the setting silently fails at the thing it was
+  added for. An add-if-absent variant for the seeding call would fix it, or
+  seeding once rather than per layer.
 - **The Capture the Flag mode description says "Steal the the enemy flag".** The
   tool shows the game's own wording, so the typo shows through.
 - **A map that changes the mode silently loses the base rules' mutators.**

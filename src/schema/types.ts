@@ -93,6 +93,12 @@ export type SchemaKey = ScalarKey | TableKey | ArrayKey
 
 export interface RulesSchema {
   keys: SchemaKey[]
+  /**
+   * What a scope that names a different game type does with the rules it was
+   * handed. Alpine rebuilds from the built-in defaults plus the keys [base] set
+   * by hand, so no part of the old mode survives the change.
+   */
+  gameTypeRebase: { on: string; source: string }
   /** every dotted path, groups included */
   flat: string[]
 }
@@ -186,7 +192,8 @@ export interface ServerSchema {
   tables: TableKey[]
   arrays: ArrayKey[]
   levelKeys: string[]
-  presetKeys: string[]
+  /** keys a [[levels]] entry still parses but Alpine no longer acts on */
+  removedLevelKeys: string[]
   botKeys: SchemaKey[]
   /** what the old-style single rcon password is allowed to run */
   legacyRconCommands: string[]

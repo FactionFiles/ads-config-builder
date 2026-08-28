@@ -22,12 +22,10 @@
 
   /* provenance: which layer set a value */
   --p-def: #5F646B;
-  --p-preset: #4FC9BC;
   --p-mut: #EE85B3;
   --p-you: #E0A24A;
   --p-map: #A98CF5;
 
-  --p-preset-b: #123330;
   --p-mut-b: #361D2A;
   --p-you-b: #372A13;
   --p-map-b: #241E3C;
@@ -220,7 +218,6 @@ select.ctl { cursor: pointer; }
 }
 
 .fr .src.you    { color: var(--p-you); }
-.fr .src.preset { color: var(--p-preset); }
 .fr .src.mut    { color: var(--p-mut); }
 .fr .src.map    { color: var(--p-map); }
 
@@ -244,7 +241,6 @@ select.ctl { cursor: pointer; }
   background: var(--p-def);
 }
 
-.pd.preset { background: var(--p-preset); }
 .pd.mut    { background: var(--p-mut); }
 .pd.you    { background: var(--p-you); }
 .pd.map    { background: var(--p-map); }

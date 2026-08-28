@@ -48,8 +48,8 @@
 
   // Only a setting this config file actually holds gets an editor. A table is a
   // group heading, and the authored layer also describes keys that belong to
-  // other documents - a bot profile, a preset - which are labeled for
-  // completeness and would be written into the wrong file from here.
+  // other documents - a bot profile - which are labeled for completeness and
+  // would be written into the wrong file from here.
   function editorFor(scope: Scope, path: string): Editor | null {
     const schema = schemaFor(scope, path)
     if (schema?.kind === 'scalar') return 'field'

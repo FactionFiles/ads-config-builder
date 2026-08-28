@@ -29,14 +29,13 @@
   }: Props = $props()
 
   // columns the sheet can show that are not one setting: the score limit follows
-  // each row's own mode, and mutators and presets are lists rather than values
+  // each row's own mode, and mutators are a list rather than a value
   const PSEUDO = [
     { id: '@score', label: 'Score limit', group: 'Rotation sheet' },
     { id: '@mutators', label: 'Mutators', group: 'Rotation sheet' },
-    { id: '@presets', label: 'Presets', group: 'Rotation sheet' },
   ]
 
-  let columns = $state(['game_type', 'time_limit', '@score', '@mutators', '@presets'])
+  let columns = $state(['game_type', 'time_limit', '@score', '@mutators'])
   let panel = $state<'columns' | 'paste' | 'add' | 'bulk' | null>(null)
   let pasteText = $state('')
   let newMap = $state('')
@@ -46,7 +45,7 @@
   const baseMode = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const baseScoreKey = $derived(gametypesByName.get(baseMode)?.scoreLimitKey ?? null)
 
-  type CellKind = 'inherited' | 'plain' | 'map' | 'preset' | 'mut' | 'muted'
+  type CellKind = 'inherited' | 'plain' | 'map' | 'mut' | 'muted'
   interface Cell { text: string; kind: CellKind }
 
   interface Row {
@@ -71,8 +70,7 @@
         rules,
         mode,
         modeChanged: mode !== baseMode,
-        changed: Object.keys(level.rules.manual).length
-          + level.rules.presets.length + level.rules.mutators.length,
+        changed: Object.keys(level.rules.manual).length + level.rules.mutators.length,
       }
     })
   )
@@ -100,7 +98,6 @@
   }
 
   function layerKind(r: Resolved, isBase: boolean): CellKind {
-    if (r.layer === 'preset') return 'preset'
     if (r.layer === 'mutator') return 'mut'
     if (r.layer === 'manual') return isBase ? 'plain' : 'map'
     return 'plain'
@@ -136,19 +133,6 @@
     return { text: effective.map(m => mutatorLabel(m.name)).join(', '), kind: 'mut' }
   }
 
-  function presetCell(row: Row): Cell {
-    if (!row.level) {
-      return base.presets.length
-        ? { text: base.presets.join(', '), kind: 'preset' }
-        : { text: 'none', kind: 'muted' }
-    }
-    const own = row.level.rules.presets
-    if (!own.length) {
-      return base.presets.length ? { text: 'same', kind: 'inherited' } : { text: 'none', kind: 'muted' }
-    }
-    return { text: `+ ${own.join(', ')}`, kind: 'preset' }
-  }
-
   function scoreCell(row: Row): Cell {
     const key = gametypesByName.get(row.mode)?.scoreLimitKey
     if (!key) return { text: 'no score limit', kind: 'muted' }
@@ -159,7 +143,6 @@
 
   function cellFor(row: Row, col: string): Cell {
     if (col === '@mutators') return mutatorCell(row)
-    if (col === '@presets') return presetCell(row)
     if (col === '@score') return scoreCell(row)
     return settingCell(row, col)
   }
@@ -657,7 +640,6 @@
 
   .v.inherited { color: var(--ink-3); }
   .v.muted { color: var(--ink-3); font-style: italic; }
-  .v.preset { color: var(--p-preset); }
   .v.mut { color: var(--p-mut); }
 
   .v.map {

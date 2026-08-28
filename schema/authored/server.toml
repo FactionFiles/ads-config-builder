@@ -1,10 +1,9 @@
 # Plain-English labels for the server settings.
 # Covers every path in schema/generated/server.json "flat", plus the rcon profile
-# array, the per-level keys, the rules preset file keys and the bot profile keys.
+# array, the per-level keys and the bot profile keys.
 #
 # Namespaced keys used for the tables that are not part of "flat":
 #   levels.*        keys allowed inside a [[levels]] entry
-#   presets.*       keys allowed at the top of a rules preset file
 #   bot_profiles.*  keys allowed inside a bot profile file
 #
 # unit  = the unit the value is written in inside the config file
@@ -445,11 +444,6 @@ page = "rotation"
 label = "Rules just for this map"
 help = "Anything set here overrides the base rules for this one map only, and everything else is inherited."
 
-["levels.rules_presets"]
-page = "rotation"
-label = "Presets for this map"
-help = "Rules preset files applied to this map before its own rule changes, in the order listed."
-
 # ---------------------------------------------------------------- bots
 
 ["bot_shared_secret"]
@@ -557,24 +551,43 @@ sv_timelimit = "Change the time limit"
 download_level = "Fetch a map from FactionFiles onto the server"
 sv_loadconfig = "Reload this config file without restarting"
 
-# ---------------------------------------------------------------- presets
+# ---------------------------------------------------------------- base rules
 
 ["base"]
 page = "rules-mode"
 label = "Base game rules"
 help = "The rules every map uses unless that map overrides them."
 
-["rules_preset_aliases"]
-page = "presets"
-label = "Preset shortcuts"
-help = "Short names for preset files so you can refer to them by name, including from an in-game vote, instead of typing a path."
+# ---------------------------------------------------------------- recording matches
 
-["presets.rules"]
-page = "presets"
-label = "Rules in this preset"
-help = "The rule changes a preset file carries; a preset may also put these at the top of the file instead of nesting them."
+["demo_auto_record"]
+page = "srv-demos"
+label = "Record every match"
+help = "Records each map to a demo file in the server's demos folder, which players can watch back later. A recording is thrown away if nobody was connected for it, and on a match server only live matches are recorded."
 
-["presets.rules_presets"]
-page = "presets"
-label = "Presets this preset builds on"
-help = "Other preset files applied first, so you can layer a house ruleset on top of a shared one."
+["demo_chat_record"]
+page = "srv-demos"
+label = "Include chat in recordings"
+help = "Keeps what people said in the recording. Turn it off if you would rather not store chat."
+
+["fflink_demo_upload"]
+page = "srv-demos"
+label = "Send recordings to FactionFiles"
+help = "Uploads each finished recording and attaches it to that match on the site. Needs a FactionFiles server key."
+
+["fflink_demo_max_mb"]
+page = "srv-demos"
+label = "Largest recording to send"
+help = "Recordings bigger than this are kept on the server but never uploaded."
+unit = "megabytes"
+
+["fflink_demo_queue_max"]
+page = "srv-demos"
+label = "Recordings waiting to send"
+help = "How many finished recordings can queue up for upload. Once the queue is full the oldest waiting recording is dropped from it."
+unit = "recordings"
+
+["fflink_demo_delete_after_send"]
+page = "srv-demos"
+label = "Delete a recording once it is sent"
+help = "Removes the local file after a successful upload, so the server's demos folder does not grow forever."

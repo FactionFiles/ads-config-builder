@@ -189,6 +189,18 @@ notes = [
 
 # ============================================================================
 
+["crits"]
+summary = "Shots have a chance to land as a critical hit, dealing triple damage."
+notes = [
+  "Ranged weapons crit 2% of the time at rest, melee 15%. Dealing damage raises the chance, up to 15% ranged and 45% melee once you have dealt 800 damage in the last twenty seconds; it falls back as that damage ages out.",
+  "A crit is telegraphed: the shot glows in your team color on the way in, and the player who fired it gets a reticle flash.",
+  "An explosive crit widens its blast radius and its geomod crater by a quarter.",
+  "Carrying a damage amplifier blocks crit rolls, so the two never stack. The Bagman bag is the exception, since its carry buff is an amp and blocking rolls would strip the carrier of crits for the whole carry.",
+]
+
+
+# ============================================================================
+
 ["superdrain"]
 summary = "Health and armor above the normal maximum leak back down to it."
 notes = [

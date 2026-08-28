@@ -3,14 +3,12 @@
 
   /** the color a layer owns. shared, because a list shows one per row as well */
   export function toneFor(layer: Layer | undefined, level: boolean) {
-    if (layer === 'preset') return 'preset'
     if (layer === 'mutator') return 'mut'
     if (layer === 'manual') return level ? 'map' : 'you'
     return ''
   }
 
   export function labelFor(layer: Layer | undefined, level: boolean) {
-    if (layer === 'preset') return 'a preset'
     if (layer === 'mutator') return 'a mutator'
     if (layer === 'manual') return level ? 'this map only' : 'you'
     if (layer === 'gametype') return "the game mode's defaults"
@@ -83,7 +81,6 @@
     background: var(--p-def);
   }
 
-  .pd.preset { background: var(--p-preset); }
   .pd.mut    { background: var(--p-mut); }
   .pd.you    { background: var(--p-you); }
   .pd.map    { background: var(--p-map); }

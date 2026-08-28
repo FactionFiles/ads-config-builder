@@ -23,7 +23,6 @@
   })
 
   function toneFor(layer: Layer) {
-    if (layer === 'preset') return 'preset'
     if (layer === 'mutator') return 'mut'
     if (layer === 'manual') return levelScope ? 'map' : 'you'
     return ''
@@ -32,7 +31,6 @@
   function describe(c: Contribution) {
     if (c.layer === 'default') return 'Alpine default'
     if (c.layer === 'gametype') return `${c.source} defaults`
-    if (c.layer === 'preset') return `Preset: ${c.source}`
     if (c.layer === 'mutator') return `Mutator: ${c.source}`
     if (c.layer === 'inherited') return 'Base rules'
     return levelScope ? 'You, for this map' : 'You'

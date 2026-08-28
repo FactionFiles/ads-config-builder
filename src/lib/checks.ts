@@ -271,8 +271,8 @@ function carriedFindings(doc: ConfigDocument, out: Finding[]) {
     }
   }
 
-  // a [[levels]] entry holds a file name, its rules and its presets and nothing
-  // else, so anything else in one is a key Alpine itself warns about on the way in
+  // a [[levels]] entry holds a file name and its rules and nothing else, so
+  // anything else in one is a key Alpine itself warns about on the way in
   doc.levels.forEach((level, i) => {
     const misplaced = Object.keys(level.unknown)
     if (!misplaced.length) return
@@ -283,8 +283,8 @@ function carriedFindings(doc: ConfigDocument, out: Finding[]) {
       title: `${misplaced.length} ${plural(misplaced.length, 'key', 'keys')} on this map ${
         plural(misplaced.length, 'is', 'are')
       } in the wrong place`,
-      detail: 'A map in the rotation holds a file name, its game rules and its presets, and '
-        + 'nothing else. Alpine warns about ' + plural(misplaced.length, 'this', 'these')
+      detail: 'A map in the rotation holds a file name and its game rules and nothing '
+        + 'else. Alpine warns about ' + plural(misplaced.length, 'this', 'these')
         + ' at startup and moves on. ' + plural(misplaced.length, 'It was', 'They were')
         + ' most likely meant for the game rules.',
       page: 'rotation',
@@ -353,7 +353,7 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
   }
 
   const written = Object.keys(doc.base.manual).length + doc.base.mutators.length
-    + Object.keys(doc.server).length + doc.base.presets.length
+    + Object.keys(doc.server).length
   if (!doc.levels.length && written > 0) {
     out.push({
       id: 'rotation:empty',

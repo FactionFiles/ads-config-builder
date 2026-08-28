@@ -917,10 +917,17 @@ export function extractGameTypeDefaults(sources, structs) {
   const switchOpen = body.indexOf('{', switchAt)
   const switchBody = bodyAt(body, switchAt)
   const perType = {}
-  const caseRe = /case\s+rf::NetGameType::(NG_TYPE_\w+)\s*:\s*\{/g
+  // a mode can share an arm by falling through to the next label, and reading
+  // only the label the brace sits on would silently hand the other one the
+  // default arm instead
+  const caseRe = /((?:case\s+rf::NetGameType::NG_TYPE_\w+\s*:\s*)+)\{/g
   let m
   while ((m = caseRe.exec(switchBody)) !== null) {
-    perType[m[1]] = readDefaultOps(bodyAt(switchBody, m.index + m[0].length - 1), structs)
+    const labels = [...m[1].matchAll(/NG_TYPE_(\w+)/g)].map(g => `NG_TYPE_${g[1]}`)
+    const body = bodyAt(switchBody, m.index + m[0].length - 1)
+    // the arm can ask which of the modes sharing it is running, so each is read
+    // on its own rather than once for the group
+    for (const label of labels) perType[label] = readDefaultOps(body, structs, label)
   }
   expect(Object.keys(perType).length > 0, 'No game type default cases',
     'The switch in apply_defaults_for_game_type matched no `case rf::NetGameType::X: {`')
@@ -943,7 +950,7 @@ export function extractGameTypeDefaults(sources, structs) {
   return { common, perType, fallback, after }
 }
 
-function readDefaultOps(block, structs) {
+function readDefaultOps(block, structs, gameType = null) {
   const consts = blockConstants(block)
   const ops = []
   for (const stmt of block.split(';')) {
@@ -980,19 +987,35 @@ function readDefaultOps(block, structs) {
     const call = path.match(/^([\w.]*?)\.?(\w+)\s*\((.*)\)$/s)
     if (call && call[2].startsWith('set_')) {
       const target = (call[1] ? call[1] + '.' : '') + call[2]
-      const lit = parseLiteral(call[3])
-      ops.push({ op: 'set', target, value: lit.ok ? lit.value : null, expr: lit.ok ? undefined : call[3].trim() })
+      ops.push({ op: 'set', target, ...readDefaultValue(call[3], gameType) })
       continue
     }
 
     const assign = path.match(/^([\w.]+)\s*=\s*(.+)$/s)
     if (assign) {
-      const lit = parseLiteral(assign[2])
-      ops.push({ op: 'set', target: assign[1], value: lit.ok ? lit.value : null, expr: lit.ok ? undefined : assign[2].trim() })
+      ops.push({ op: 'set', target: assign[1], ...readDefaultValue(assign[2], gameType) })
       continue
     }
   }
   return ops
+}
+
+/**
+ * The value a default assigns. Beyond a plain literal, an arm shared by several
+ * modes can ask which one is running, so that comparison is answered here for
+ * the mode being read rather than left for the app to guess at.
+ */
+function readDefaultValue(expr, gameType) {
+  const lit = parseLiteral(expr)
+  if (lit.ok) return { value: lit.value }
+
+  const cmp = expr.trim().match(/^\(?\s*game_type\s*(==|!=)\s*rf::NetGameType::(NG_TYPE_\w+)\s*\)?$/)
+  if (cmp && gameType) {
+    const same = gameType === cmp[2]
+    return { value: cmp[1] === '==' ? same : !same }
+  }
+
+  return { value: null, expr: expr.trim() }
 }
 
 /** the constants a block declares for its own use, as the loadout reserves are */
@@ -1213,7 +1236,9 @@ export function extractServerKeys(sources, structs) {
   const tables = extractDispatch(sources.dediCpp, structs, 'apply_known_table_in_order', 'AlpineServerConfig',
     (key, consequent, structs, structName) => {
       const call = consequent.match(/=\s*(parse_\w+)\s*\(/)
-      if (!call) return { key, kind: 'table', complex: true }
+      // [base] is a rules scope, so its keys are rules.json's job. Recursing into
+      // the scope parser would restate every rules key as a server key.
+      if (!call || call[1] === 'parse_scope_rules') return { key, kind: 'table', complex: true }
       const sub = subStructFor(sources.dediCpp, structs, consequent, structName)
       return { key, kind: 'table', keys: extractKeys(sources.dediCpp, structs, call[1], sub) }
     })
@@ -1270,14 +1295,68 @@ export function extractLevelKeys(sources) {
   return keys
 }
 
-// how a rules scope pulls in preset files before its own keys are applied
-export function extractPresetKeys(sources) {
-  const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+apply_rules_presets_and_overrides\s*\(/, 'apply_rules_presets_and_overrides')
-  const keys = [...body.matchAll(/\[\s*"(\w+)"\s*\]/g)].map(m => m[1])
-  const uniq = [...new Set(keys)]
-  expect(uniq.includes('rules'), 'The `rules` key vanished from apply_rules_presets_and_overrides', `Saw: ${uniq.join(', ')}`)
-  expect(uniq.includes('rules_presets'), 'The `rules_presets` key vanished from apply_rules_presets_and_overrides', `Saw: ${uniq.join(', ')}`)
-  return uniq
+// A scope's mutator list goes through the registry rather than a struct member,
+// so extractKeys cannot see it either. It is read in parse_server_rules, ahead of
+// the explicit keys, which is what makes a manual key beat a mutator.
+export function extractMutatorsKey(sources) {
+  const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_server_rules\s*\([^)]*\)\s*\{/, 'parse_server_rules')
+  expect(/\[\s*"mutators"\s*\]\s*\.as_array\s*\(\s*\)/.test(body),
+    'parse_server_rules no longer reads the mutators array',
+    'Expected `t["mutators"].as_array()` in parse_server_rules')
+  const keysAt = body.search(/\bapply_rules_keys_from_toml\s*\(/)
+  const mutAt = body.search(/\[\s*"mutators"\s*\]/)
+  expect(keysAt !== -1 && mutAt < keysAt,
+    'Mutators no longer apply before the explicit keys',
+    'parse_server_rules must read the mutators array before it calls apply_rules_keys_from_toml, ' +
+    'or a manual key no longer beats a mutator in the same scope')
+  return { key: 'mutators', kind: 'array', of: 'mutator' }
+}
+
+// game_type is the one rules key the scope resolves for itself rather than
+// assigning through a struct member, so extractKeys cannot see it. Since 1.4 it
+// is read once per scope in parse_scope_rules, before any key is applied, and
+// the nested [rules] table's answer beats the scope's own.
+export function extractGameTypeKey(sources) {
+  const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
+  const reads = [...body.matchAll(/\[\s*"game_type"\s*\]\s*\.value<std::string>\s*\(\s*\)/g)]
+  expect(reads.length === 2,
+    'parse_scope_rules no longer reads game_type from both tables',
+    `Found ${reads.length} string reads of game_type, expected 2 (the nested [rules] table and the scope itself)`)
+  expect(/resolve_gametype_from_name\s*\(/.test(body),
+    'parse_scope_rules no longer resolves the game type by name',
+    'Expected a resolve_gametype_from_name call in parse_scope_rules')
+  return { key: 'game_type', kind: 'scalar', cppType: 'std::string', type: 'string' }
+}
+
+// Whether a scope that names a different game type restarts from the operator's
+// base keys instead of inheriting what it was handed. This is the layering rule
+// the provenance trail describes, so it is read out rather than assumed.
+export function extractGameTypeRebase(sources) {
+  const scope = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
+  expect(/game_type_changed\s*&&\s*opts\.rebase_source/.test(scope),
+    'parse_scope_rules no longer rebases on a game type change',
+    'Expected `if (game_type_changed && opts.rebase_source)` in parse_scope_rules')
+
+  const levels = funcBody(sources.dediCpp, /\bstatic\s+void\s+add_level_entry_from_table\s*\(/, 'add_level_entry_from_table')
+  expect(/RulesParseOptions\s*\{\s*RulesParseMode::Full\s*,\s*&cfg\.base_rules_keys_only\s*\}/.test(levels),
+    'A level no longer rebases onto base_rules_keys_only',
+    'Expected add_level_entry_from_table to pass &cfg.base_rules_keys_only as the rebase source')
+
+  return { on: 'gametype-change', source: 'base-manual-keys' }
+}
+
+// Keys a [[levels]] entry still parses without complaint but no longer acts on.
+// Alpine 1.4 removed the rules preset mechanic and left `rules_presets` in the
+// whitelist so an old config still loads quietly, which means the tool has to
+// say so rather than let the key look live.
+export function deadLevelKeys(levelKeys) {
+  const live = new Set(['filename', 'rules'])
+  const dead = levelKeys.filter(k => !live.has(k))
+  expect(dead.includes('rules_presets'),
+    'rules_presets is no longer a dead [[levels]] key',
+    `The whitelist in add_level_entry_from_table reads: ${levelKeys.join(', ')}. ` +
+    'Either the key was fully removed, or presets came back.')
+  return dead
 }
 
 // Which commands an admin profile may be granted. The config parser only checks
@@ -1418,13 +1497,13 @@ function main() {
     version[key] = Number(m[1])
   }
 
-  const rulesKeys = extractKeys(sources.dediCpp, structs, 'parse_server_rules', 'AlpineServerConfigRules')
+  const rulesKeys = extractKeys(sources.dediCpp, structs, 'apply_rules_keys_from_toml', 'AlpineServerConfigRules')
   const gametypes = extractGameTypes(sources, structs)
   const gametypeDefaults = extractGameTypeDefaults(sources, structs)
   const { mutators, applyOrder } = extractMutators(sources)
   const server = extractServerKeys(sources, structs)
   const levelKeys = extractLevelKeys(sources)
-  const presetKeys = extractPresetKeys(sources)
+  const removedLevelKeys = deadLevelKeys(levelKeys)
   const botKeys = extractKeys(sources.dediCpp, structs, 'parse_bot_config_table', 'ServerBotConfig')
   server.arrays.push(...extractInlineArrays(sources, new Set(server.arrays.map(a => a.key))))
 
@@ -1444,18 +1523,29 @@ function main() {
   expect(tiers, 'The gg_tiers key is gone', 'Expected it in parse_server_rules')
   tiers.lookup = extractTierLookup(sources)
 
-  // game_type is the one rules key resolved by a lookup rather than a member
-  const gt = rulesKeys.find(k => k.key === 'game_type')
-  expect(gt, 'The game_type key is gone', 'Expected it at the top of parse_server_rules')
-  delete gt.unresolved
+  // game_type resolves in the scope rather than through a struct member, so it
+  // is rebuilt here and put back at the top where the parser reads it
+  const gt = extractGameTypeKey(sources)
   gt.choices = gametypes.map(g => g.names[0])
   gt.default = gametypes[0].names[0]
+  expect(!rulesKeys.some(k => k.key === 'game_type'),
+    'game_type is back in the rules key parser',
+    'apply_rules_keys_from_toml now reads it too; drop the synthesized entry')
+  rulesKeys.unshift(gt, extractMutatorsKey(sources))
+  const gameTypeRebase = extractGameTypeRebase(sources)
 
   const targetIndex = buildTargetIndex(rulesKeys)
   const printLabels = extractPrintLabels(sources, targetIndex)
-  const resolveOps = ops => ops.map(op => {
+  // an expression the reader could not evaluate would otherwise reach the app as
+  // a null and be shown to an operator as the mode's default, so it stops here
+  const resolveOps = (ops, where) => ops.map(op => {
     if (op.op !== 'set') return op
-    return { ...op, key: targetIndex[op.target] ?? null }
+    const key = targetIndex[op.target] ?? null
+    expect(key === null || op.expr === undefined,
+      `Could not read a game type default in ${where}`,
+      `\`${op.target} = ${op.expr}\` sets the config key '${key}', and the value is not a literal ` +
+      'this reader understands. Teach readDefaultValue the expression.')
+    return { ...op, key }
   })
 
   const scoreLimitKeys = {}
@@ -1470,7 +1560,7 @@ function main() {
       alpineVersion: `${version.VERSION_MAJOR}.${version.VERSION_MINOR}.${version.VERSION_PATCH}`,
       alpineCommit: pinnedCommit(),
     }),
-    writeJson('rules.json', { keys: rulesKeys, flat: flatten(rulesKeys).map(k => k.path) }),
+    writeJson('rules.json', { keys: rulesKeys, gameTypeRebase, flat: flatten(rulesKeys).map(k => k.path) }),
     writeJson('console-labels.json', printLabels),
     writeJson('gametypes.json', {
       gametypes: gametypes.map(g => ({
@@ -1485,14 +1575,14 @@ function main() {
         scoreLimitKey: scoreLimitKeys[g.names[0]],
       })),
       defaults: {
-        common: resolveOps(gametypeDefaults.common),
+        common: resolveOps(gametypeDefaults.common, 'the preamble every mode runs'),
         perType: Object.fromEntries(
           gametypes
             .filter(g => gametypeDefaults.perType[g.enum])
-            .map(g => [g.names[0], resolveOps(gametypeDefaults.perType[g.enum])])
+            .map(g => [g.names[0], resolveOps(gametypeDefaults.perType[g.enum], `the ${g.names[0]} arm`)])
         ),
-        fallback: resolveOps(gametypeDefaults.fallback),
-        after: resolveOps(gametypeDefaults.after),
+        fallback: resolveOps(gametypeDefaults.fallback, 'the default arm'),
+        after: resolveOps(gametypeDefaults.after, 'the tail after the switch'),
       },
     }),
     writeJson('mutators.json', { mutators, applyOrder }),
@@ -1501,7 +1591,7 @@ function main() {
       tables: server.tables,
       arrays: server.arrays,
       levelKeys,
-      presetKeys,
+      removedLevelKeys,
       botKeys,
       legacyRconCommands,
       // one canonical path per authored entry. the nested key sets live under
@@ -1512,8 +1602,7 @@ function main() {
         ...flatten(server.tables).map(k => k.path),
         ...server.arrays.map(a => a.key),
         ...server.arrays.flatMap(a => (a.keys ?? []).map(k => `${a.key}.${k.key}`)),
-        ...levelKeys.map(k => `levels.${k}`),
-        ...presetKeys.map(k => `presets.${k}`),
+        ...levelKeys.filter(k => !removedLevelKeys.includes(k)).map(k => `levels.${k}`),
         ...botKeys.map(k => `bot_profiles.${k.key}`),
       ])],
     }),

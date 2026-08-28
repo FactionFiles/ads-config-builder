@@ -12,8 +12,6 @@ import type { MutatorDeclaration } from './resolve'
 export type ManualKeys = Record<string, unknown>
 
 export interface RulesScope {
-  /** preset file names, applied in order */
-  presets: string[]
   mutators: MutatorDeclaration[]
   manual: ManualKeys
   /**
@@ -47,8 +45,6 @@ export interface ConfigDocument {
   base: RulesScope
   levels: LevelEntry[]
   rconProfiles: RconProfile[]
-  /** short name -> preset file, so a scope can name a preset instead of a path */
-  presetAliases: Record<string, string>
   /**
    * Keys we did not recognize when the file was opened, kept verbatim so a
    * config written by a newer Alpine survives a round trip through this tool
@@ -58,11 +54,11 @@ export interface ConfigDocument {
 }
 
 export function emptyScope(): RulesScope {
-  return { presets: [], mutators: [], manual: {}, unknown: {} }
+  return { mutators: [], manual: {}, unknown: {} }
 }
 
 export function emptyDocument(): ConfigDocument {
-  return { server: {}, base: emptyScope(), levels: [], rconProfiles: [], presetAliases: {}, unknown: {} }
+  return { server: {}, base: emptyScope(), levels: [], rconProfiles: [], unknown: {} }
 }
 
 export function emptyRconProfile(): RconProfile {
@@ -133,7 +129,6 @@ function nest(flat: ManualKeys): Record<string, unknown> {
 
 function scopeToToml(scope: RulesScope): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  if (scope.presets.length) out.rules_presets = scope.presets
 
   // nested in one pass so a table holding both an edited key and an untouched
   // one comes back out whole rather than one half replacing the other
@@ -156,12 +151,6 @@ export function toToml(doc: ConfigDocument): string {
 
   if (doc.rconProfiles.length) {
     root.rcon_profiles = doc.rconProfiles.map(p => ({ ...p.fields, ...p.unknown }))
-  }
-
-  if (Object.keys(doc.presetAliases).length) {
-    // merged rather than assigned, so an alias the tool could not read is not
-    // dropped by the ones it could
-    root.rules_preset_aliases = { ...(root.rules_preset_aliases as object), ...doc.presetAliases }
   }
 
   if (doc.levels.length) {
@@ -187,6 +176,12 @@ export interface ImportReport {
   kept: string[]
   /** keys this tool does not recognize at all, also kept */
   unrecognized: string[]
+  /**
+   * Keys the file carried that Alpine has since removed. These are the one thing
+   * the tool does drop rather than keep: the server no longer acts on them, so
+   * writing them back would leave the file claiming a rule that never runs.
+   */
+  removed: string[]
   /** the ads_version the file declared, when it declared one */
   fromVersion: number | null
 }
@@ -247,12 +242,6 @@ function split(entries: [string, unknown][], index: Map<string, SchemaKey>): Spl
   return out
 }
 
-function readPresets(value: unknown): string[] {
-  if (typeof value === 'string') return [value]
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string')
-  return []
-}
-
 function readMutators(value: unknown): MutatorDeclaration[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(entry => {
@@ -262,8 +251,12 @@ function readMutators(value: unknown): MutatorDeclaration[] {
   })
 }
 
-function scopeFromToml(table: Record<string, unknown>, report: ImportReport): RulesScope {
+function scopeFromToml(table: Record<string, unknown>, report: ImportReport, where: string): RulesScope {
+  // Alpine 1.4 removed rules presets. It still accepts the key inside a level
+  // entry so an old config loads, but nothing applies it, so it is reported and
+  // dropped rather than carried into a file that would misrepresent the rules.
   const { rules_presets, rules, ...direct } = table
+  if (rules_presets !== undefined) report.removed.push(where)
 
   // Alpine reads rule keys written straight into the scope before it reads the
   // [rules] table, so both are the same layer with [rules] winning
@@ -276,7 +269,6 @@ function scopeFromToml(table: Record<string, unknown>, report: ImportReport): Ru
   report.unrecognized.push(...parts.unrecognized)
 
   return {
-    presets: readPresets(rules_presets),
     mutators: readMutators(mutators),
     manual: parts.manual,
     unknown: parts.unknown,
@@ -286,7 +278,7 @@ function scopeFromToml(table: Record<string, unknown>, report: ImportReport): Ru
 function levelFromToml(table: Record<string, unknown>, report: ImportReport): LevelEntry {
   const { filename, rules_presets, rules, ...rest } = table
   const level = emptyLevel(typeof filename === 'string' ? filename : '')
-  level.rules = scopeFromToml({ rules_presets, rules }, report)
+  level.rules = scopeFromToml({ rules_presets, rules }, report, 'levels.rules_presets')
   level.unknown = rest
   for (const key of Object.keys(rest)) report.unrecognized.push(`levels.${key}`)
   return level
@@ -308,31 +300,6 @@ function rconProfileFromToml(table: Record<string, unknown>, report: ImportRepor
   return profile
 }
 
-/**
- * A rules scope on its own, as a preset file other configs can pull in. Alpine
- * accepts the rules at the top level or under [rules]; the nested form is used
- * here because it is the one a scope in ads.toml is written in, so a preset
- * reads like the thing it came from.
- */
-export function toPresetToml(scope: RulesScope): string {
-  return stringify(scopeToToml(scope)) + '\n'
-}
-
-function readAliases(value: unknown, report: ImportReport): Record<string, string> {
-  const out: Record<string, string> = {}
-  if (!isTable(value)) return out
-  for (const [name, target] of Object.entries(value)) {
-    // the server warns and skips anything that is not a path, so this keeps it
-    // verbatim rather than guessing at what was meant
-    if (typeof target === 'string') out[name] = target
-    else {
-      report.doc.unknown[`rules_preset_aliases.${name}`] = target
-      report.unrecognized.push(`rules_preset_aliases.${name}`)
-    }
-  }
-  return out
-}
-
 export function fromToml(text: string): ImportReport {
   const root = parse(text) as Record<string, unknown>
   const { ads_version, base, levels, rcon_profiles, rules_preset_aliases, ...server } = root
@@ -341,6 +308,7 @@ export function fromToml(text: string): ImportReport {
     doc: emptyDocument(),
     kept: [],
     unrecognized: [],
+    removed: [],
     fromVersion: typeof ads_version === 'number' ? ads_version : null,
   }
 
@@ -350,13 +318,13 @@ export function fromToml(text: string): ImportReport {
   report.doc.server = parts.manual
   report.doc.unknown = parts.unknown
 
-  report.doc.presetAliases = readAliases(rules_preset_aliases, report)
+  if (rules_preset_aliases !== undefined) report.removed.push('rules_preset_aliases')
 
   if (Array.isArray(rcon_profiles)) {
     report.doc.rconProfiles = rcon_profiles.filter(isTable).map(p => rconProfileFromToml(p, report))
   }
 
-  if (isTable(base)) report.doc.base = scopeFromToml(base, report)
+  if (isTable(base)) report.doc.base = scopeFromToml(base, report, 'base.rules_presets')
   if (Array.isArray(levels)) {
     report.doc.levels = levels.filter(isTable).map(level => levelFromToml(level, report))
   }

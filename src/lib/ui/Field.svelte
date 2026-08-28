@@ -148,9 +148,9 @@
         {levelScope ? 'Just for this map' : 'You changed this'}
         <button type="button" class="rst" onclick={() => onreset?.(path)}>undo</button>
       </div>
-    {:else if current?.layer === 'preset' || current?.layer === 'mutator'}
-      <div class="src {current.layer === 'preset' ? 'preset' : 'mut'}">
-        <i class="pd {current.layer === 'preset' ? 'preset' : 'mut'}"></i>
+    {:else if current?.layer === 'mutator'}
+      <div class="src mut">
+        <i class="pd mut"></i>
         {current.source}
       </div>
     {/if}

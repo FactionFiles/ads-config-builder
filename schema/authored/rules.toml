@@ -645,41 +645,6 @@ page = "rules-damage"
 label = "Armor reward can go past normal"
 help = "Lets the reward push a player past normal armor, up to 200, the way a super armor pickup does."
 
-["critical_hits"]
-page = "rules-damage"
-label = "Critical hits"
-help = "Give shots a chance to land as a critical, which briefly grants the shooter a damage amplifier."
-
-["critical_hits.enabled"]
-page = "rules-damage"
-label = "Shots can land as criticals"
-help = "Adds a bit of luck and a reward for staying alive; off by default."
-
-["critical_hits.reward_duration"]
-page = "rules-damage"
-label = "How long the amp lasts"
-help = "The damage amplifier a critical hit grants, which stacks if the player crits again before it expires."
-unit = "milliseconds"
-display = "seconds"
-
-["critical_hits.base_chance"]
-page = "rules-damage"
-label = "Chance of a critical hit"
-help = "How often a shot crits before any bonus is added."
-unit = "fraction"
-display = "percent"
-
-["critical_hits.dynamic_scale"]
-page = "rules-damage"
-label = "Raise the chance as a player deals damage"
-help = "Adds up to ten more percentage points of crit chance the longer a player survives and keeps hitting people, resetting when they die."
-
-["critical_hits.dynamic_damage_bonus_ceiling"]
-page = "rules-damage"
-label = "Damage needed for the full bonus"
-help = "How much damage a player has to deal on one life to reach the largest crit chance bonus; lower numbers make the bonus arrive sooner."
-unit = "damage"
-
 # ---------------------------------------------------------------- messages
 
 ["welcome_message"]

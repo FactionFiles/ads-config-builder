@@ -102,11 +102,11 @@ order = 14
 blurb = "Several named admin passwords, each allowed to run only the commands you pick."
 
 [[page]]
-id = "presets"
-title = "Presets"
-scope = "other"
+id = "srv-demos"
+title = "Recording matches"
+scope = "server"
 order = 15
-blurb = "Sets of game rules saved on their own so other servers can reuse them."
+blurb = "Recording play to demo files, and sending them to FactionFiles."
 
 [[page]]
 id = "checks"

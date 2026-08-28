@@ -1,7 +1,7 @@
 <script lang="ts">
   import { meta, pages, schemaFor, type Scope } from './schema'
   import {
-    emptyDocument, fromToml, toPresetToml, toToml, withRowOnEveryLevel,
+    emptyDocument, fromToml, toToml, withRowOnEveryLevel,
     type ImportReport, type RulesScope,
   } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
@@ -11,9 +11,7 @@
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
   import RotationPage from './lib/ui/RotationPage.svelte'
   import AdminPage from './lib/ui/AdminPage.svelte'
-  import PresetsPage from './lib/ui/PresetsPage.svelte'
   import ProblemsPage from './lib/ui/ProblemsPage.svelte'
-  import PresetList from './lib/ui/PresetList.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
   let doc = $state(emptyDocument())
@@ -77,12 +75,6 @@
     save(fileText, fileName)
   }
 
-  // a preset is the rules on their own, named after the config it came from so
-  // two of them in one folder do not collide
-  function savePreset() {
-    save(toPresetToml(doc.base), fileName.replace(/\.toml$/i, '') + '-rules.toml')
-  }
-
   /** the same key can turn up in several scopes, and saying so twice helps nobody */
   function once(paths: string[]) {
     return [...new Set(paths)]
@@ -101,6 +93,9 @@
   function resolve(scope: RulesScope, base?: ResolvedRules): ResolvedRules {
     return resolveScope({
       base,
+      // a map that changes the mode is rebuilt from the base rules' own keys
+      // rather than from the resolved base rules, so they travel together
+      baseManual: base ? doc.base.manual : undefined,
       gameType: scope.manual.game_type as string | undefined,
       mutators: scope.mutators,
       manual: scope.manual,
@@ -295,6 +290,7 @@
     {#if imported}
       {@const kept = once(imported.kept)}
       {@const strange = once(imported.unrecognized)}
+      {@const removed = once(imported.removed)}
       <div class="notice">
         <div>
           <b>Opened {fileName}.</b>
@@ -313,6 +309,14 @@
             {strange.length === 1 ? 'key was' : 'keys were'} not recognized, and
             {strange.length === 1 ? 'is' : 'are'} kept too:
             <span class="keys">{strange.join(', ')}</span>.
+          {/if}
+          {#if removed.length}
+            <br /><b>Rules presets have been removed from Alpine.</b>
+            Alpine {meta.alpineVersion} no longer applies
+            <span class="keys">{removed.join(', ')}</span>, so
+            {removed.length === 1 ? 'that key was' : 'those keys were'} dropped rather than
+            written back out. Anything a preset used to set has to be set here instead,
+            in the base rules or on the map that needs it.
           {/if}
           <br />Downloading writes the file out fresh, so comments and the order
           you had things in are not kept.
@@ -351,13 +355,6 @@
         levels={doc.levels}
         onopen={(target, map) => go(target, map)}
       />
-    {:else if page?.id === 'presets'}
-      <PresetsPage
-        aliases={doc.presetAliases}
-        canSave={Object.keys(doc.base.manual).length > 0 || doc.base.mutators.length > 0}
-        onchange={next => (doc.presetAliases = next)}
-        onsave={savePreset}
-      />
     {:else if page?.id === 'admin'}
       <AdminPage
         profiles={doc.rconProfiles}
@@ -375,14 +372,6 @@
         onchange={setMutators}
       />
     {:else if page}
-      {#if page.id === 'rules-mode'}
-        <PresetList
-          presets={activeScope.presets}
-          aliases={doc.presetAliases}
-          levelScope={level !== undefined}
-          onchange={next => editScope(s => ({ ...s, presets: next }))}
-        />
-      {/if}
       <SettingsPage
         page={page.id}
         {gameType}

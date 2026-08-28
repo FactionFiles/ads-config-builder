@@ -6,13 +6,18 @@
 //
 //   Alpine built-in default
 //     -> game type defaults   (only when the game type changed, or was never applied)
-//     -> rules presets        (files, in declared order)
 //     -> mutators             (fixed apply order, before manual keys)
 //     -> manual keys in this scope
 //
 // applied once for [base], then again per [[levels]] entry, with the resolved
 // base rules as the starting point. Manual keys always beat mutators in the same
 // scope.
+//
+// A map that names a different game type is the exception: it does not inherit
+// the resolved base rules at all. Alpine rebuilds it from the built-in defaults
+// plus the keys the operator set by hand in [base], so no part of the old mode
+// leaks into the new one, and the new mode's defaults land on top of those base
+// keys rather than under them.
 
 import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
 import type { ArrayKey, DefaultOp, Guard, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
@@ -21,7 +26,6 @@ import { railGunName, reserveAmmo } from './gamedata'
 export type Layer =
   | 'default'      // Alpine's built-in value
   | 'gametype'     // this game mode's defaults
-  | 'preset'       // a rules preset file
   | 'mutator'
   | 'manual'       // set in this scope
   | 'inherited'    // resolved in the base scope, unchanged here
@@ -29,7 +33,7 @@ export type Layer =
 export interface Contribution {
   layer: Layer
   value: unknown
-  /** preset file name, mutator name, or game mode name */
+  /** mutator name or game mode name */
   source?: string
   /** why this layer did what it did, where the value alone does not say */
   description?: string
@@ -55,8 +59,12 @@ export interface ScopeInput {
   base?: ResolvedRules
   /** game type declared in this scope, if any */
   gameType?: string
-  /** preset contents in declared order, each a flat path -> value map */
-  presets?: { name: string; values: Record<string, unknown> }[]
+  /**
+   * keys set by hand in [base]. A scope that changes the game type restarts from
+   * these rather than from the resolved base rules, so they have to be passed
+   * separately from the resolved map.
+   */
+  baseManual?: Record<string, unknown>
   mutators?: MutatorDeclaration[]
   /** keys written directly in this scope */
   manual?: Record<string, unknown>
@@ -103,7 +111,7 @@ let cachedServerDefaults: ResolvedRules | null = null
 
 /**
  * The server-level settings are not layered the way the rules are - there is one
- * scope and no presets or mutators - but they still have Alpine defaults, and a
+ * scope and no mutators - but they still have Alpine defaults, and a
  * field showing nothing until you touch it would be lying about what the server
  * will do.
  */
@@ -455,10 +463,28 @@ function orderMutators(declared: MutatorDeclaration[]): MutatorDeclaration[] {
 
 export function resolveScope(input: ScopeInput): ResolvedRules {
   const isBase = !input.base
+
+  // the server only rebuilds the game type defaults when the type actually
+  // changes, so a level that repeats the base game type does not reset anything
+  const baseGameType = input.base ? (input.base.get('game_type')?.value as string | undefined) : undefined
+  const gameType = input.gameType ?? baseGameType ?? gametypes.gametypes[0].name
+  const changedGameType = !isBase && !!input.gameType && input.gameType !== baseGameType
+
   let out: ResolvedRules
 
   if (isBase) {
     out = defaults()
+  } else if (changedGameType) {
+    // Alpine throws the resolved base rules away here and rebuilds from the
+    // built-in defaults plus whatever [base] set by hand, so the old mode's
+    // defaults and the base mutators do not come along
+    out = defaults()
+    applyValues(out, input.baseManual ?? {}, {
+      layer: 'inherited',
+      source: 'base rules',
+      description: 'Set by hand in the base rules. Changing the mode here rebuilt everything '
+        + 'else from scratch, but a setting you typed yourself still carries over.',
+    })
   } else {
     // a level scope starts from the resolved base rules; anything it does not
     // touch stays inherited, which is what lets the rotation table show at a
@@ -469,20 +495,22 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
     }
   }
 
-  // the server only rebuilds the game type defaults when the type actually
-  // changes, so a level that repeats the base game type does not reset anything
-  const baseGameType = input.base ? (input.base.get('game_type')?.value as string | undefined) : undefined
-  const gameType = input.gameType ?? baseGameType ?? gametypes.gametypes[0].name
-  if (input.gameType) contribute(out, 'game_type', { layer: 'manual', value: input.gameType })
+  if (input.gameType) {
+    contribute(out, 'game_type', {
+      layer: 'manual',
+      value: input.gameType,
+      description: changedGameType
+        ? 'This map runs a different mode from the base rules, so Alpine rebuilt its rules from '
+          + "the base rules' own settings and then applied this mode's defaults on top."
+        : undefined,
+    })
+  }
   else if (isBase) {
     contribute(out, 'game_type', { layer: 'default', value: gameType, source: 'Alpine default' })
   }
-  if (isBase || (input.gameType && input.gameType !== baseGameType)) {
-    applyGameTypeDefaults(out, gameType)
-  }
 
-  for (const preset of input.presets ?? []) {
-    applyValues(out, preset.values, { layer: 'preset', source: preset.name })
+  if (isBase || changedGameType) {
+    applyGameTypeDefaults(out, gameType)
   }
 
   for (const decl of orderMutators(input.mutators ?? [])) {

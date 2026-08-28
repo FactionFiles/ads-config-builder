@@ -3,7 +3,7 @@
   import type { ScalarKey } from '../../schema/types'
   import { tableFor } from '../gamedata'
   import { toDisplay, toFile, unitFor } from '../format'
-  import type { Resolved, ResolvedRules } from '../resolve'
+  import { unsatisfiedGuard, type Resolved, type ResolvedRules } from '../resolve'
   import ProvenanceDot from './ProvenanceDot.svelte'
 
   interface Props {
@@ -36,17 +36,7 @@
 
   // a setting the server only reads when a sibling is on. it stays visible but
   // inert, so nobody sets a value that will be silently ignored.
-  const inert = $derived(
-    (scalar?.requires ?? []).some(
-      g => g.key !== undefined && resolved.get(siblingPath(path, g.key))?.value !== (g.equals ?? true)
-    )
-  )
-
-  function siblingPath(full: string, key: string) {
-    const parts = full.split('.')
-    parts[parts.length - 1] = key
-    return parts.join('.')
-  }
+  const inert = $derived(unsatisfiedGuard(scalar, path, resolved) !== undefined)
 
   const choiceLabels = $derived(choiceLabelsFor(scope, path))
   const options = $derived(

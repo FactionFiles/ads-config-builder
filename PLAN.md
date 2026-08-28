@@ -407,21 +407,55 @@ Facts established from the Alpine source, worth not re-deriving:
     it. It fails quiet - not knowing looks like nothing at all, because an
     unreachable archive must never read as a broken config.
 
+- **M8: the problems page, which is the last of M8 besides parity.**
+  `src/lib/checks.ts` reads the document and the resolver and returns findings;
+  `ProblemsPage.svelte` renders them. No schema work, as planned. The one check
+  that needs an answer from outside takes it as an argument already gathered, so
+  the module stays a pure function and could be tested without a browser.
+  - The line it draws: a problem is something the server will not do, or will do
+    differently from what the file says. A deliberate choice is never a problem,
+    however unusual it looks. That test threw out two checks that had looked
+    obvious - a rotation that plays one map twice is playing it twice on purpose,
+    and a config only Alpine clients can join was written that way. It is also
+    why the client requirements from `server_features_require_alpine_client` are
+    not here: that function is a list of choices, not of mistakes.
+  - Three tiers, and the wording of each finding is read off the source rather
+    than guessed at. A level Alpine cannot download is dropped from the rotation
+    outright, not merely awkward for the people joining. A number past its bounds
+    is clamped rather than refused, because the bounds are `std::clamp` calls, so
+    the file keeps a value the server has already replaced. A mutator its mode
+    cannot run makes the server print a warning and carry on.
+  - The check with the most value is the one the source says out loud and the
+    server never does: a map that changes the mode runs without the mutators the
+    base rules turn on, while keeping the ordinary keys those mutators wrote.
+  - The guard test - a setting the server only reads when its sibling is on -
+    now lives beside the resolver as `unsatisfiedGuard`, and the field renderer
+    greys a setting out through the same call the problems page counts it with.
+    It had been written out twice, which is the drift this tool exists to avoid.
+  - The sidebar carries a count of what will not work, notes excluded, so the
+    page is visible from wherever you are. Both the count and the page read one
+    derived list, because a badge disagreeing with the page it points at is worse
+    than no badge.
+
 ### Next, in order
 
-1. The rest of M8: problems, then a parity pass.
-   - Problems needs no schema work. It reads the document and the resolver.
-   - The autodownloader check is already answered for; the page reads
-     `rotationCheck` rather than asking FactionFiles again.
-   - One thing the kit work leaves behind: the weapon-stay exemptions are seeded
-     by the parser with the Fusion Rocket Launcher before it reads the array, and
-     the tool still says so in help text rather than showing it as an inherited
-     row. It is the same shape of fix as the game mode kits and now a small one -
-     the generator would capture the seeding call, and the resolver would apply
-     it as a layer under everything else.
+1. The weapon-stay exemptions, the one thing the kit work left behind. The
+   parser seeds them with the Fusion Rocket Launcher before it reads the array,
+   and the tool still says so in help text rather than showing it as an
+   inherited row. Same shape of fix as the game mode kits and now a small one -
+   the generator would capture the seeding call, and the resolver would apply it
+   as a layer under everything else.
 2. A parity pass against `old.html`, then delete it and `design/prototype.html`.
+   That closes M8.
 3. M10 CI and deploy. Nothing is blocking it now that the origin does not have
    to be registered anywhere.
+
+Testing has an answer now that costs nothing: a scratch entry point built with
+`vite build --lib` and run under node imports the app's own modules with the
+JSON schema resolved, no `vitest` and no `tsx`. The problems checks were built
+against fixture configs that way, which is how three wording bugs and a
+duplicate finding were caught before the page was ever opened. The resolver
+fixture the risk list asks for could be written the same way.
 
 Smaller things noticed and not done: `gg_final_weapon` is a weapon name in a
 plain text box, for the same reason `gg_tiers` was - the check is in the game

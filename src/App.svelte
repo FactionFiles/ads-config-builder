@@ -4,11 +4,14 @@
     emptyDocument, fromToml, toPresetToml, toToml, type ImportReport, type RulesScope,
   } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
+  import { findProblems } from './lib/checks'
+  import { rotationCheck } from './lib/mapcheck.svelte'
   import SettingsPage from './lib/ui/SettingsPage.svelte'
   import MutatorsPage from './lib/ui/MutatorsPage.svelte'
   import RotationPage from './lib/ui/RotationPage.svelte'
   import AdminPage from './lib/ui/AdminPage.svelte'
   import PresetsPage from './lib/ui/PresetsPage.svelte'
+  import ProblemsPage from './lib/ui/ProblemsPage.svelte'
   import PresetList from './lib/ui/PresetList.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
 
@@ -118,6 +121,22 @@
   const gameType = $derived((activeRules.get('game_type')?.value as string) ?? '')
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
+
+  // the archive is asked here rather than on the problems page, so the sidebar
+  // count and the page itself are always answering with the same information
+  $effect(() => {
+    rotationCheck.schedule(doc.levels.map(level => level.filename))
+  })
+
+  const absentMaps = $derived(rotationCheck.absentAmong(doc.levels.map(level => level.filename)))
+
+  const findings = $derived(
+    findProblems({ doc, baseRules, levelRules, server: serverSettings, absentMaps })
+  )
+
+  // the sidebar count, so a problem is visible from whichever page you are on.
+  // notes are left out of it - a badge that is always lit stops being read.
+  const problems = $derived(findings.filter(f => f.severity !== 'note').length)
 
   function editScope(edit: (scope: RulesScope) => RulesScope) {
     if (route.map === null) doc.base = edit(doc.base)
@@ -236,7 +255,10 @@
           class="ni"
           class:on={!level && p.id === route.page}
           onclick={() => go(p.id)}
-        >{p.title}</button>
+        >
+          {p.title}
+          {#if p.id === 'checks' && problems}<span class="ct warn">{problems}</span>{/if}
+        </button>
       {/each}
     {/if}
   </nav>
@@ -306,6 +328,12 @@
         onchange={next => (doc.levels = next)}
         onopen={i => go(rulesPages[0].id, i)}
         onopenbase={() => go(rulesPages[0].id)}
+      />
+    {:else if page?.id === 'checks'}
+      <ProblemsPage
+        {findings}
+        levels={doc.levels}
+        onopen={(target, map) => go(target, map)}
       />
     {:else if page?.id === 'presets'}
       <PresetsPage
@@ -461,6 +489,14 @@
     font-size: 11.5px;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* a count of things that will not work, which is not a count of maps */
+  .ni .ct.warn {
+    color: var(--err);
+    background: var(--err-b);
+    border-radius: 4px;
+    padding: 0 5px;
   }
 
   .main {

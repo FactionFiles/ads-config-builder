@@ -15,7 +15,7 @@
 // scope.
 
 import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
-import type { ArrayKey, DefaultOp, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
+import type { ArrayKey, DefaultOp, Guard, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
 import { railGunName, reserveAmmo } from './gamedata'
 
 export type Layer =
@@ -523,4 +523,26 @@ export function overridden(resolved: ResolvedRules): string[] {
   return [...resolved]
     .filter(([, r]) => r.layer !== 'inherited' && r.layer !== 'default')
     .map(([path]) => path)
+}
+
+/** the sibling a guard names, as a full path */
+function siblingPath(full: string, key: string): string {
+  const parts = full.split('.')
+  parts[parts.length - 1] = key
+  return parts.join('.')
+}
+
+/**
+ * The guard stopping the server from reading this setting, if one is. A setting
+ * behind an unsatisfied guard is parsed and then never looked at, so a field
+ * shows it inert and the problems page counts it as doing nothing.
+ */
+export function unsatisfiedGuard(
+  key: SchemaKey | undefined,
+  path: string,
+  resolved: ResolvedRules,
+): Guard | undefined {
+  return (key?.requires ?? []).find(
+    g => g.key !== undefined && resolved.get(siblingPath(path, g.key))?.value !== (g.equals ?? true)
+  )
 }

@@ -7,8 +7,8 @@ decisions, the milestone list, and the reference notes about the Alpine source.
 ## The idea in one paragraph
 
 Alpine resolves a server's rules in layers: built-in default, then game type
-defaults, then rules presets, then mutators, then keys set by hand, applied once
-for the base rules and again for each map in the rotation. The old builder
+defaults, then mutators, then keys set by hand, applied once for the base rules
+and again for each map in the rotation. The old builder
 modelled this as two flat duplicate forms, which is why it drifted. This one
 models the layering directly, so every setting can say which layer set it. That
 record is the interface: a colored dot per setting, and a popover showing the
@@ -49,7 +49,10 @@ npm run check          svelte-check plus tsc
 - `src/lib/resolve.ts` - the layering, and the trail the provenance UI renders.
   Some list keys are folded together rather than replaced, keyed by one field the
   generator reads out of the parser, so a scope can change one entry of a list an
-  earlier layer built without restating the list.
+  earlier layer built without restating the list. A scope that names a different
+  game type than the one it inherited does not layer at all: it restarts from the
+  built-in defaults plus the keys the base scope set by hand, and the new mode's
+  defaults land on top of those.
 - `src/lib/config.ts` - the document the user edits, plus reading and writing
   `ads.toml`. Anything it cannot model is kept verbatim rather than dropped.
 - `src/lib/maps.ts` - the FactionFiles archive, queried live from the browser.

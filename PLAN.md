@@ -37,14 +37,14 @@ Four structural problems in the old tool, all of which the new architecture remo
   which reuses the same pages scoped smaller.
 - **Provenance dots**: every setting carries a small colored dot. Clicking it opens
   a popover showing every layer that touched the value and which one won.
-  Default / from a preset / from a mutator / you set it / just for one map.
+  Default / from the game mode / from a mutator / you set it / just for one map.
 - **Plain language throughout.** Labels are human names ("Round length", "15 minutes"),
   not TOML keys. The tool converts units, so `time_limit = 900` displays as 15 minutes.
 - **The only fixed-width type in the tool is the config file pane.** The audience is
   mostly non-technical.
-- **Preset authoring is an export option, not a mode.** Download offers the whole
-  server config or just the game rules. Opening a preset file lands in Game rules
-  with the rest of the sidebar dimmed. No up-front decision, nothing to undo.
+- ~~**Preset authoring is an export option, not a mode.**~~ Dropped: Alpine 1.4
+  removed rules presets entirely (see the 1.4 pass below). Download offers the
+  whole server config and nothing else.
 
 Approved prototype: https://claude.ai/code/artifact/dca8eb94-71f3-47de-9f09-8c671cfc4857
 
@@ -134,18 +134,26 @@ comments and struct context for review rather than leaving them blank.
 
 ## Resolution model
 
-From `dedi_cfg.cpp:566-570`, the layering per scope is:
+From `parse_scope_rules` in `dedi_cfg.cpp`, the layering per scope is:
 
 ```
 Alpine built-in default
   -> game type defaults      (apply_defaults_for_game_type)
-  -> rules_presets           (files, chainable, alias-able)
   -> mutators                (fixed apply order, before manual keys)
   -> manual keys in scope
 ```
 
 applied once for `[base]`, then again for each `[[levels]]` entry. Manual keys
 always win over mutators in the same scope.
+
+A scope that names a **different game type** than the one it inherited is the
+exception: Alpine does not layer onto the rules it was handed at all. It restarts
+from the built-in defaults plus `base_rules_keys_only` - the keys `[base]` set by
+hand and nothing else - so neither the old mode's defaults nor the base mutators
+survive. The new mode's defaults then land *on top* of those base keys, and only
+after that do the scope's own mutators and keys apply. `gameTypeRebase` in
+`rules.json` is read out of the source rather than assumed, so the trail the
+popover renders cannot quietly drift from what the server does.
 
 The resolver merges tier 1 and tier 2 tables in that order and records which layer
 set each value. That record is what the provenance dots and the popover render.
@@ -184,8 +192,8 @@ that map.
 **M7 - Import round-trip.** Open an existing config, preserve unknown keys on
 export so we never eat something a newer Alpine added.
 
-**M8 - Remaining pages.** Bots, admin/rcon profiles, voting, idle, presets,
-problems/diagnostics. Parity pass against `old.html`, then delete it.
+**M8 - Remaining pages.** Bots, admin/rcon profiles, voting, idle, demo
+recording, problems/diagnostics. Parity pass against `old.html`, then delete it.
 
 **M9 - Map picker.** Search the archive, add a map by name, flag a rotation entry
 the autodownloader cannot serve. Done; see the status log.
@@ -309,12 +317,8 @@ Facts established from the Alpine source, worth not re-deriving:
     set, since a page listing only the written ones would be describing a
     different server.
   - *Presets* split in two, because a preset applies to a scope but is named
-    globally. The list of presets a scope pulls in sits at the top of Mode &
-    scoring, where it works for the game rules and for one map alike, and it
-    replaces the stray text box the page used to render for `base`. The Presets
-    page itself carries the shortcuts, the export, and the honest note that this
-    tool does not read preset files - so a setting a preset changes still shows
-    its default here.
+    globally. **Superseded: Alpine 1.4 removed rules presets, and all of this was
+    deleted in the 1.4 pass below.**
   - Both are out of the `unknown` bucket now: `rcon_profiles` and
     `rules_preset_aliases` are modeled, and anything inside them the tool does not
     know is still kept verbatim per entry.
@@ -459,15 +463,55 @@ Facts established from the Alpine source, worth not re-deriving:
   - Weapon stay is what RF calls it, so that is what the tool calls it now. The
     exemption column had been "Disappears when taken", which is nobody's phrase.
 
+- **Pinned to Alpine 1.4.0 (`v1.4.0_Lupin`).** The pin had been sitting on a
+  commit 95 past `v1.3.0_Bakeapple`, mid-way through 1.4.0's development. Four of
+  the 45 commits to the release touched the schema surface, and `npm run gen`
+  stopped on each in turn, which is what the fail-loud extractors were for.
+  - *Rules presets are gone.* `Revamp level rules layering (#435)` deleted
+    `apply_rules_presets_and_overrides`, preset chaining, the cycle check,
+    `[rules_preset_aliases]` and `load_rules_preset_alias`. `rules_presets`
+    survives only in the `[[levels]]` key whitelist, accepted and ignored. That
+    removed a whole provenance layer, its color, its two pages, and the
+    rules-only download. `deadLevelKeys` derives the ignored keys from that
+    whitelist rather than naming them, so the day Alpine drops the key or brings
+    presets back, the generator says so.
+  - *A config that still carries them is warned about and stripped.* This is the
+    one thing the tool does not keep verbatim. The rule elsewhere is that an
+    unmodelled key survives the round trip; here the server authoritatively no
+    longer acts on the key, so writing it back would leave the file claiming a
+    rule that never runs. The import banner names what was dropped and says where
+    those settings have to go instead.
+  - *A scope that changes the game type no longer inherits.* The layering gained
+    a rebase: the scope restarts from the built-in defaults plus `[base]`'s own
+    keys, so the old mode's defaults and the base mutators are dropped, and the
+    new mode's defaults land on top of the base keys rather than under them. Both
+    halves of that are read out of the source by `extractGameTypeRebase` rather
+    than assumed, and the popover explains it in the trail where it applies.
+  - *Critical hits moved from a rules section to a mutator.* `[critical_hits]`
+    and its five keys are gone; `crits` is a plain no-option mutator that triples
+    the damage of a rolled shot. The upstream `dynamic_scale` type mismatch noted
+    below went with it. The effects entry describes the new mechanic, which is
+    not the old one wearing a different hat.
+  - *Six demo recording keys* on a new page, plus the 12mm handgun the Bagman
+    modes now spawn players holding.
+  - *A generator bug this surfaced.* `case NG_TYPE_BAG:` falls through to
+    `case NG_TYPE_TBAG: {`, and the case reader only matched a label with a brace
+    on it, so Bagman had silently been getting the default arm instead of its own
+    since the mode landed. The arm's `location_pinging = (game_type == NG_TYPE_TBAG)`
+    was emitted as a null on top of that. Shared arms are now read once per label,
+    a mode comparison inside one is answered for the label being read, and any
+    default expression that reaches a real config key without a value now fails
+    the generator rather than reaching an operator as a blank.
+
 ### Next, in order
 
 1. A parity pass against `old.html`, then delete it and `design/prototype.html`.
    That closes M8.
 2. M10 CI and deploy. Nothing is blocking it now that the origin does not have
    to be registered anywhere.
-3. Bump the `vendor/AlpineFaction` pin to 1.5.0 as a commit of its own, so
-   whatever `check-schema` flags is reviewed on its own rather than mixed into
-   feature work.
+3. Bump the `vendor/AlpineFaction` pin again when 1.5.0 tags, as a commit of its
+   own, so whatever `check-schema` flags is reviewed on its own rather than mixed
+   into feature work. 1.4.0 is in; `master` is already carrying 1.5.0 work.
 
 Testing has an answer now that costs nothing: a scratch entry point built with
 `vite build --lib` and run under node imports the app's own modules with the
@@ -522,8 +566,8 @@ None of these block the builder; they are worth reporting to Alpine.
   commented out - so Super Rail's exemption accumulates.
 - **The Fusion Rocket Launcher exemption is re-seeded once per scope, which undoes
   the operator.** `parse_server_rules` runs `add("shoulder_cannon", true)` before
-  it reads the key, and it runs for every preset, for the scope table and for the
-  scope's `[rules]` table. `add` overwrites the flag on a weapon already in the
+  it reads the key, and it runs for the scope table and for the scope's `[rules]`
+  table. `add` overwrites the flag on a weapon already in the
   list, so `exempt = false` in the base rules is put back to `true` for every map
   that does not repeat it - and a level's resolved rules replace the active rules
   wholesale, so that is what the server runs. Within one scope the operator still
@@ -559,11 +603,9 @@ None of these block the builder; they are worth reporting to Alpine.
   layer only has to add help text, page assignment, group titles, and better
   wording where the console phrasing is jargon. It also means a setting added
   upstream shows a real name immediately instead of a raw key.
-- **An upstream bug the generator surfaced.** `critical_hits.dynamic_scale` is
-  read from the config as a float (`dedi_cfg.cpp`) but stored in a `bool`
-  (`server_internal.h`). Writing `dynamic_scale = true` does nothing, and
-  `dynamic_scale = 1.0` sets a bool from a float. The generated schema flags this
-  as `typeMismatch` rather than hiding it. Worth reporting upstream.
+- ~~**An upstream bug the generator surfaced.**~~ `critical_hits.dynamic_scale`
+  was read from the config as a float but stored in a `bool`. Moot as of Alpine
+  1.4.0, which deleted the whole `[critical_hits]` section in favor of a mutator.
 - **Testing needs a decision.** Node 20 cannot run TypeScript directly, so a test
   fixture for the resolver (the "resolution correctness" risk below) needs either
   `vitest` or `tsx` as a dev dependency. Deferred pending your call - the

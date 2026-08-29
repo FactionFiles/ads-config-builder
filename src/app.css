@@ -115,6 +115,12 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
   max-width: 52ch;
 }
 
+.fr a.help {
+  display: inline-block;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .fr .warn {
   font-size: 12px;
   color: var(--err);

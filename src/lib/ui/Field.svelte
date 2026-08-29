@@ -65,6 +65,11 @@
   <div>
     <div class="lab">{text.label}</div>
     {#if text.help && showHelp}<div class="help">{text.help}</div>{/if}
+    {#if text.link && showHelp}
+      <a class="help" href={text.link} target="_blank" rel="noreferrer noopener">
+        {text.linkLabel ?? text.link}
+      </a>
+    {/if}
     {#if offMode}
       <div class="warn">{offMode}</div>
     {/if}

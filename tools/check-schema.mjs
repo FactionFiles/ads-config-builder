@@ -196,6 +196,12 @@ function crossCheck(label, generatedPaths, authored) {
     const entry = authored[path]
     if (!entry.label) problem(`${label}: entry has no label`, path)
     if (!entry.help) problem(`${label}: entry has no help text`, path)
+    if (entry.link && !/^https:\/\//.test(entry.link)) {
+      problem(`${label}: entry link is not an https url`, `${path} -> "${entry.link}"`)
+    }
+    if (entry.linkLabel && !entry.link) {
+      problem(`${label}: entry names a link it does not have`, path)
+    }
     if (!entry.page) problem(`${label}: entry has no page`, path)
     else if (pageIds.size && !pageIds.has(entry.page)) {
       problem(`${label}: entry points at an unknown page`, `${path} -> "${entry.page}"`)

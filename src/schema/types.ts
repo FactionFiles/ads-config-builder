@@ -217,6 +217,9 @@ export interface AuthoredEntry {
   page: string
   label: string
   help: string
+  /** a page worth sending the user to, shown under the help text */
+  link?: string
+  linkLabel?: string
   unit?: string
   display?: string
   uncertain?: boolean

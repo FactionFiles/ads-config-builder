@@ -19,23 +19,25 @@ help = "Marks which version of the server config format this file is written in;
 ["server_name"]
 page = "srv-basics"
 label = "Server name"
-help = "The name people see in the in-game server list."
+help = "The name displayed on the in-game server list."
 
 ["max_players"]
 page = "srv-basics"
 label = "Maximum players"
-help = "How many people can be connected at once, up to 32; pick a number your map rotation can actually hold."
+help = "How many people can be connected at once, up to 32."
 unit = "players"
 
 ["upnp"]
 page = "srv-basics"
-label = "Try to open the port automatically"
-help = "Asks your router to forward the server's port. Helpful on a home connection, and ignored by most hosting providers."
+label = "Enable UPnP"
+help = "Use UPnP to automatically forward your server's port through a home router."
 
 ["fflink_gsk"]
-page = "srv-basics"
-label = "FactionFiles server key"
-help = "Links this server to your FactionFiles account so matches played here are reported to the site; paste the key FactionFiles gives you, or leave it empty."
+page = "srv-stats"
+label = "FactionFiles Game Server Key"
+help = "Paste your key from FactionFiles here to enable player stats tracking on your server. Leave blank to disable player stats tracking."
+link = "https://www.factionfiles.com/ff.php?action=manageservers"
+linkLabel = "Register a key on FactionFiles"
 
 # ---------------------------------------------------------------- passwords and access
 
@@ -46,12 +48,12 @@ help = "Leave it empty for a server anyone can join; set one to keep the server 
 
 ["rcon_password"]
 page = "srv-access"
-label = "Admin password"
+label = "Admin (rcon) password"
 help = "A single password that lets somebody run a fixed set of admin commands. For separate passwords with different powers, see Advanced admin access."
 
 ["require_client_mod"]
 page = "srv-access"
-label = "Players must have the same mod loaded"
+label = "Require players to have the same mod"
 help = "Only matters when the server runs a total conversion; turning it off lets people join without installing it, which will look wrong for them."
 
 ["alpine_restrict"]
@@ -93,28 +95,28 @@ help = "Players still using the old renderer are kept out; only turn this on if 
 
 ["allow_fullbright_meshes"]
 page = "srv-client"
-label = "Fully lit player models"
-help = "Lets players make everyone glow evenly so nobody can hide in a dark corner. Competitive servers often allow it; it does spoil the look of a map."
+label = "Fullbright player models"
+help = "Lets players use the fullbright model option."
 
 ["allow_lightmap_mode"]
 page = "srv-client"
-label = "Plain untextured level"
-help = "Lets players strip the level down to flat lighting, which makes other players easier to pick out."
+label = "Lightmap mode"
+help = "Lets players use flat lightmap lighting."
 
 ["allow_disable_screenshake"]
 page = "srv-client"
-label = "Screen shake"
-help = "Players may switch off the camera shake from explosions and heavy weapons."
+label = "Disable screenshake"
+help = "Lets players disable screenshake."
 
 ["allow_disable_muzzle_flash"]
 page = "srv-client"
-label = "Muzzle flash lights"
-help = "Players may switch off the light each shot throws, which some people find distracting."
+label = "Disable muzzle flash"
+help = "Lets players disable muzzle flash."
 
 ["allow_unlimited_fps"]
 page = "srv-client"
 label = "Unlimited frame rate"
-help = "Lets players go past the 240 frames per second cap. Some movement techniques behave differently at very high frame rates, so competitive servers usually leave this off."
+help = "Lets players go past the default 240 FPS limit. Some movement techniques behave differently at very high frame rates, so competitive servers usually leave this off."
 
 ["allow_footsteps"]
 page = "srv-client"
@@ -128,61 +130,61 @@ help = "Lets players draw a colored outline around other players so they stand o
 
 ["allow_outlines_xray"]
 page = "srv-client"
-label = "Outlines through walls"
+label = "Outlines through walls (x-ray)"
 help = "Decides whether outlines show through solid geometry. Only has any effect while outlines are allowed at all, and seeing people through walls is a large advantage."
 
 ["sprays"]
 page = "srv-client"
 label = "Sprays"
-help = "Player-made images that can be stuck on walls."
+help = "Images that can be stuck on walls."
 
 ["sprays.enabled"]
 page = "srv-client"
-label = "Players can spray images"
-help = "Turn it off on a server where you would rather not moderate what people put on the walls."
+label = "Enable sprays"
+help = "Lets players use sprays."
 
 ["sprays.cooldown_ms"]
 page = "srv-client"
 label = "Wait between sprays"
-help = "How long a player must wait before spraying again, which is what stops someone papering a whole room."
+help = "How long a player must wait between sprays."
 unit = "milliseconds"
 
 ["click_limiter"]
 page = "srv-client"
-label = "Fire rate limit"
-help = "Caps how fast semi-automatic weapons can be fired, so a mouse macro is no better than a fast finger."
+label = "Fire rate limit (click limiter)"
+help = "Limits how fast semi-automatic weapons can be fired."
 
 ["click_limiter.enabled"]
 page = "srv-client"
-label = "Limit semi-automatic fire rate"
+label = "Enable click limiter"
 help = "Leave it on unless you specifically want people to be able to click as fast as their hardware allows."
 
 ["click_limiter.cooldown"]
 page = "srv-client"
 label = "Minimum time between shots"
-help = "The shortest gap allowed between two semi-automatic shots; larger numbers make the limit stricter."
+help = "The shortest gap allowed between two semi-automatic shots; larger numbers enforce a slower fire rate."
 unit = "milliseconds"
 
 # ---------------------------------------------------------------- voting
 
 ["vote_match"]
 page = "srv-voting"
-label = "Vote to start a match"
+label = "Match voting"
 help = "Sets up an organized match between two teams, with a ready-up step before it begins."
 
 ["vote_match.enabled"]
 page = "srv-voting"
 label = "Allow match votes"
-help = "Players can propose a match on a chosen map and team size."
+help = "Allows players to vote to start a match on a chosen map and team size."
 
 ["vote_match.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_match.time"]
 page = "srv-voting"
-label = "Time to vote"
+label = "Vote time limit"
 help = "How long the vote stays open before it is counted."
 unit = "seconds"
 
@@ -193,13 +195,13 @@ help = "Lets players remove someone from the server without an admin present."
 
 ["vote_kick.enabled"]
 page = "srv-voting"
-label = "Allow kick votes"
-help = "Handy on an unattended server, but it can be abused on a busy one."
+label = "Allow kick voting"
+help = "Allows players to vote to kick another player."
 
 ["vote_kick.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_kick.time"]
 page = "srv-voting"
@@ -219,8 +221,8 @@ help = "Players choose the next map instead of waiting for the rotation to reach
 
 ["vote_level.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_level.time"]
 page = "srv-voting"
@@ -255,8 +257,8 @@ help = "Useful when a good game keeps getting cut short by the time limit."
 
 ["vote_extend.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_extend.time"]
 page = "srv-voting"
@@ -276,8 +278,8 @@ help = "Lets players reset a game that started badly, for instance after a mass 
 
 ["vote_restart.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_restart.time"]
 page = "srv-voting"
@@ -298,7 +300,7 @@ help = "A quick way off a map nobody is enjoying."
 ["vote_next.ignore_nonvoters"]
 page = "srv-voting"
 label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_next.time"]
 page = "srv-voting"
@@ -318,8 +320,8 @@ help = "Lets players move on without having to agree on where to."
 
 ["vote_rand.ignore_nonvoters"]
 page = "srv-voting"
-label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+label = "Ignore players who did not vote"
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_rand.time"]
 page = "srv-voting"
@@ -340,7 +342,7 @@ help = "Lets players return to a map that ended too soon."
 ["vote_previous.ignore_nonvoters"]
 page = "srv-voting"
 label = "Ignore people who did not vote"
-help = "Decides the vote on the ballots actually cast; with this off, anyone who says nothing counts as a no."
+help = "When enabled, votes are only counted from players who voted. When disabled, players who abstain from voting are counted as a \"no\" vote."
 
 ["vote_previous.time"]
 page = "srv-voting"

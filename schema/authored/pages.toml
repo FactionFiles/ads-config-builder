@@ -102,15 +102,22 @@ order = 14
 blurb = "Several named admin passwords, each allowed to run only the commands you pick."
 
 [[page]]
+id = "srv-stats"
+title = "Stats tracking"
+scope = "server"
+order = 15
+blurb = "Linking this server to FactionFiles so the matches it runs are reported to the site."
+
+[[page]]
 id = "srv-demos"
 title = "Recording matches"
 scope = "server"
-order = 15
+order = 16
 blurb = "Recording play to demo files, and sending them to FactionFiles."
 
 [[page]]
 id = "checks"
 title = "Problems"
 scope = "other"
-order = 16
+order = 17
 blurb = "Things in this config that look wrong or will not work together."

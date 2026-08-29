@@ -8,4 +8,8 @@ schema/generated/
 .DS_Store
 *.local
 
+# nat test script
 up.sh
+
+# goober's old tool
+old.html

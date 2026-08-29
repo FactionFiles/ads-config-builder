@@ -7,3 +7,5 @@ schema/generated/
 
 .DS_Store
 *.local
+
+up.sh

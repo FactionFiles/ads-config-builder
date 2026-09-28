@@ -129,13 +129,13 @@
   .box.ticked::after {
     content: "";
     position: absolute;
-    left: 4px;
-    top: 1px;
+    left: 50%;
+    top: 50%;
     width: 4px;
     height: 8px;
     border: solid var(--on-accent);
     border-width: 0 2px 2px 0;
-    transform: rotate(42deg);
+    transform: translate(-50%, -60%) rotate(42deg);
   }
 
   .none {

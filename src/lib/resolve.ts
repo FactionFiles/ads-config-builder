@@ -1,23 +1,17 @@
-// Resolving a scope means replaying Alpine's layering and remembering who did
-// what, because the record is the whole point: it is what the provenance dot on
-// each setting shows.
+// replays alpine's rule layering and records which layer set each value.
 //
-// From dedi_cfg.cpp, one scope resolves as:
+// from dedi_cfg.cpp, one scope resolves as:
 //
 //   Alpine built-in default
 //     -> game type defaults   (only when the game type changed, or was never applied)
 //     -> mutators             (fixed apply order, before manual keys)
 //     -> manual keys in this scope
 //
-// applied once for [base], then again per [[levels]] entry, with the resolved
-// base rules as the starting point. Manual keys always beat mutators in the same
-// scope.
+// applied once for [base], then per [[levels]] entry starting from the resolved
+// base rules.
 //
-// A map that names a different game type is the exception: it does not inherit
-// the resolved base rules at all. Alpine rebuilds it from the built-in defaults
-// plus the keys the operator set by hand in [base], so no part of the old mode
-// leaks into the new one, and the new mode's defaults land on top of those base
-// keys rather than under them.
+// exception: a level that changes the game type restarts from built-in defaults
+// plus [base]'s manual keys, and the new game type's defaults land on top.
 
 import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
 import type { ArrayKey, DefaultOp, Guard, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
@@ -25,7 +19,7 @@ import { railGunName, reserveAmmo } from './gamedata'
 
 export type Layer =
   | 'default'      // Alpine's built-in value
-  | 'gametype'     // this game mode's defaults
+  | 'gametype'     // game type defaults
   | 'mutator'
   | 'manual'       // set in this scope
   | 'inherited'    // resolved in the base scope, unchanged here
@@ -33,9 +27,9 @@ export type Layer =
 export interface Contribution {
   layer: Layer
   value: unknown
-  /** mutator name or game mode name */
+  /** mutator or game type name */
   source?: string
-  /** why this layer did what it did, where the value alone does not say */
+  /** explanation, where the value alone is not enough */
   description?: string
 }
 
@@ -43,7 +37,7 @@ export interface Resolved {
   value: unknown
   layer: Layer
   source?: string
-  /** every layer that touched this setting, oldest first; the last one won */
+  /** oldest first; the last one won */
   trail: Contribution[]
 }
 
@@ -59,11 +53,7 @@ export interface ScopeInput {
   base?: ResolvedRules
   /** game type declared in this scope, if any */
   gameType?: string
-  /**
-   * keys set by hand in [base]. A scope that changes the game type restarts from
-   * these rather than from the resolved base rules, so they have to be passed
-   * separately from the resolved map.
-   */
+  /** manual keys from [base], which a game type change restarts from */
   baseManual?: Record<string, unknown>
   mutators?: MutatorDeclaration[]
   /** keys written directly in this scope */
@@ -76,7 +66,6 @@ function contribute(into: ResolvedRules, path: string, c: Contribution) {
   into.set(path, { value: c.value, layer: c.layer, source: c.source, trail })
 }
 
-/** every scalar setting in a key tree, with its built-in default */
 function collectDefaults(roots: SchemaKey[]): ResolvedRules {
   const out: ResolvedRules = new Map()
   const walk = (keys: SchemaKey[], prefix = '') => {
@@ -100,7 +89,6 @@ function copy(source: ResolvedRules): ResolvedRules {
   return new Map([...source].map(([k, v]) => [k, { ...v, trail: [...v.trail] }]))
 }
 
-/** the built-in rules defaults, computed once */
 let cachedRuleDefaults: ResolvedRules | null = null
 export function defaults(): ResolvedRules {
   if (!cachedRuleDefaults) cachedRuleDefaults = collectDefaults(rulesSchema.keys)
@@ -109,12 +97,7 @@ export function defaults(): ResolvedRules {
 
 let cachedServerDefaults: ResolvedRules | null = null
 
-/**
- * The server-level settings are not layered the way the rules are - there is one
- * scope and no mutators - but they still have Alpine defaults, and a
- * field showing nothing until you touch it would be lying about what the server
- * will do.
- */
+// server settings have one scope and no mutators, but still need their defaults
 export function resolveServer(manual: Record<string, unknown>): ResolvedRules {
   if (!cachedServerDefaults) {
     cachedServerDefaults = collectDefaults([
@@ -130,12 +113,7 @@ export function resolveServer(manual: Record<string, unknown>): ResolvedRules {
   return out
 }
 
-/**
- * One entry of an array of tables, against the built-in defaults for its fields.
- * Nothing layers here - an admin profile is not inherited from anywhere - but
- * the fields still render through the shared field renderer, which wants a
- * resolved map and a value for a field nobody has touched.
- */
+// no layering, but the shared field renderer needs a resolved map with defaults
 export function resolveEntry(root: SchemaKey, fields: Record<string, unknown>): ResolvedRules {
   const out = collectDefaults([root])
   for (const [key, value] of Object.entries(fields)) {
@@ -145,14 +123,11 @@ export function resolveEntry(root: SchemaKey, fields: Record<string, unknown>): 
 }
 
 // ---------------------------------------------------------------------------
-// Lists that are folded together rather than replaced. Alpine parses some list
-// keys by handing each entry to the list it already has, keyed by one field, so
-// a later layer that names one entry changes that entry and leaves the rest -
-// which is what lets a map turn one weapon of a game mode's spawn kit off
-// without restating the kit. Which lists work that way comes from the parser.
+// merged lists. alpine folds some list entries into the existing list by one key
+// field, so a layer can change one entry (e.g. one spawn loadout weapon) without
+// restating the rest. which lists merge comes from the parser.
 // ---------------------------------------------------------------------------
 
-/** one entry of a merged list, with every field the file can hold filled in */
 type Row = Record<string, unknown>
 
 const mergedLists = rulesSchema.keys
@@ -160,16 +135,11 @@ const mergedLists = rulesSchema.keys
 
 const SPAWN_KIT = 'spawn_loadout'
 
-/**
- * The reserve the stock spawn grant hands out, as the Alpine source states it.
- * It is read off the game type defaults rather than written down again here, so
- * the source stays the one place it is stated.
- */
+// read from the game type defaults so the alpine source stays the only authority
 const stockSpawnReserve = gametypes.defaults.after
   .find(op => op.op === 'loadoutSpawnWeapon')?.ammoFrom
 
-// entries are keyed by the name they resolve to, and the game resolves a name
-// without case, so two spellings of one weapon are one entry
+// the game matches names case-insensitively
 function sameId(a: unknown, b: unknown): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return a === b
   return a.toLowerCase() === b.toLowerCase()
@@ -184,7 +154,6 @@ function rowsAt(into: ResolvedRules, path: string): Row[] {
   return Array.isArray(value) ? (value as Row[]) : []
 }
 
-/** one layer's word on one entry, folded into what the layers under it left */
 function withRow(list: ArrayKey, rows: Row[], edit: Row): Row[] {
   const key = list.mergeKey!
   const at = rows.findIndex(row => sameId(row[key], edit[key]))
@@ -192,9 +161,7 @@ function withRow(list: ArrayKey, rows: Row[], edit: Row): Row[] {
 
   const next: Row = {}
   for (const field of list.item ?? []) {
-    // a field the entry leaves out keeps what the layer under it left, where the
-    // parser asks whether the entry carried one at all, and otherwise falls back
-    // to whatever the parser reads in its place
+    // an omitted optional field keeps the previous value; otherwise it takes the parser default
     const value = edit[field.key] !== undefined ? edit[field.key]
       : field.optional && previous?.[field.key] !== undefined ? previous[field.key]
       : field.default !== undefined ? field.default
@@ -205,41 +172,34 @@ function withRow(list: ArrayKey, rows: Row[], edit: Row): Row[] {
   return at === -1 ? [...rows, next] : rows.map((row, i) => (i === at ? next : row))
 }
 
-// a layer that leaves a list exactly as it found it did not touch it, and saying
-// so in the trail would make the popover list layers that did nothing
+// skip no-op layers so the trail only lists real changes
 function setRows(into: ResolvedRules, path: string, rows: Row[], c: Omit<Contribution, 'value'>) {
   if (JSON.stringify(rowsAt(into, path)) === JSON.stringify(rows)) return
   contribute(into, path, { ...c, value: rows })
 }
 
-/** an entry as a layer wrote it, or null for one with nothing to key it by */
+/** null when the entry has no merge key */
 function readRow(list: ArrayKey, entry: unknown): Row | null {
   if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
   const row = entry as Row
   const id = row[list.mergeKey!]
-  // a name the game does not know is kept rather than dropped, so it stays
-  // visible in the editor where it can be corrected
+  // unknown names are kept so they stay visible and fixable in the editor
   return typeof id === 'string' && id !== '' ? row : null
 }
 
-/** the spare clips the spawn weapon comes with, which its reserve counts */
 function clipsOf(into: ResolvedRules): number {
   const clips = into.get('spawn_weapon.clips')?.value
   return typeof clips === 'number' ? clips : 0
 }
 
-/** the weapon the scope spawns players holding, as an entry of the kit */
 function spawnWeaponRow(into: ResolvedRules, from: StockReserve | undefined): Row | null {
   const name = into.get('spawn_weapon.weapon_name')?.value
   if (typeof name !== 'string' || !name || !from) return null
   return { weapon_name: name, ammo: reserveAmmo(from, name, clipsOf(into)), include: true }
 }
 
-/**
- * The merged list keys of one scope. Alpine reads the spawn weapon before the
- * kit entries, and naming a different one takes the weapon the mode chose back
- * out of the kit, so the order here is the order there.
- */
+// matches alpine's order: the spawn weapon is read before loadout entries, and
+// changing it removes the previous spawn weapon from the loadout
 function applyListKeys(
   into: ResolvedRules,
   values: Record<string, unknown>,
@@ -270,7 +230,6 @@ function applyListKeys(
   }
 }
 
-/** everything one layer of ordinary keys says, merged lists included */
 function applyValues(
   into: ResolvedRules,
   values: Record<string, unknown>,
@@ -278,29 +237,16 @@ function applyValues(
 ) {
   const previousWeapon = (into.get('spawn_weapon.weapon_name')?.value as string) ?? ''
   for (const [path, value] of Object.entries(values)) {
-    // the game type decides which defaults ran in the first place, and a merged
-    // list is not this layer's alone, so both are handled on their own
+    // game_type and merged lists are handled separately
     if (path === 'game_type' || listAt(path)) continue
     contribute(into, path, { ...c, value })
   }
   applyListKeys(into, values, previousWeapon, c)
 }
 
-/**
- * Rows the parser puts into a list before it reads the scope's own, once for
- * every scope it parses.
- *
- * Alpine keeps the stock weapon stay rule for the Fusion Rocket Launcher this
- * way: it patches the game's own hardcoded exemption out so the rule can be
- * configured at all, then seeds the list with the same row so a config that
- * says nothing still plays like stock. Because the seeding runs per scope
- * rather than once, a map that says nothing gets the row put back - so turning
- * it off in the base rules does not reach any map that has not turned it off
- * too. That is upstream behavior, not a decision here, and the trail says so.
- *
- * `setRows` stays quiet when a layer changes nothing, so the seed only appears
- * in the trail where it actually took something away.
- */
+// rows the parser seeds before reading each scope. alpine seeds the stock fusion
+// weapon stay exemption this way, and since it runs per scope, a base change to
+// that row does not reach maps that do not repeat it. this is upstream behavior.
 function applySeeds(into: ResolvedRules) {
   for (const key of rulesSchema.keys) {
     if (key.kind !== 'array') continue
@@ -312,8 +258,7 @@ function applySeeds(into: ResolvedRules) {
     setRows(into, list.key, rows, {
       layer: 'default',
       source: 'Alpine',
-      description: 'Alpine puts this row back at the start of every map, so a map keeps it '
-        + 'unless that map turns it off itself.',
+      description: 'Alpine resets this row on every map. Change it on each map to override it.',
     })
   }
 }
@@ -334,8 +279,7 @@ function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
         continue
       }
       if (op.op === 'loadoutSpawnWeapon') {
-        // the case above may have placed the spawn weapon already, with a
-        // reserve of its own choosing that this must not overwrite
+        // do not overwrite a spawn weapon the per-type case already placed
         const row = spawnWeaponRow(into, op.ammoFrom)
         const rows = rowsAt(into, kit.key)
         if (row && !rows.some(existing => sameId(existing.weapon_name, row.weapon_name))) {
@@ -352,8 +296,7 @@ function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
   }
 
   apply(gametypes.defaults.common)
-  // a mode with no case of its own still gets the arm that covers the rest,
-  // which is where deathmatch and capture the flag get their spawn weapon
+  // the fallback arm is where dm and ctf get their spawn weapon
   apply(gametypes.defaults.perType[gameType] ?? gametypes.defaults.fallback)
   apply(gametypes.defaults.after)
 }
@@ -365,8 +308,7 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
   if (!effect) return
 
   for (const set of effect.sets ?? []) {
-    // a mutator with a kit of its own builds it from nothing rather than adding
-    // to what the mode handed out, so its list replaces rather than folds in
+    // mutator lists replace rather than merge
     const list = listAt(set.key)
     if (list && Array.isArray(set.value)) {
       setRows(into, set.key, mutatorRows(list, set.value), { layer: 'mutator', source: mutator.label })
@@ -376,9 +318,7 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
     const value = set.fromOption === undefined
       ? set.value
       : optionValue(mutator, decl, set.fromOption, into.get(set.key)?.value)
-    // a `sets` entry whose value is not a value of the right type is a prose
-    // description of something we cannot compute - record it as such rather than
-    // writing a bogus value into the setting
+    // a mistyped value is prose describing an effect we cannot compute
     const usable = schema ? valueMatchesType(value, schema.type) : false
     contribute(into, set.key, usable
       ? { layer: 'mutator', value, source: mutator.label }
@@ -391,11 +331,7 @@ function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
   }
 }
 
-/**
- * A list a mutator builds for itself. An entry of a spawn kit that names no
- * reserve ammo gets the weapon's own, which is the figure the source hands those
- * entries out of the weapon table.
- */
+// loadout entries with no ammo get the weapon's stock reserve, as in the source
 function mutatorRows(list: ArrayKey, entries: unknown[]): Row[] {
   let rows: Row[] = []
   for (const entry of entries) {
@@ -409,12 +345,7 @@ function mutatorRows(list: ArrayKey, entries: unknown[]): Row[] {
   return rows
 }
 
-/**
- * What a mutator option is set to. An option the user has not touched falls back
- * to its declared default, and the two options declared as `currentValue` fall
- * back to whatever the setting already resolved to - which is what the server
- * does, and is why turning those mutators on changes nothing by itself.
- */
+// `currentValue` options default to the setting's already-resolved value, as the server does
 export function optionValue(
   mutator: Mutator,
   decl: MutatorDeclaration,
@@ -448,10 +379,7 @@ function findScalar(path: string): ScalarKey | undefined {
   return undefined
 }
 
-/**
- * Mutators run in a fixed order rather than the order they are declared in, so
- * that two active mutators that touch the same rule always land the same way.
- */
+// alpine applies mutators in a fixed order, not declaration order
 function orderMutators(declared: MutatorDeclaration[]): MutatorDeclaration[] {
   const rank = new Map(mutatorSchema.applyOrder.map((id, i) => [id, i]))
   return [...declared].sort((a, b) => {
@@ -464,8 +392,7 @@ function orderMutators(declared: MutatorDeclaration[]): MutatorDeclaration[] {
 export function resolveScope(input: ScopeInput): ResolvedRules {
   const isBase = !input.base
 
-  // the server only rebuilds the game type defaults when the type actually
-  // changes, so a level that repeats the base game type does not reset anything
+  // repeating the base game type does not reset anything
   const baseGameType = input.base ? (input.base.get('game_type')?.value as string | undefined) : undefined
   const gameType = input.gameType ?? baseGameType ?? gametypes.gametypes[0].name
   const changedGameType = !isBase && !!input.gameType && input.gameType !== baseGameType
@@ -475,20 +402,14 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   if (isBase) {
     out = defaults()
   } else if (changedGameType) {
-    // Alpine throws the resolved base rules away here and rebuilds from the
-    // built-in defaults plus whatever [base] set by hand, so the old mode's
-    // defaults and the base mutators do not come along
+    // old game type defaults and base mutators are discarded
     out = defaults()
     applyValues(out, input.baseManual ?? {}, {
       layer: 'inherited',
       source: 'base rules',
-      description: 'Set by hand in the base rules. Changing the mode here rebuilt everything '
-        + 'else from scratch, but a setting you typed yourself still carries over.',
+      description: 'Set in the base rules. Manual settings carry over when a map changes the game type.',
     })
   } else {
-    // a level scope starts from the resolved base rules; anything it does not
-    // touch stays inherited, which is what lets the rotation table show at a
-    // glance which cells a map actually overrides
     out = new Map()
     for (const [path, resolved] of input.base!) {
       out.set(path, { ...resolved, layer: 'inherited', trail: [...resolved.trail] })
@@ -500,8 +421,8 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
       layer: 'manual',
       value: input.gameType,
       description: changedGameType
-        ? 'This map runs a different mode from the base rules, so Alpine rebuilt its rules from '
-          + "the base rules' own settings and then applied this mode's defaults on top."
+        ? 'This map changes the game type. Its rules start from the manual settings in the base '
+          + "rules, with this game type's defaults applied on top."
         : undefined,
     })
   }
@@ -524,13 +445,8 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
   return out
 }
 
-/**
- * The mutators actually running in a level scope. A level that changes the game
- * mode starts from a cleared mutator state, because rebuilding a mode's defaults
- * would leave a half-applied mutator behind - so only that level's own
- * declarations count there. Otherwise the level's declarations stack on the
- * base's, with one for the same mutator replacing the base's.
- */
+// a game type change clears base mutators. otherwise level mutators stack on
+// the base's, replacing any with the same name
 export function effectiveMutators(
   base: MutatorDeclaration[],
   level: MutatorDeclaration[],
@@ -540,19 +456,13 @@ export function effectiveMutators(
   return [...base.filter(b => !level.some(l => l.name === b.name)), ...level]
 }
 
-/** where one row of a resolved list came from */
 export interface RowOrigin {
-  /** the layer that left the row the way it is now */
+  /** layer that last changed the row */
   by?: Contribution
-  /** the first layer to name it at all, which is what a later layer folded into */
+  /** layer that first added the row */
   first?: Contribution
 }
 
-/**
- * Which layer each row of a list owes its current state to. A row no later layer
- * touched still shows the one that put it there, which is what lets the kit a
- * game mode hands out read as the mode's rather than as yours.
- */
 export function rowSources(resolved: Resolved | undefined, mergeKey?: string): RowOrigin[] {
   const rows = Array.isArray(resolved?.value) ? (resolved.value as unknown[]) : []
   const lists = (resolved?.trail ?? [])
@@ -568,8 +478,7 @@ export function rowSources(resolved: Resolved | undefined, mergeKey?: string): R
     let previous: string | undefined
     for (const list of lists) {
       const found = list.rows.find(r => idOf(r) === id)
-      // a layer that rebuilt the list from nothing dropped the row, so whatever
-      // put it back owns it rather than whoever had it before
+      // the row was dropped here, so whoever re-adds it owns it
       if (!found) { previous = undefined; origin.first = undefined; continue }
       const now = JSON.stringify(found)
       if (!origin.first) origin.first = list.c
@@ -587,18 +496,13 @@ export function overridden(resolved: ResolvedRules): string[] {
     .map(([path]) => path)
 }
 
-/** the sibling a guard names, as a full path */
 function siblingPath(full: string, key: string): string {
   const parts = full.split('.')
   parts[parts.length - 1] = key
   return parts.join('.')
 }
 
-/**
- * The guard stopping the server from reading this setting, if one is. A setting
- * behind an unsatisfied guard is parsed and then never looked at, so a field
- * shows it inert and the problems page counts it as doing nothing.
- */
+/** the guard that stops the server from reading this setting, if any */
 export function unsatisfiedGuard(
   key: SchemaKey | undefined,
   path: string,

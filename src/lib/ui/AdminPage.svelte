@@ -1,7 +1,5 @@
 <script lang="ts">
-  // Admin profiles: a password plus the list of commands it may run. Nothing
-  // here is layered, so the fields render bare - a profile has no base rules to
-  // inherit from and no provenance to explain.
+  // profiles are not layered, so fields render bare with no provenance
 
   import { choiceLabelsFor, schemaFor, server, textFor } from '../../schema'
   import type { ArrayKey, ScalarKey } from '../../schema/types'
@@ -11,7 +9,7 @@
 
   interface Props {
     profiles: RconProfile[]
-    /** the old-style single admin password, which conjures a profile of its own */
+    /** the legacy single admin password, which alpine turns into its own profile */
     legacyPassword?: string
     onchange: (next: RconProfile[]) => void
   }
@@ -37,17 +35,16 @@
     return typeof given === 'string' && given.trim() ? given : `Profile ${index + 1}`
   }
 
-  // the server refuses a profile with no name or no password, so a card that is
-  // missing either is telling the truth about what would happen
+  // the server skips a profile with no name or no password
   function missing(profile: RconProfile): string | null {
     const name = profile.fields.name
     const password = profile.fields.password
-    if (typeof name !== 'string' || !name.trim()) return 'Without a name the server skips this profile.'
-    if (typeof password !== 'string' || !password) return 'Without a password the server skips this profile.'
+    if (typeof name !== 'string' || !name.trim()) return 'Profile has no name and will be ignored.'
+    if (typeof password !== 'string' || !password) return 'Profile has no password and will be ignored.'
     return null
   }
 
-  /** full admins run everything, so the command list stops meaning anything */
+  // full admins can run every command, so the list does not apply
   function unrestricted(index: number) {
     return (commandsKey?.requires ?? []).some(
       g => g.key !== undefined
@@ -65,8 +62,7 @@
   }
 
   function setCommands(index: number, next: string[]) {
-    // written in the master list's order rather than the order they were picked,
-    // so two profiles allowed the same things read the same way in the file
+    // canonical order keeps the file stable regardless of click order
     const ordered = commands.filter(c => next.includes(c))
     edit(index, p => ({ ...p, fields: { ...p.fields, allowed_commands: ordered } }))
   }
@@ -84,8 +80,7 @@
     onchange(profiles.filter((_, i) => i !== index))
   }
 
-  // Alpine only invents the legacy profile when no written profile already uses
-  // that password, so saying it always appears would sometimes be wrong
+  // alpine only adds the legacy profile when no other profile uses that password
   const legacyTaken = $derived(
     legacyPassword !== '' && profiles.some(p => p.fields.password === legacyPassword)
   )
@@ -95,12 +90,9 @@
 <div class="banner">
   <span class="ic">i</span>
   <div>
-    Each profile here is a password and a list of commands. Somebody who types
-    that password gets exactly those commands and nothing else, so you can hand
-    out kicking without handing out the rules.
-    <br />If one password for everything is all you need, set the
-    <b>Admin password</b> on <b>Passwords &amp; access</b> instead and leave this
-    page alone.
+    Each profile pairs an rcon password with the commands it can run.
+    <br />For a single password with full access, set the <b>Rcon password</b>
+    on <b>Passwords &amp; access</b> instead.
   </div>
 </div>
 
@@ -136,8 +128,7 @@
 
       {#if !restricted}
         <p class="hint">
-          This profile can run every command, so the list below is ignored. It is
-          kept in case you turn that off again.
+          This profile can run every command. The list below is ignored.
         </p>
       {:else if i === 0}
         <p class="hint">{commandsText.help}</p>
@@ -167,32 +158,28 @@
   </section>
 {:else}
   <p class="none">
-    No profiles yet, which is the right answer for most servers. Nobody can run
-    admin commands at all unless you add one here or set the <b>Admin password</b>
-    on <b>Passwords &amp; access</b>.
+    No profiles. Rcon is disabled unless you add a profile or set the
+    <b>Rcon password</b> on <b>Passwords &amp; access</b>.
   </p>
 {/each}
 
-<button type="button" class="btn pri addbtn" onclick={add}>Add a profile</button>
+<button type="button" class="btn pri addbtn" onclick={add}>Add profile</button>
 
 {#if legacyPassword}
   <section class="pcard legacy">
     <header>
       <h3>legacy</h3>
-      <span class="tag">Made for you</span>
+      <span class="tag">Automatic</span>
     </header>
     {#if legacyTaken}
       <p class="hint">
-        One of your profiles already uses the same password as the <b>Admin
-        password</b> on <b>Passwords &amp; access</b>, so the server leaves that
-        profile in charge and adds nothing of its own.
+        A profile above already uses the <b>Rcon password</b> from
+        <b>Passwords &amp; access</b>, so no legacy profile is created.
       </p>
     {:else}
       <p class="hint">
-        You have an <b>Admin password</b> set on <b>Passwords &amp; access</b>.
-        The server turns it into a profile of its own, allowed to run these
-        {legacyCommands.length} commands. Clear that password if you would rather
-        the profiles above were the only way in.
+        The <b>Rcon password</b> on <b>Passwords &amp; access</b> creates this
+        profile, which can run these {legacyCommands.length} commands.
       </p>
       <div class="grid read">
         {#each legacyCommands as command (command)}

@@ -1,17 +1,15 @@
 #!/usr/bin/env node
-// One-shot extractor: unpacks tables.vpp and writes gamedata/{weapons,items,characters}.json.
+// one-shot extractor: unpacks tables.vpp into gamedata/{weapons,items,characters}.json.
 //
-// Usage:  node tools/extract-tables.mjs <path-to-tables.vpp>
+// usage: node tools/extract-tables.mjs <path-to-tables.vpp>
 //
-// The unpacker is Alpine Faction's prebuilt `vpp` tool. It is located via the
-// VPP_TOOL env var, then vendor/AlpineFaction/tools/vpp, then PATH.
+// needs alpine's `vpp` tool, found via VPP_TOOL, then vendor/AlpineFaction/tools/vpp, then PATH.
 //
-// Identifier fields are the strings the dedicated server matches against, taken
-// from the Alpine source:
+// identifier fields are what the dedicated server matches against:
 //   weapons.tbl  $Name       -> rf::weapon_lookup_type (dedi_cfg.cpp:698 comment)
 //   items.tbl    $Class Name -> rf::item_lookup_type   (object/item.cpp:21, matches cls_name)
 //   pc_multi.tbl $Name       -> rf::multi_find_character (server_internal.h ForceCharacterConfig)
-// All three lookups are case insensitive, but we emit the table spelling verbatim.
+// all three lookups are case insensitive; the table spelling is kept verbatim.
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -22,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_DIR = path.join(REPO_ROOT, 'gamedata');
 
-// Alpine treats these four pickups as "super" items (bots/bot_main.cpp is_super_pickup_name).
+// super items per bots/bot_main.cpp is_super_pickup_name
 const SUPER_ITEMS = new Set([
     'Multi Damage Amplifier',
     'Multi Invulnerability',
@@ -30,14 +28,14 @@ const SUPER_ITEMS = new Set([
     'Multi Super Health',
 ]);
 
-// Weapons Alpine's bots class as super pickups (bots/bot_main.cpp item_matches_super_item_hoarder_target).
+// super weapons per bots/bot_main.cpp item_matches_super_item_hoarder_target
 const SUPER_WEAPONS = new Set(['rail_gun', 'shoulder_cannon']);
 
 // ---------------------------------------------------------------------------
 // tbl parsing
 // ---------------------------------------------------------------------------
 
-// strip // comments without eating a // that sits inside a quoted value
+// ignores // inside quoted values
 function stripComment(line) {
     let quoted = false;
     for (let i = 0; i < line.length; i++) {
@@ -52,8 +50,8 @@ function stripComment(line) {
     return line;
 }
 
-// Splits a .tbl into records. A line matching startKey opens a new record.
-// Returns [{ section, fields: Map<key, string[]>, order: [{key, value}] }]
+// a line matching startKey opens a new record.
+// returns [{ section, fields: Map<key, string[]>, order: [{key, value}] }]
 function parseTable(text, startKey) {
     const records = [];
     let section = null;
@@ -139,7 +137,7 @@ function intOrNull(token) {
     return Number.isNaN(n) ? null : n;
 }
 
-// Several numeric fields carry a single-player value then a multiplayer value.
+// some numeric fields hold a single-player value then a multiplayer value
 function numberPair(value) {
     if (value == null) {
         return [null, null];
@@ -183,9 +181,7 @@ function extractWeapons(text) {
             category: (rec.section ?? '').toLowerCase().startsWith('secondary') ? 'secondary' : 'primary',
             playerWeapon: has('player_wep'),
             melee: has('melee'),
-            // Alpine's thrown explosives are exactly the remote charge and the grenade
-            // (mutators.cpp is_thrown_explosive_weapon); in the table those are the only
-            // player weapons that are both thrown under gravity and silent.
+            // matches mutators.cpp is_thrown_explosive_weapon (remote charge and grenade)
             thrown: has('gravity') && has('silent') && has('player_wep'),
             remoteCharge: has('remote_charge'),
             detonator: has('detonator'),
@@ -234,7 +230,7 @@ function extractItems(text) {
 function extractCharacters(text) {
     return parseTable(text, '$Name').map((rec, index) => {
         const name = quoted(rawValue(rec, '$Name'));
-        // $ScreenName: has its localizations on the following lines, English first
+        // $ScreenName localizations follow on later lines, english first
         const screenName = field(rec, '$ScreenName');
         const english = screenName?.extra.map(quoted).find(Boolean) ?? quoted(screenName?.value);
 
@@ -248,8 +244,7 @@ function extractCharacters(text) {
     });
 }
 
-// weapons.tbl and items.tbl disagree on capitalization, and both lookups are
-// case insensitive, so cross references resolve to the weapons.tbl spelling
+// the tables disagree on capitalization, so cross references use the weapons.tbl spelling
 function linkWeaponsAndItems(weapons, items) {
     const byLowerName = new Map(weapons.map(w => [w.name.toLowerCase(), w]));
 

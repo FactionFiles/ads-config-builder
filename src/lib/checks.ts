@@ -1,14 +1,6 @@
-// Everything in this config that will not do what it reads like.
-//
-// A problem here is something the server will not do, or will do differently
-// from what the file says. A deliberate choice is never a problem, however
-// unusual it looks: a rotation that plays one map twice is playing it twice on
-// purpose, and a config that only Alpine clients can join was written that way.
-// The line is whether the operator would be surprised by what the server does.
-//
-// Nothing here asks anything of the network. The one check that needs an answer
-// from outside takes it as an argument, already gathered, so this stays a pure
-// reading of the document and the resolver.
+// findings for anything the server will not do as the file says. unusual but
+// deliberate choices are not problems. network results are passed in, so this
+// stays pure.
 
 import {
   appliesToMode, gametypesByName, modeTitles, modesFor, mutatorsByName,
@@ -22,10 +14,9 @@ import { tableFor } from './gamedata'
 
 export type Severity =
   | 'broken'   // the server will not do this at all
-  | 'ignored'  // it is in the file, and the server uses something else or nothing
-  | 'note'     // worth knowing, nothing is wrong
+  | 'ignored'  // the server uses a different value, or none
+  | 'note'     // informational
 
-/** which part of the config a finding is about, and where to go to fix it */
 export interface FindingScope {
   kind: 'server' | 'base' | 'rotation' | 'map'
   /** index into the rotation, for a map */
@@ -41,7 +32,7 @@ export interface Finding {
   detail: string
   /** page to open, where one page owns the fix */
   page: string | null
-  /** the settings or maps this is about, named as the user reads them */
+  /** display names of the settings or maps involved */
   items?: string[]
 }
 
@@ -50,11 +41,11 @@ export interface CheckInput {
   baseRules: ResolvedRules
   levelRules: ResolvedRules[]
   server: ResolvedRules
-  /** rotation entries FactionFiles does not carry, already asked about */
+  /** rotation entries missing from FactionFiles */
   absentMaps?: string[]
 }
 
-const SERVER_SCOPE: FindingScope = { kind: 'server', map: null, label: 'The whole server' }
+const SERVER_SCOPE: FindingScope = { kind: 'server', map: null, label: 'Server' }
 const BASE_SCOPE: FindingScope = { kind: 'base', map: null, label: 'Game rules' }
 const ROTATION_SCOPE: FindingScope = { kind: 'rotation', map: null, label: 'Map rotation' }
 
@@ -79,17 +70,11 @@ function scalarAt(scope: Scope, path: string): ScalarKey | undefined {
   return schema?.kind === 'scalar' ? schema : undefined
 }
 
-/** one or many, so a count never reads "1 keys" */
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many
 }
 
-/**
- * The settings one scope sets by hand that the server will not use as written.
- *
- * A setting that does nothing is reported once, for the first reason it does
- * nothing - a value the mode ignores is not also worth a note about its range.
- */
+// each setting is reported once, for the first reason it goes unused
 function settingFindings(
   scope: Scope,
   manual: ManualKeys,
@@ -111,8 +96,8 @@ function settingFindings(
         scope: where,
         title: `${label} does nothing in ${modeTitle(gameType)}`,
         detail: modes
-          ? `This mode never reads it. It only applies in ${modeTitles(modes)}.`
-          : 'This mode never reads it.',
+          ? `Only used in ${modeTitles(modes)}.`
+          : 'Not used by this game type.',
         page,
       })
       continue
@@ -126,10 +111,10 @@ function settingFindings(
         id: `${id}:guard`,
         severity: 'ignored',
         scope: where,
-        title: `${label} is never read`,
-        detail: `The server only reads it when ${labelOf(scope, sibling)} is ${
+        title: `${label} is not used`,
+        detail: `Only used when ${labelOf(scope, sibling)} is ${
           guard.equals === false ? 'off' : 'on'
-        }, and here it is ${guard.equals === false ? 'on' : 'off'}.`,
+        }.`,
         page,
       })
       continue
@@ -138,8 +123,7 @@ function settingFindings(
     if (!scalar) continue
     const value = manual[path]
 
-    // the source clamps rather than refuses, so the file keeps a number the
-    // server has already replaced - which is exactly the surprise this page is for
+    // alpine clamps out-of-range values instead of rejecting them
     if (typeof value === 'number') {
       const low = scalar.min !== undefined && value < scalar.min
       const high = scalar.max !== undefined && value > scalar.max
@@ -149,10 +133,10 @@ function settingFindings(
           id: `${id}:range`,
           severity: 'ignored',
           scope: where,
-          title: `${label} is outside the range Alpine accepts`,
-          detail: `It is set to ${formatValue(scope, path, value)}. Alpine brings it back to ${
+          title: `${label} is out of range`,
+          detail: `Set to ${formatValue(scope, path, value)}. The server uses ${
             formatValue(scope, path, limit)
-          }, so that is what the server uses.`,
+          } instead.`,
           page,
         })
         continue
@@ -164,8 +148,8 @@ function settingFindings(
         id: `${id}:length`,
         severity: 'ignored',
         scope: where,
-        title: `${label} is longer than Alpine keeps`,
-        detail: `Alpine cuts it to ${scalar.maxLength} characters, so the end of it never reaches anyone.`,
+        title: `${label} is too long`,
+        detail: `Alpine truncates it to ${scalar.maxLength} characters.`,
         page,
       })
       continue
@@ -177,15 +161,13 @@ function settingFindings(
         severity: 'note',
         scope: where,
         title: `${label} is read as a ${scalar.typeMismatch.readAs} and stored as a ${scalar.typeMismatch.storedAs}`,
-        detail: 'This is a bug in Alpine rather than in your config. Until it is fixed the '
-          + 'setting does not behave the way the file reads, whatever you put here.',
+        detail: 'This is an Alpine bug. The setting may not behave as configured.',
         page,
       })
     }
   }
 }
 
-/** mutators a scope turns on that its mode will not run */
 function mutatorFindings(
   running: MutatorDeclaration[],
   gameType: string,
@@ -204,20 +186,14 @@ function mutatorFindings(
     title: blocked.length === 1
       ? `${blocked[0]!.label} does nothing in ${modeTitle(gameType)}`
       : `${blocked.length} mutators do nothing in ${modeTitle(gameType)}`,
-    detail: 'The server prints a warning at startup and carries on without '
+    detail: 'The server logs a warning at startup and skips '
       + (blocked.length === 1 ? 'it' : 'them') + '.',
     page: 'rules-mutators',
     items: blocked.map(m => m!.label),
   })
 }
 
-/**
- * Keys carried through untouched because nothing here can edit them.
- *
- * Reported per scope rather than as one pile, because the point of saying so is
- * being able to go and look at them, and a key inside one map is not something
- * to go looking for in the game rules.
- */
+// keys preserved but not editable here, reported per scope so each is easy to find
 function carriedFindings(doc: ConfigDocument, out: Finding[]) {
   const sources: { where: FindingScope; page: string | null; paths: string[] }[] = [
     { where: SERVER_SCOPE, page: null, paths: Object.keys(doc.unknown) },
@@ -244,11 +220,8 @@ function carriedFindings(doc: ConfigDocument, out: Finding[]) {
         id: `carried:known:${where.kind}${where.map ?? ''}`,
         severity: 'note',
         scope: where,
-        title: `${known.length} ${plural(known.length, 'setting has', 'settings have')} no editor here yet`,
-        detail: 'Alpine supports ' + plural(known.length, 'it', 'them') + ' and this config sets '
-          + plural(known.length, 'it', 'them') + '. ' + plural(known.length, 'It is', 'They are')
-          + ' written back out exactly as ' + plural(known.length, 'it came', 'they came')
-          + ' in, so nothing is lost by editing the rest here.',
+        title: `${known.length} ${plural(known.length, 'setting has', 'settings have')} no editor yet`,
+        detail: plural(known.length, 'It is', 'They are') + ' preserved unchanged when the config is saved.',
         page,
         items: known,
       })
@@ -259,20 +232,16 @@ function carriedFindings(doc: ConfigDocument, out: Finding[]) {
         id: `carried:strange:${where.kind}${where.map ?? ''}`,
         severity: 'note',
         scope: where,
-        title: `${strange.length} ${plural(strange.length, 'key is', 'keys are')} not ${
-          plural(strange.length, 'one', 'ones')
-        } this tool knows`,
-        detail: plural(strange.length, 'It may be', 'They may be')
-          + ' from a newer Alpine than this tool was built against, or misspelled. '
-          + plural(strange.length, 'It is', 'They are') + ' kept and written back out either way.',
+        title: `${strange.length} unrecognized ${plural(strange.length, 'key', 'keys')}`,
+        detail: 'Possibly misspelled, or from a newer Alpine version. '
+          + plural(strange.length, 'It is', 'They are') + ' preserved when the config is saved.',
         page,
         items: strange,
       })
     }
   }
 
-  // a [[levels]] entry holds a file name and its rules and nothing else, so
-  // anything else in one is a key Alpine itself warns about on the way in
+  // a [[levels]] entry holds only a filename and rules; alpine warns about anything else
   doc.levels.forEach((level, i) => {
     const misplaced = Object.keys(level.unknown)
     if (!misplaced.length) return
@@ -282,25 +251,21 @@ function carriedFindings(doc: ConfigDocument, out: Finding[]) {
       scope: mapScope(i, level.filename),
       title: `${misplaced.length} ${plural(misplaced.length, 'key', 'keys')} on this map ${
         plural(misplaced.length, 'is', 'are')
-      } in the wrong place`,
-      detail: 'A map in the rotation holds a file name and its game rules and nothing '
-        + 'else. Alpine warns about ' + plural(misplaced.length, 'this', 'these')
-        + ' at startup and moves on. ' + plural(misplaced.length, 'It was', 'They were')
-        + ' most likely meant for the game rules.',
+      } misplaced`,
+      detail: 'A rotation entry can only hold a filename and game rules. Alpine ignores '
+        + plural(misplaced.length, 'this key', 'these keys') + ' with a warning at startup.',
       page: 'rotation',
       items: misplaced,
     })
   })
 }
 
-/** a setting every map repeats that the game rules could say once */
 function repeatedFindings(doc: ConfigDocument, out: Finding[]) {
   if (doc.levels.length < 2) return
 
   const first = doc.levels[0].rules.manual
   for (const path of Object.keys(first)) {
-    // a list Alpine seeds per scope has to be repeated on every map, so hoisting
-    // it into the game rules is the one thing that would not work
+    // seeded lists are reset per map, so they must be repeated
     const schema = schemaFor('rules', path)
     if (schema?.kind === 'array' && schema.seed) continue
     const value = JSON.stringify(first[path])
@@ -310,9 +275,8 @@ function repeatedFindings(doc: ConfigDocument, out: Finding[]) {
       id: `repeated:${path}`,
       severity: 'note',
       scope: BASE_SCOPE,
-      title: `Every map sets ${labelOf('rules', path)} to the same thing`,
-      detail: 'Setting it once in the game rules would do the same job, and a map added later '
-        + 'would pick it up instead of starting without it.',
+      title: `Every map sets ${labelOf('rules', path)} to the same value`,
+      detail: 'Consider setting it once in the game rules instead, so new maps inherit it.',
       page: pageOf('rules', path),
     })
   }
@@ -328,9 +292,9 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
       severity: 'broken',
       scope: mapScope(blank[0].i, ''),
       title: blank.length === 1
-        ? 'A map in the rotation has no file name'
-        : `${blank.length} maps in the rotation have no file name`,
-      detail: 'The server has nothing to load, so the entry does not become a map.',
+        ? 'A map in the rotation has no filename'
+        : `${blank.length} maps in the rotation have no filename`,
+      detail: 'The server skips entries with no filename.',
       page: 'rotation',
     })
   }
@@ -343,10 +307,8 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
       title: absent.length === 1
         ? 'A map in the rotation is not on the FactionFiles autodownloader'
         : `${absent.length} maps in the rotation are not on the FactionFiles autodownloader`,
-      detail: 'Unless the file is already sitting on the server, Alpine cannot fetch '
-        + (absent.length === 1 ? 'it' : 'them')
-        + ' and drops the entry from the rotation at startup. Players who join without the '
-        + 'map cannot download it either.',
+      detail: 'Unless the file is already on the server, Alpine removes it from the rotation '
+        + 'at startup. Players cannot download it either.',
       page: 'rotation',
       items: absent,
     })
@@ -360,20 +322,13 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
       severity: 'note',
       scope: ROTATION_SCOPE,
       title: 'The rotation is empty',
-      detail: 'This config does not say which maps to play. That is fine if the server is '
-        + 'meant to run on votes alone, and worth a look if it is not.',
+      detail: 'No maps are listed. This is only intended for servers that run on votes alone.',
       page: 'rotation',
     })
   }
 }
 
-/**
- * A map that changes the mode starts with no mutators at all, because rebuilding
- * a mode's defaults would leave a half-applied mutator behind. The source says a
- * scope that changes game_type has to declare its mutators again, and nothing at
- * runtime says so out loud - which makes this the one thing on this page a
- * careful operator is most likely to get wrong.
- */
+// changing game_type clears inherited mutators, and alpine does not warn about it
 function clearedMutatorFindings(
   doc: ConfigDocument,
   base: MutatorDeclaration[],
@@ -392,27 +347,19 @@ function clearedMutatorFindings(
       id: `map${i}:mutators:cleared`,
       severity: 'broken',
       scope: mapScope(i, level.filename),
-      title: `This map changes the mode, so it runs without ${
+      title: `This map changes the game type and drops ${
         lost.length === 1 ? 'a mutator' : 'mutators'
-      } your game rules turn on`,
-      detail: 'Changing the mode clears every mutator the game rules set. Anything this map '
-        + 'still needs has to be turned on again here. The ordinary settings those mutators '
-        + 'wrote are not cleared with them, so the map keeps part of what they did while the '
-        + 'mutators themselves are off.',
+      } from the game rules`,
+      detail: 'Changing the game type clears all mutators, so re-enable any this map needs. '
+        + 'Settings those mutators changed are not reset, so their effects may partially remain.',
       page: 'rules-mutators',
       items: lost.map(m => mutatorsByName.get(m.name)?.label ?? m.name),
     })
   })
 }
 
-/**
- * A list row the game rules change that Alpine puts back for every map.
- *
- * The parser seeds some rows before reading each scope, so a change made only
- * in the game rules is undone for every map that does not repeat it. Nothing at
- * runtime says so, and the settings page can only show it one map at a time, so
- * it is worth saying plainly here.
- */
+// the parser reseeds some list rows before each scope, undoing base changes on
+// any map that does not repeat them. alpine does not warn about it
 function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
   if (!doc.levels.length) return
 
@@ -448,12 +395,11 @@ function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
         id: `reseed:${list.key}:${String(row[mergeKey])}`,
         severity: 'broken',
         scope: BASE_SCOPE,
-        title: `What the game rules set for ${name} does not reach ${
+          title: `${name} settings from the game rules do not apply to ${
           missing.length === doc.levels.length ? 'any map' : 'every map'
         }`,
-        detail: `Alpine adds its own ${name} row back at the start of every map, after the game `
-          + 'rules have been read, so a map keeps what you set here only if that map sets it too. '
-          + 'The weapons page can write it into every map for you.',
+        detail: `Alpine resets ${name} to its defaults on every map, so each map must set it too. `
+          + 'The weapons page can copy it to every map.',
         page: pageOf('rules', list.key),
         items: missing.map((level, i) => level.filename || `Map ${i + 1}`),
       })
@@ -483,9 +429,7 @@ export function findProblems(input: CheckInput): Finding[] {
     const rules = levelRules[i] ?? baseRules
     const where = mapScope(i, level.filename)
     settingFindings('rules', level.rules.manual, rules, modeOf(i), where, out)
-    // only what this map turns on itself. a mutator it inherits runs under the
-    // base mode, which the base scope already reported, and a map that changes
-    // the mode inherits none at all
+    // only this map's own mutators; inherited ones were already checked against the base mode
     mutatorFindings(level.rules.mutators, modeOf(i), where, out)
   })
 

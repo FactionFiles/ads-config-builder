@@ -1,7 +1,6 @@
 <script lang="ts">
-  // Search the FactionFiles archive for a level to put in the rotation. What we
-  // take from a result is the level file name; everything else on the card is
-  // there so the person can tell one Bunker Assault from the other four.
+  // only the level file name is used; the rest of the card helps tell similar
+  // maps apart
 
   import { mapCategories, searchMaps, type MapCategory, type MapResult } from '../maps'
 
@@ -13,7 +12,7 @@
 
   const { taken, onpick }: Props = $props()
 
-  /** typing settles before a search goes out */
+  /** search debounce in ms */
   const SETTLE = 300
   const PAGE = 25
 
@@ -25,7 +24,7 @@
   let problem = $state('')
   let categories = $state<MapCategory[]>([])
   let searched = $state(false)
-  /** the archive ran out before the estimated total did */
+  /** the archive ran out before the estimated total */
   let ended = $state(false)
 
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -45,8 +44,8 @@
         query, category, limit: PAGE, offset, signal: controller.signal,
       })
       if (mine !== run) return
-      // the archive counts files and the search counts level names, so the total
-      // reads a little high. a short page is the real end of the list
+      // the total counts files rather than levels and runs high, so a short page
+      // marks the real end
       const seen = new Set(offset ? results.map(m => m.fileId) : [])
       const fresh = found.results.filter(map => !seen.has(map.fileId))
       results = offset ? [...results, ...fresh] : fresh
@@ -55,8 +54,6 @@
       searched = true
     } catch (failure) {
       if (mine !== run || (failure instanceof DOMException && failure.name === 'AbortError')) return
-      // the panel keeps its typed-name field, so a search that cannot happen
-      // costs the wording rather than the feature
       problem = failure instanceof Error ? failure.message : 'Could not reach FactionFiles.'
       results = []
       total = 0
@@ -73,7 +70,7 @@
   }
 
   $effect(() => {
-    // read both so either one changing starts a new search
+    // read both so either change starts a new search
     query
     category
     search()
@@ -102,8 +99,7 @@
     return new Date(seconds * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
   }
 
-  // the site names its categories "Maps - Capture the Flag", and the prefix is
-  // noise once they are all sitting in a list of map categories
+  // strip the "Maps - " prefix the site puts on every category
   const shortName = (name: string) => name.replace(/^Maps\s*-\s*/i, '')
 </script>
 
@@ -112,13 +108,13 @@
     <input
       class="ctl grow"
       type="search"
-      placeholder="Search by map name or file name"
+      placeholder="Search by name or file name"
       aria-label="Search FactionFiles for a map"
       bind:value={query}
     />
     {#if categories.length}
-      <select class="ctl" aria-label="Only this kind of map" bind:value={category}>
-        <option value={null}>Any kind</option>
+      <select class="ctl" aria-label="Category" bind:value={category}>
+        <option value={null}>All categories</option>
         {#each categories as option (option.id)}
           <option value={option.id}>{shortName(option.name)} ({option.maps})</option>
         {/each}
@@ -129,15 +125,14 @@
   {#if problem}
     <div class="miss">
       <strong>{problem}</strong>
-      Searching needs FactionFiles to be reachable. You can still add a map by
-      typing its file name below.
+      Search is unavailable. You can still add a map by file name below.
     </div>
   {:else if loading && !shown}
     <p class="ph">Searching...</p>
   {:else if searched && !shown}
     <p class="ph">
-      Nothing in the archive matches that. The autodownloader carries maps the
-      site does not list, so a name you know is good can still be typed in below.
+      No matches. Maps not listed on FactionFiles can still be added by file name
+      below.
     </p>
   {:else if shown}
     <p class="ph count">
@@ -155,7 +150,7 @@
               <span class="rfl">{map.rfl}</span>
             </div>
             <div class="line meta">
-              <span>{map.author || 'unknown author'}</span>
+              <span>{map.author || 'Unknown author'}</span>
               <span>{shortName(map.category.name)}</span>
               <span>{sizeOf(map.size)}</span>
               {#if map.uploadedAt}<span>{whenOf(map.uploadedAt)}</span>{/if}
@@ -170,7 +165,7 @@
               onclick={() => onpick(map)}
             >{already ? 'Added' : 'Add'}</button>
             {#if map.siteUrl}
-              <a class="link" href={map.siteUrl} target="_blank" rel="noreferrer noopener">On FactionFiles</a>
+              <a class="link" href={map.siteUrl} target="_blank" rel="noreferrer noopener">View on FactionFiles</a>
             {/if}
           </div>
         </li>
@@ -235,8 +230,7 @@
   .hit:last-child { border-bottom: none; }
   .hit:hover { background: var(--surface-2); }
 
-  /* the last row of the list rather than a control under it, so reaching the
-     end of what is loaded and asking for more is one movement */
+  /* sits in the list itself so it appears right where scrolling ends */
   .hit.more {
     display: block;
     text-align: center;

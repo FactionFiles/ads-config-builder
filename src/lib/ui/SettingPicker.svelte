@@ -1,7 +1,5 @@
 <script lang="ts">
-  // Picking one of a hundred-odd settings by name. Used both for choosing the
-  // sheet's columns and for choosing what a multi-map edit changes, so the two
-  // stay one list rather than drifting into two.
+  // shared by sheet column selection and multi-map edits so both use one list
 
   import { allEntries, pages, schemaFor, textFor } from '../../schema'
 
@@ -12,7 +10,7 @@
   }
 
   interface Props {
-    /** shown above the settings, for the sheet's own pseudo-columns */
+    /** extra choices listed before the settings, like the sheet's own columns */
     extra?: Choice[]
     /** ids currently chosen; when given, rows are toggles rather than buttons */
     selected?: string[]
@@ -61,7 +59,7 @@
         <span class="gp">{choice.group}</span>
       </button>
     {:else}
-      <p class="none">Nothing matches "{filter}".</p>
+      <p class="none">No settings match "{filter}".</p>
     {/each}
   </div>
 </div>

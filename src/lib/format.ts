@@ -1,16 +1,11 @@
-// One place that turns a stored value into the words a person reads. The
-// rotation sheet and a setting's own field render the same value in different
-// shapes, and if they each did their own conversion they would eventually
-// disagree about what the config says.
+// the single place stored values become display text, so every view agrees
 
 import { choiceLabelsFor, schemaFor, textFor, type Scope } from '../schema'
 import type { AuthoredEntry, ScalarKey } from '../schema/types'
 import { tableFor } from './gamedata'
 
-/** anything that knows what unit it is stored in and what unit to show */
 type Measured = Pick<AuthoredEntry, 'unit' | 'display'>
 
-/** the file stores seconds where the user thinks in minutes, and so on */
 export function toDisplay(text: Measured, value: unknown): unknown {
   if (typeof value !== 'number') return value
   if (text.display === 'minutes' && text.unit === 'seconds') return value / 60
@@ -24,7 +19,6 @@ export function toFile(text: Measured, value: number): number {
   return value
 }
 
-/** the unit next to the number, in whatever unit is being shown */
 export function unitFor(text: Measured): string | undefined {
   return text.display ?? text.unit
 }
@@ -38,7 +32,7 @@ function tidy(n: number): string {
   return String(Math.round(n * 100) / 100)
 }
 
-/** what a choice or a game data name is called, falling back to the raw token */
+/** falls back to the raw token */
 export function labelForChoice(scope: Scope, path: string, value: string): string {
   const fromAuthored = choiceLabelsFor(scope, path)?.[value]
   if (fromAuthored) return fromAuthored
@@ -50,11 +44,7 @@ export function labelForChoice(scope: Scope, path: string, value: string): strin
   return value
 }
 
-/**
- * A list as one phrase. Where the entries are records there is nothing to print
- * but the field they are keyed by, and where they are not even keyed by one, all
- * that is left to say is how many there are.
- */
+// records show their merge key, or just a count when they have none
 function listOf(scope: Scope, path: string, value: unknown[]): string {
   if (value.every(entry => typeof entry !== 'object' || entry === null)) return value.join(', ')
   const schema = schemaFor(scope, path)
@@ -68,7 +58,6 @@ function listOf(scope: Scope, path: string, value: unknown[]): string {
     .join(', ')
 }
 
-/** a setting's value as one short phrase, for a table cell or a summary line */
 export function formatValue(scope: Scope, path: string, value: unknown): string {
   if (value === undefined || value === null) return 'not set'
   if (typeof value === 'boolean') return value ? 'On' : 'Off'

@@ -1,7 +1,5 @@
-// The document the user is editing. It holds only what they actually set, which
-// is exactly what gets written to the file - everything else is derived by the
-// resolver. That is what keeps the export free of surprises, and what lets a
-// setting say honestly that nobody has touched it.
+// the edited document holds only what the user set, which is exactly what gets
+// written. everything else is derived by the resolver.
 
 import { parse, stringify } from 'smol-toml'
 import { meta, rulesIndex, server as serverSchema, serverIndex } from '../schema'
@@ -14,11 +12,7 @@ export type ManualKeys = Record<string, unknown>
 export interface RulesScope {
   mutators: MutatorDeclaration[]
   manual: ManualKeys
-  /**
-   * Rules this scope sets that the tool has no field for - a setting it knows
-   * but cannot yet edit, or one a newer Alpine added. Kept verbatim and written
-   * back out, so opening a config here never costs you anything.
-   */
+  /** rules with no editor here, kept verbatim */
   unknown: ManualKeys
 }
 
@@ -29,14 +23,10 @@ export interface LevelEntry {
   unknown: ManualKeys
 }
 
-/**
- * One admin profile. The fields are keyed by their schema key rather than named
- * here, so the page renders them from the schema like every other setting and
- * the key names live in exactly one place.
- */
+/** fields are keyed by schema key so the page can render them from the schema */
 export interface RconProfile {
   fields: ManualKeys
-  /** anything else in this profile entry, kept verbatim */
+  /** unrecognized keys, kept verbatim */
   unknown: ManualKeys
 }
 
@@ -45,11 +35,7 @@ export interface ConfigDocument {
   base: RulesScope
   levels: LevelEntry[]
   rconProfiles: RconProfile[]
-  /**
-   * Keys we did not recognize when the file was opened, kept verbatim so a
-   * config written by a newer Alpine survives a round trip through this tool
-   * instead of being quietly eaten.
-   */
+  /** unrecognized keys, kept verbatim so newer configs survive a round trip */
   unknown: ManualKeys
 }
 
@@ -69,12 +55,8 @@ export function emptyLevel(filename: string): LevelEntry {
   return { filename, rules: emptyScope(), unknown: {} }
 }
 
-/**
- * A pasted rotation turned into level entries. People paste all sorts of things
- * - a numbered list, a column out of a spreadsheet, the lines of somebody else's
- * config - so anything that is not the file name is stripped rather than
- * rejected.
- */
+// accepts numbered lists, spreadsheet columns, or config lines; strips anything
+// that is not the filename
 export function parseLevelList(text: string): string[] {
   return text
     .split(/[\n,]/)
@@ -88,13 +70,7 @@ export function parseLevelList(text: string): string[] {
     .map(name => (name.includes('.') ? name : name + '.rfl'))
 }
 
-/**
- * One row of a merged list written into every map.
- *
- * Repeating a key across every map is normally the worse config, but a row the
- * parser seeds once per scope is put back for each map, so the game rules alone
- * cannot hold it and this is the only arrangement that works.
- */
+// needed for rows the parser reseeds per scope, which the game rules alone cannot hold
 export function withRowOnEveryLevel(
   levels: LevelEntry[],
   path: string,
@@ -110,7 +86,6 @@ export function withRowOnEveryLevel(
   })
 }
 
-/** turn flat dotted paths back into the nested tables TOML wants */
 function nest(flat: ManualKeys): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [path, value] of Object.entries(flat)) {
@@ -130,8 +105,7 @@ function nest(flat: ManualKeys): Record<string, unknown> {
 function scopeToToml(scope: RulesScope): Record<string, unknown> {
   const out: Record<string, unknown> = {}
 
-  // nested in one pass so a table holding both an edited key and an untouched
-  // one comes back out whole rather than one half replacing the other
+  // nested together so a table with both edited and unknown keys stays whole
   const rules = nest({ ...scope.manual, ...scope.unknown })
   if (scope.mutators.length) {
     rules.mutators = scope.mutators.map(m => ({ name: m.name, ...(m.options ?? {}) }))
@@ -165,24 +139,16 @@ export function toToml(doc: ConfigDocument): string {
 }
 
 // ---------------------------------------------------------------------------
-// Opening a config somebody else wrote. The rule throughout is that nothing is
-// thrown away: a key this tool has no field for is kept exactly as it was and
-// written back out, so a config from a newer Alpine survives the round trip.
+// import. keys with no editor are kept verbatim and written back out.
 // ---------------------------------------------------------------------------
 
 export interface ImportReport {
   doc: ConfigDocument
-  /** settings Alpine has but this tool cannot edit yet, kept as they were */
+  /** known settings with no editor yet */
   kept: string[]
-  /** keys this tool does not recognize at all, also kept */
   unrecognized: string[]
-  /**
-   * Keys the file carried that Alpine has since removed. These are the one thing
-   * the tool does drop rather than keep: the server no longer acts on them, so
-   * writing them back would leave the file claiming a rule that never runs.
-   */
+  /** keys alpine has removed. dropped rather than kept, since the server ignores them */
   removed: string[]
-  /** the ads_version the file declared, when it declared one */
   fromVersion: number | null
 }
 
@@ -191,11 +157,7 @@ function isTable(value: unknown): value is Record<string, unknown> {
     && !Array.isArray(value) && !(value instanceof Date)
 }
 
-/**
- * Every leaf in a table as a dotted path. A table the schema knows is walked
- * into; anything else stays whole, which is what preserves a structure we have
- * no model for.
- */
+// only tables the schema knows are walked into, so unmodeled structures stay whole
 function flatten(
   table: Record<string, unknown>,
   index: Map<string, SchemaKey>,
@@ -221,7 +183,6 @@ interface Split {
   unrecognized: string[]
 }
 
-/** a list this tool can edit, as opposed to one it can only carry through */
 function isEditableList(schema: SchemaKey | undefined): boolean {
   return schema?.kind === 'array' && !schema.complex
     && ((schema.item?.length ?? 0) > 0 || schema.itemType !== undefined)
@@ -252,14 +213,11 @@ function readMutators(value: unknown): MutatorDeclaration[] {
 }
 
 function scopeFromToml(table: Record<string, unknown>, report: ImportReport, where: string): RulesScope {
-  // Alpine 1.4 removed rules presets. It still accepts the key inside a level
-  // entry so an old config loads, but nothing applies it, so it is reported and
-  // dropped rather than carried into a file that would misrepresent the rules.
+  // alpine 1.4 still accepts rules_presets so old configs load, but ignores it
   const { rules_presets, rules, ...direct } = table
   if (rules_presets !== undefined) report.removed.push(where)
 
-  // Alpine reads rule keys written straight into the scope before it reads the
-  // [rules] table, so both are the same layer with [rules] winning
+  // alpine reads keys set directly on the scope before [rules], so [rules] wins
   const inner = isTable(rules) ? rules : {}
   const { mutators, ...innerRules } = inner
   const merged = { ...direct, ...innerRules }

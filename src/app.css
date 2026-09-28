@@ -1,7 +1,5 @@
-/* design tokens, carried over from the approved prototype in design/prototype.html.
-   the prototype carried a light palette too - this tool ships dark only, so the
-   dark values are the whole palette rather than an override.
-   color in this tool means provenance and nothing else - chrome uses --graphite. */
+/* design tokens. dark only, so there is no light palette to keep in step.
+   color means provenance and nothing else; chrome uses --graphite. */
 :root {
   color-scheme: dark;
 
@@ -30,7 +28,7 @@
   --p-you-b: #1A2B3E;
   --p-map-b: #241E3C;
 
-  /* the provenance colors are light enough to need dark type on top of them */
+  /* dark text on provenance colors */
   --on-accent: #16181B;
 
   --err: #E8837B;
@@ -74,12 +72,11 @@ button, input, select, textarea {
   color: inherit;
 }
 
-/* a tick box is chrome, so it follows graphite rather than the browser's accent */
+/* checkboxes are chrome, so they use graphite */
 input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
 
 ::placeholder { color: var(--ink-3); opacity: 1; }
 
-/* the prototype's app frame kept its scrollbars out of the way */
 * { scrollbar-width: thin; }
 
 :focus-visible {
@@ -88,8 +85,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
 }
 
 /* ---------------------------------------------------------------------------
-   settings fields. one renderer drives every setting, which is what stops the
-   rules form ever existing twice the way it did in the old builder.
+   settings fields
    --------------------------------------------------------------------------- */
 
 .fr {
@@ -128,7 +124,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
   max-width: 52ch;
 }
 
-/* the game's own description of the choice currently selected */
+/* description of the selected choice */
 .fr .blurb {
   font-size: 12px;
   color: var(--ink-3);
@@ -136,11 +132,11 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--graphite); }
   text-align: right;
 }
 
-/* a setting the mode in play ignores, still shown because this scope sets it */
+/* set in this scope but ignored by the current game type */
 .fr.offmode .lab { color: var(--ink-2); }
 .fr.offmode .warn { color: var(--ink-3); }
 
-/* a setting the server ignores until its sibling is on */
+/* ignored until a sibling setting is on */
 .fr.inert .lab,
 .fr.inert .help { color: var(--ink-3); }
 .fr.inert .ctlwrap { opacity: .55; }
@@ -274,7 +270,7 @@ select.ctl { cursor: pointer; }
 }
 
 /* ---------------------------------------------------------------------------
-   buttons that are not a setting control: toolbars, panels, dialogs
+   toolbar, panel and dialog buttons
    --------------------------------------------------------------------------- */
 
 .btn {
@@ -314,8 +310,7 @@ textarea.ctl {
 }
 
 /* ---------------------------------------------------------------------------
-   a standing note at the top of a page: how the thing below it works, not a
-   warning about anything the user did
+   informational page banner, not a warning
    --------------------------------------------------------------------------- */
 
 .banner {

@@ -33,20 +33,18 @@
     if (c.layer === 'gametype') return `${c.source} defaults`
     if (c.layer === 'mutator') return `Mutator: ${c.source}`
     if (c.layer === 'inherited') return 'Base rules'
-    return levelScope ? 'You, for this map' : 'You'
+    return levelScope ? 'This map' : 'You'
   }
 
   function show(value: unknown) {
     if (value === true) return 'on'
     if (value === false) return 'off'
     if (value === '' || value === undefined) return 'not set'
-    // a list is too long to print in a popover, and a row of it is a record
     if (Array.isArray(value)) return value.length === 1 ? '1 entry' : `${value.length} entries`
     return String(value)
   }
 
-  // a list that is folded together rather than replaced has no layer whose value
-  // was thrown away, so nothing in its trail is crossed out
+  // merged lists keep every layer's rows, so nothing in the trail is struck out
   const schema = $derived(schemaFor(scope, path))
   const merged = $derived(schema?.kind === 'array' && schema.mergeKey !== undefined)
 
@@ -56,8 +54,8 @@
 
 <svelte:window onkeydown={e => e.key === 'Escape' && onclose?.()} />
 
-<div class="pop" style="top:{position.top}px; left:{position.left}px" role="dialog" aria-label="Where this value comes from">
-  <h5>Where this comes from</h5>
+<div class="pop" style="top:{position.top}px; left:{position.left}px" role="dialog" aria-label="Value source">
+  <h5>Value source</h5>
   <div class="pk">{path}</div>
 
   {#each trail as contribution, i (i)}
@@ -84,7 +82,7 @@
   {#if canReset}
     <div class="acts">
       <button type="button" class="rst" onclick={() => { onreset?.(path); onclose?.() }}>
-        {levelScope ? 'Use the base rules value' : 'Reset to default'}
+        {levelScope ? 'Use base rules value' : 'Reset to default'}
       </button>
     </div>
   {/if}

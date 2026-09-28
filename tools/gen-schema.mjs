@@ -1,10 +1,8 @@
-// Generates schema/generated/*.json by parsing the pinned Alpine Faction source.
+// generates schema/generated/*.json by parsing the pinned alpine source.
 //
-// It parses rather than runs: the mutator apply functions read runtime globals,
-// and the codebase is a Windows game patch that will not build on a CI runner.
-// The tradeoff is that every pattern this relies on is a shape in the upstream
-// source that a refactor could break, so every extractor fails loudly with the
-// pattern that stopped matching rather than quietly emitting less.
+// parses rather than runs, since the source is a windows game patch that reads
+// runtime globals. any upstream refactor can break a pattern here, so every
+// extractor fails loudly with the pattern that stopped matching.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -19,8 +17,8 @@ class SchemaError extends Error {}
 function fail(what, detail) {
   throw new SchemaError(
     `${what}\n  ${detail}\n\n` +
-    `  The upstream source shape this generator relies on has changed.\n` +
-    `  Fix the extractor in tools/gen-schema.mjs, or roll the vendor/AlpineFaction pin back.`
+    `  The upstream source no longer matches this pattern.\n` +
+    `  Fix the extractor in tools/gen-schema.mjs, or roll back the vendor/AlpineFaction pin.`
   )
 }
 
@@ -105,7 +103,7 @@ export function normalizeType(cppType) {
   if (t === 'float' || t === 'double') return 'float'
   if (INT_TYPES.has(t)) return 'int'
   if (t === 'std::string' || t === 'std::string_view') return 'string'
-  return null // a struct, container, enum or something else we do not treat as a scalar
+  return null // not a scalar
 }
 
 // returns {ok:true, value} for literals we understand, {ok:false} otherwise
@@ -125,10 +123,8 @@ export function parseLiteral(raw) {
 // struct table: members, their defaults, and what each setter writes
 // ---------------------------------------------------------------------------
 
-// A setter is the only place the config-file value and the stored value can
-// differ, so it is where the UI gets its bounds and its units. Setter bodies are
-// short but not always a single statement, so follow the argument through any
-// locals it passes through rather than only matching `member = f(arg)`.
+// setters are where bounds and unit conversions live. the argument is traced
+// through locals since bodies are not always a single `member = f(arg)`.
 function analyzeSetter(body, argName, members) {
   const tainted = new Set([argName])
   const result = { scale: 1 }
@@ -140,7 +136,6 @@ function analyzeSetter(body, argName, members) {
     if ([...tainted].some(t => new RegExp(`\\b${t}\\b`).test(expr))) tainted.add(name)
   }
 
-  // the assignment into a member that carries the argument
   let target = null
   for (const m of body.matchAll(/(?:^|\n|\{|;)\s*([a-z_]\w*)\s*(?:=\s*([^;]+)|\.assign\s*\(([^;]+)\))\s*;/g)) {
     const [, name, rhs, assigned] = m
@@ -245,7 +240,7 @@ export function parseStructs(src) {
         if (lit.ok) entry.default = lit.value
         else entry.defaultExpr = init.trim()
       } else if (entry.scalar) {
-        // an uninitialized scalar member; C++ leaves it indeterminate, so flag it
+        // c++ leaves it indeterminate
         entry.uninitialized = true
       }
       structs[name].members[member] = entry
@@ -263,9 +258,7 @@ export function parseStructs(src) {
       structs[name].setters[setter] = analyzed ?? { opaque: true }
     }
 
-    // the other methods, for the name checks they hold. an array key is often
-    // read by handing each entry to one of these, so the answer to "is this
-    // field a weapon name" lives in the method rather than at the call site.
+    // other methods, since array entries are often validated inside one
     structs[name].methods = {}
     const methodRe = /(?:^|\n)\s*(?:[A-Za-z_][\w:<>\s*&,]*\s+)?([a-z_]\w*)\s*\(([^)]*)\)\s*(?:const\s*)?(?:noexcept\s*)?\{/g
     let km
@@ -291,8 +284,7 @@ function lookupKind(fn) {
   return fn.includes('weapon') ? 'weapon' : fn.includes('character') ? 'character' : 'item'
 }
 
-// which of `roots` each local carries, so a value that has been copied into
-// another variable before it is checked is still traced back to where it came in
+// maps each local to the root it was copied from
 function taintOrigins(body, roots) {
   const origin = new Map(roots.map(r => [r, r]))
   for (const m of body.matchAll(/(?:^|\n|\{)\s*(?:[A-Za-z_][\w:<>\s*&]*\s+)?([A-Za-z_]\w*)\s*(?:=|\{)\s*([^;]+);/g)) {
@@ -318,8 +310,7 @@ function lookupsByRoot(body, roots) {
   return out
 }
 
-// blank out anything inside a nested { } so member scanning does not walk into
-// method bodies, while keeping character offsets intact
+// blanks nested { } contents, preserving offsets, so member scanning skips method bodies
 function stripNestedBraces(body) {
   let out = ''
   let depth = 0
@@ -427,8 +418,7 @@ export function extractKeys(cpp, structs, fnName, structName, seen = new Set()) 
 
   const body = funcBody(cpp, new RegExp(`\\b\\w[\\w:<>&\\s*]*\\b${fnName}\\s*\\([^)]*\\)\\s*\\{`), fnName)
 
-  // a parser can start by delegating to a more general one and then add its own
-  // keys, so those inherited keys have to come along
+  // include keys from any parser this one delegates to
   const inherited = []
   for (const m of body.matchAll(/\b\w+\s+\w+\s*=\s*(parse_\w+)\s*\(\s*\w+\s*\)\s*;/g)) {
     if (seen.has(m[1])) continue
@@ -440,21 +430,18 @@ export function extractKeys(cpp, structs, fnName, structName, seen = new Set()) 
   return [...inherited.filter(k => !ownKeys.has(k.key)), ...own]
 }
 
-// a parser body is a tree of `if`s: some test a TOML key, others gate a group of
-// keys on a value already read (`if (v.enabled) { ... }`). The second kind is the
-// dependency information the UI needs to grey out fields, so it is kept.
+// a parser body is a tree of `if`s that either test a toml key or gate a group of
+// keys on a value already read (`if (v.enabled)`). the gates become guards.
 function walkBody(cpp, structs, body, structName, seen, requires) {
   const keys = []
 
-  // some array keys are read by a local lambda called once per key, so the key
-  // name lives at the call site rather than in the accessor
+  // some array keys are read by a local lambda, with the key name at the call site
   const lambdas = []
   for (const m of body.matchAll(/auto\s+(\w+)\s*=\s*\[[^\]]*\]\s*\(([^)]*)\)\s*\{/g)) {
     lambdas.push({ name: m[1], body: bodyAt(body, m.index + m[0].length - 1) })
   }
 
-  // scan around the lambda bodies - their keys come from the call sites below,
-  // so scanning into them would emit the item fields as loose top-level keys
+  // skip lambda bodies, or their item fields would appear as top-level keys
   let scanText = body
   for (const l of lambdas) scanText = scanText.replace(l.body, ' '.repeat(l.body.length))
   const ifs = scanIfStatements(scanText)
@@ -463,7 +450,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
     const acc = cond.match(ACCESSOR)
 
     if (!acc) {
-      // not a key test - a guard around a group of keys
+      // a guard around a group of keys
       const inner = walkBody(cpp, structs, consequent, structName, seen, normalizeGuard(cond, requires))
       keys.push(...inner)
       continue
@@ -495,17 +482,14 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
 
     const assign = consequent.match(/([A-Za-z_]\w*)((?:\.\w+)+)\s*(?:=|\()/)
     if (assign) {
-      // a length-capped string is written with .assign(...) rather than =, so the
-      // member is one segment up from what the assignment names
+      // length-capped strings use .assign(...), so drop that segment
       const path = assign[2].replace(/^\./, '').replace(/\.assign$/, '')
       const target = resolveTarget(structs, structName, path)
       const inline = readInlineConstraints(consequent)
       if (target) {
         Object.assign(target, inline)
         Object.assign(entry, target, { target: path })
-        // the config file is read as one type and stored as another. usually a
-        // deliberate unit conversion, but a bool stored from a float read is an
-        // upstream bug the UI must not paper over.
+        // int/float differences are unit conversions; anything else is an upstream bug
         if (target.storedType && entry.type && target.storedType !== entry.type &&
             !(entry.type === 'float' && target.storedType === 'int') &&
             !(entry.type === 'int' && target.storedType === 'float')) {
@@ -530,7 +514,7 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
     }
   }
 
-  // accessors outside any `if` - rare, but silently dropping one would lose a key
+  // accessors outside any `if` are rare, but must not be dropped
   const covered = ifs.map(x => scanText.slice(x.start, x.end)).join('\n')
   for (const m of scanText.matchAll(new RegExp(ACCESSOR.source, 'g'))) {
     if (covered.includes(m[0])) continue
@@ -570,15 +554,13 @@ function readInlineConstraints(consequent) {
     }
   }
 
-  // a string length cap is a trim where it is read, not a clamp in a setter
   const trim = consequent.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*(\d+)\s*\)/)
   if (trim) out.maxLength = Number(trim[1])
 
   return out
 }
 
-// `v.enabled` -> depends on the sibling key `enabled`. Anything less obvious is
-// kept verbatim so it shows up rather than being silently dropped.
+// `v.enabled` -> sibling key `enabled`. anything else is kept verbatim as expr
 function normalizeGuard(cond, outer) {
   const c = cond.trim()
   const simple = c.match(/^!?\s*[A-Za-z_]\w*\.(\w+)$/)
@@ -587,8 +569,7 @@ function normalizeGuard(cond, outer) {
   return outer ? [...(Array.isArray(outer) ? outer : [outer]), g] : [g]
 }
 
-// which struct a nested `x.y = parse_foo(...)` writes into, so the sub-parser's
-// keys resolve against the right member table
+// which struct a nested `x.y = parse_foo(...)` writes into
 function subStructFor(cpp, structs, consequent, structName) {
   const lhs = consequent.match(/([A-Za-z_]\w*)((?:\.\w+)+)\s*=/)
   if (lhs) {
@@ -608,13 +589,8 @@ function subStructFor(cpp, structs, consequent, structName) {
   return structName
 }
 
-// fields read off each element of an array-of-tables
-/**
- * The shape of one entry in an array key: the fields of a table, or a list of
- * values where the entries are not tables. An array whose shape does not come
- * out of this is one the UI would draw as an empty editor, so it stops the
- * build rather than shipping a list nobody can fill in.
- */
+// table fields or a value type for one array entry. an unreadable shape fails
+// the build, since the UI would otherwise show an empty editor
 function extractArrayShape(block, body, structs, structName, key) {
   const fields = []
   const re = /\[\s*"(\w+)"\s*\]\s*\.\s*(?:value<([^>]+)>|value_or<([^>]+)>)/g
@@ -635,8 +611,7 @@ function extractArrayShape(block, body, structs, structName, key) {
     for (const [local, field] of locals) {
       const found = fields.find(f => f.key === field)
       if (!found) continue
-      // a field the parser asks whether the entry even carried. an entry that
-      // leaves it out is restating the rest, not asking for a zero.
+      // has_value() means omitting the field keeps the previous value
       if (new RegExp(`\\b${local}\\s*\\.\\s*has_value\\s*\\(`).test(block)) found.optional = true
       const fallback = block.match(new RegExp(`\\b${local}\\s*\\.\\s*value_or\\s*\\(([^)]*)\\)`))
       if (fallback) {
@@ -644,7 +619,7 @@ function extractArrayShape(block, body, structs, structName, key) {
         if (lit.ok) found.default = lit.value
       }
     }
-    // the same fallback written where the field is read rather than where it is used
+    // value_or written at the read site instead
     for (const m of block.matchAll(/\[\s*"(\w+)"\s*\][^;[\]]*?\.\s*value_or\s*(?:<[^>]+>)?\s*\(([^)]*)\)/g)) {
       const found = fields.find(f => f.key === m[1])
       const lit = parseLiteral(m[2])
@@ -653,24 +628,22 @@ function extractArrayShape(block, body, structs, structName, key) {
     return { item: fields, ...mergeKeyOf(block, fields, locals), ...seedRows(block, body, locals, key) }
   }
 
-  // entries that are values rather than tables: a plain list, or - where the
-  // entries are themselves arrays - a list of lists, as the Gun Game ladder is
+  // a plain list, or a list of lists like the gun game ladder
   const element = block.match(/\.\s*value<([^>]+)>/)
   if (element) {
     const itemType = normalizeType(element[1].trim())
     return /\.\s*as_array\s*\(\s*\)/.test(block) ? { itemsAreLists: true, itemType } : { itemType }
   }
 
-  // handed off whole to a function of its own, as the mutator declarations are.
-  // what the entries hold is that function's business rather than this key's.
+  // handed off whole to another function, like the mutator declarations
   const via = block.match(/\b(\w+)\s*\(\s*\*\s*\w+\s*,/)
   if (via) return { complex: true, via: via[1] }
 
   expect(false, `Could not read the shape of the ${key} array`,
-    'Expected either `(*tbl)["field"].value<T>()` entries or a nested array of values')
+    'Expected `(*tbl)["field"].value<T>()` entries or a nested array of values')
 }
 
-/** the local each field of an entry was read into, which is what later code names */
+/** local variable -> entry field it was read from */
 function localFields(block) {
   const out = new Map()
   for (const m of block.matchAll(/\b(?:auto|[\w:<>]+)\s+(\w+)\s*=\s*\(?\s*\*?\s*\w+\s*\)?\s*\[\s*"(\w+)"\s*\]/g)) {
@@ -679,24 +652,14 @@ function localFields(block) {
   return out
 }
 
-/**
- * Rows the parser puts into the list before it reads the file at all.
- *
- * Alpine uses this to keep a stock behavior it has patched out of the game: the
- * Fusion Rocket Launcher is left out of weapon stay by the game itself, Alpine
- * removes that hardcoded check so the exemption can be configured, and seeds the
- * list with the same entry so a config that says nothing still behaves like
- * stock. The rows are read off the same `add` call the merge key comes from, so
- * a seeding call that stops looking like one stops the build rather than
- * quietly dropping a row the tool would then claim does not exist.
- */
+// rows the parser adds before reading the file. alpine uses this to restore the
+// stock fusion weapon stay exemption it patched out of the game.
 function seedRows(block, body, locals, key) {
   const read = block.match(/([\w.]+)\s*\.\s*add\s*\(([^;]*)\)\s*;/)
   if (!read) return {}
   const receiver = read[1]
 
-  // which field of an entry each positional argument of `add` carries, learned
-  // from the call that reads the file rather than from the argument names
+  // map each positional `add` argument to a field, using the call that reads the file
   const columns = splitTopLevelArgs(read[2]).map(arg => {
     for (const [local, field] of locals) {
       if (new RegExp(`\\b${local}\\b`).test(arg)) return field
@@ -709,19 +672,18 @@ function seedRows(block, body, locals, key) {
   for (const m of body.matchAll(new RegExp(`${escaped}\\s*\\.\\s*add\\s*\\(([^;]*)\\)\\s*;`, 'g'))) {
     const args = splitTopLevelArgs(m[1])
     const values = args.map(parseLiteral)
-    // the call that reads the file is this same one with locals in place of
-    // literals, which is what tells the two apart
+    // seeding calls pass literals; the reading call passes locals
     if (!values.every(v => v.ok)) continue
 
     expect(args.length <= columns.length,
-      `A row seeded into ${key} sets more values than the parser reads back out`,
-      `The seeding call passes ${args.length} arguments where reading an entry passes ${columns.length}`)
+      `A row seeded into ${key} has too many values`,
+      `The seeding call passes ${args.length} arguments, the reading call passes ${columns.length}`)
 
     const row = {}
     args.forEach((_, i) => {
       expect(columns[i] != null,
-        `Could not tell which column a row seeded into ${key} sets`,
-        `Argument ${i + 1} of ${receiver}.add did not name a field the parser reads from an entry`)
+        `Could not map a column of a row seeded into ${key}`,
+        `Argument ${i + 1} of ${receiver}.add does not match any field the parser reads`)
       row[columns[i]] = values[i].value
     })
     rows.push(row)
@@ -730,12 +692,7 @@ function seedRows(block, body, locals, key) {
   return rows.length ? { seed: rows } : {}
 }
 
-/**
- * The field entries are keyed by, where the parser folds each one into what is
- * already there instead of replacing the list. Naming that key again in a later
- * scope changes the fields it carries and leaves the rest, which is what lets a
- * map turn one weapon of an inherited kit off without restating the kit.
- */
+// the first `add` argument is the key a later scope uses to update one entry
 function mergeKeyOf(block, fields, locals) {
   const call = block.match(/\.\s*add\s*\(([^;]*)\)\s*;/)
   if (!call) return {}
@@ -747,12 +704,7 @@ function mergeKeyOf(block, fields, locals) {
   return {}
 }
 
-/**
- * Which fields of an array entry name something out of the game's own tables.
- * The check is at the call site for some keys and inside the method the value is
- * handed to for others, so both are followed - a weapon name shown as a text box
- * is a name typed wrong.
- */
+// fields checked against game data tables, either at the call site or in a called method
 function itemLookups(block, structs, structName) {
   const fieldOf = localFields(block)
 
@@ -776,7 +728,6 @@ function itemLookups(block, structs, structName) {
   return out
 }
 
-/** the struct a member path lands on, for following a call into its method */
 function resolveStruct(structs, structName, path) {
   let cur = structs[structName]
   for (const part of path ? path.split('.') : []) {
@@ -786,9 +737,7 @@ function resolveStruct(structs, structName, path) {
   return cur
 }
 
-// The Gun Game ladder is stored as written and resolved when the tiers are
-// built, so the table its names belong to is named there rather than in the
-// config parser.
+// gun game tiers are resolved when built, not in the config parser
 export function extractTierLookup(sources) {
   const body = funcBody(sources.gungameCpp, /\bvoid\s+resolve_tier_weapons\s*\(\s*\)\s*\{/, 'resolve_tier_weapons')
   const uses = body.includes('gungame_tiers')
@@ -837,7 +786,7 @@ export function extractGameTypes(sources, structs) {
   }
   expect(order.some(g => g.isTeam), 'No team game types found', 'multi_game_type_is_team_type matched nothing')
 
-  // which limit key each type is scored by, straight off get_score_limit
+  // score limit key per type, from get_score_limit
   const scoreFn = funcBody(sources.serverInternalH, /std::optional<int>\s+get_score_limit\s*\([^)]*\)\s*const\s*\{/, 'get_score_limit')
   let cases = []
   for (const line of scoreFn.split('\n')) {
@@ -855,7 +804,7 @@ export function extractGameTypes(sources, structs) {
     cases = []
   }
 
-  // rounds gating, so the rounds settings can hide in the modes that ignore them
+  // which game types use rounds
   const roundsFn = funcBody(sources.gametypeCpp,
     /\bgt_type_uses_rounds\s*\([^)]*\)\s*\{/, 'gt_type_uses_rounds')
   for (const g of order) g.usesRounds = false
@@ -867,7 +816,7 @@ export function extractGameTypes(sources, structs) {
   }
   expect(roundTypes > 0, 'No game types use rounds', 'gt_type_uses_rounds names no NetGameType values')
 
-  // the one-line mode descriptions the game itself shows
+  // game type titles and descriptions
   const helpFn = funcBody(sources.gametypeCpp,
     /\bmulti_gametype_help_text\s*\([^)]*\)\s*\{/, 'multi_gametype_help_text')
   let helpCase = null
@@ -902,9 +851,8 @@ export function extractGameTypes(sources, structs) {
 // per game type defaults
 // ---------------------------------------------------------------------------
 
-// apply_defaults_for_game_type is a preamble applied to every type followed by
-// one switch case per type. Both are plain assignments, so they read out as a
-// list of operations rather than having to be executed.
+// apply_defaults_for_game_type is a common preamble plus one switch case per
+// type, all plain assignments that read out as a list of operations
 export function extractGameTypeDefaults(sources, structs) {
   const body = funcBody(sources.dediCpp, /\bapply_defaults_for_game_type\s*\([^)]*\)\s*\{/, 'apply_defaults_for_game_type')
   const switchAt = body.search(/\bswitch\s*\(/)
@@ -917,30 +865,25 @@ export function extractGameTypeDefaults(sources, structs) {
   const switchOpen = body.indexOf('{', switchAt)
   const switchBody = bodyAt(body, switchAt)
   const perType = {}
-  // a mode can share an arm by falling through to the next label, and reading
-  // only the label the brace sits on would silently hand the other one the
-  // default arm instead
+  // read every fallthrough label, not just the one before the brace
   const caseRe = /((?:case\s+rf::NetGameType::NG_TYPE_\w+\s*:\s*)+)\{/g
   let m
   while ((m = caseRe.exec(switchBody)) !== null) {
     const labels = [...m[1].matchAll(/NG_TYPE_(\w+)/g)].map(g => `NG_TYPE_${g[1]}`)
     const body = bodyAt(switchBody, m.index + m[0].length - 1)
-    // the arm can ask which of the modes sharing it is running, so each is read
-    // on its own rather than once for the group
+    // read per label, since a shared arm can test which game type is running
     for (const label of labels) perType[label] = readDefaultOps(body, structs, label)
   }
   expect(Object.keys(perType).length > 0, 'No game type default cases',
     'The switch in apply_defaults_for_game_type matched no `case rf::NetGameType::X: {`')
 
-  // the modes with no case of their own still get the default arm, and those are
-  // the ordinary ones - deathmatch and capture the flag among them
+  // the default arm covers dm, ctf and other types with no case of their own
   const defaultAt = switchBody.search(/\bdefault\s*:\s*\{/)
   expect(defaultAt !== -1, 'The game type switch has no default arm',
-    'Expected `default: {` for the modes with no case of their own')
+    'Expected `default: {`')
   const fallback = readDefaultOps(bodyAt(switchBody, defaultAt), structs)
 
-  // the tail completes the kit with whichever weapon the mode spawns players
-  // holding, so it runs after the case rather than with the preamble
+  // the tail after the switch adds the spawn weapon to the loadout
   const tail = body.slice(switchOpen + switchBody.length + 2)
   const after = readDefaultOps(tail, structs)
   expect(after.some(op => op.op === 'loadoutSpawnWeapon'),
@@ -954,8 +897,7 @@ function readDefaultOps(block, structs, gameType = null) {
   const consts = blockConstants(block)
   const ops = []
   for (const stmt of block.split(';')) {
-    // the statement may sit inside an `if` that spans the same chunk, so it is
-    // found by where it starts rather than by the chunk starting with it
+    // match anywhere in the chunk, since the statement may follow an `if`
     const at = stmt.match(/(?:^|[{}\n])[ \t]*rules\.(.*)$/s)
     if (!at) continue
     const path = at[1].trim()
@@ -964,8 +906,7 @@ function readDefaultOps(block, structs, gameType = null) {
     if (add) {
       const args = splitTopLevelArgs(add[1])
       const weapon = parseLiteral(args[0] ?? '')
-      // the kit is completed with the spawn weapon rather than a named one, and
-      // the reserve that comes with it is the stock grant
+      // the spawn weapon rather than a named one, with the stock reserve
       if (!weapon.ok && /default_player_weapon\.weapon_name/.test(args[0] ?? '')) {
         ops.push({ op: 'loadoutSpawnWeapon', ammoFrom: readReserve(args[1] ?? '', consts, structs).from })
         continue
@@ -1000,11 +941,7 @@ function readDefaultOps(block, structs, gameType = null) {
   return ops
 }
 
-/**
- * The value a default assigns. Beyond a plain literal, an arm shared by several
- * modes can ask which one is running, so that comparison is answered here for
- * the mode being read rather than left for the app to guess at.
- */
+// literals, plus `game_type == X` comparisons resolved for the game type being read
 function readDefaultValue(expr, gameType) {
   const lit = parseLiteral(expr)
   if (lit.ok) return { value: lit.value }
@@ -1018,7 +955,7 @@ function readDefaultValue(expr, gameType) {
   return { value: null, expr: expr.trim() }
 }
 
-/** the constants a block declares for its own use, as the loadout reserves are */
+/** constexpr literals declared in a block */
 function blockConstants(block) {
   const out = {}
   for (const m of block.matchAll(/\bconstexpr\s+[\w:]+\s+(\w+)\s*=\s*([^;]+);/g)) {
@@ -1028,12 +965,7 @@ function blockConstants(block) {
   return out
 }
 
-/**
- * The reserve ammo an entry of the kit comes with. The source states it as a
- * number, as a constant beside it, or as a field of the weapon table - and the
- * table is only there at runtime, so that last one is passed on as a reference
- * for the tool to read against the game data rather than resolved here.
- */
+// a literal, a local constant, or a weapon table field reference (the table only exists at runtime)
 function readReserve(expr, consts, structs) {
   const raw = expr.trim()
   const lit = parseLiteral(raw)
@@ -1048,16 +980,14 @@ function readReserve(expr, consts, structs) {
   }
 
   fail(`Could not read the reserve ammo \`${raw}\``,
-    'Expected a number, a constant declared beside it, or a method reading the weapon table')
+    'Expected a number, a local constant, or a method reading the weapon table')
 }
 
-/** a weapon table field the game reads a reserve out of, as a reference to it */
 function readReserveExpr(body) {
   const named = body.match(/rf::weapon_types\s*\[\s*rf::(\w+?)_weapon_type\s*\]\s*\.\s*(\w+)/)
   if (named) return { weapon: named[1], field: camelCase(named[2]) }
 
-  // the spawn weapon is whichever one the mode chose, so it is named by the
-  // rules rather than by the expression, and its reserve counts the clips
+  // the spawn weapon varies by game type, and its reserve scales with clips
   const spawn = body.match(/rf::weapon_types\s*\[[^\]]*\.index\s*\]\s*\.\s*(\w+)\s*\*\s*[\w.]*\bnum_clips\b/)
   if (spawn) return { field: camelCase(spawn[1]), perClip: true }
 
@@ -1154,8 +1084,7 @@ export function extractMutators(sources) {
       if (opt.default === undefined) opt.defaultExpr = boolDefault[1]
       continue
     }
-    // a default read off live server state rather than a constant. the UI has to
-    // show the current value, so record why instead of inventing a number.
+    // defaults read from live server state
     if (/g_alpine_server_config_active_rules|get_score_limit/.test(m[3])) {
       opt.defaultFrom = 'currentValue'
       continue
@@ -1195,7 +1124,7 @@ function braceRows(body) {
 // top-level server keys
 // ---------------------------------------------------------------------------
 
-// The top level is dispatched by name rather than parsed positionally:
+// top-level keys are dispatched by name:
 //   if (key == "server_name") { if (auto v = node.value<std::string>()) cfg.server_name = *v; }
 function extractDispatch(cpp, structs, fnName, structName, handle) {
   const body = funcBody(cpp, new RegExp(`\\bstatic\\s+void\\s+${fnName}\\s*\\(`), fnName)
@@ -1236,8 +1165,7 @@ export function extractServerKeys(sources, structs) {
   const tables = extractDispatch(sources.dediCpp, structs, 'apply_known_table_in_order', 'AlpineServerConfig',
     (key, consequent, structs, structName) => {
       const call = consequent.match(/=\s*(parse_\w+)\s*\(/)
-      // [base] is a rules scope, so its keys are rules.json's job. Recursing into
-      // the scope parser would restate every rules key as a server key.
+      // [base] is a rules scope, covered by rules.json
       if (!call || call[1] === 'parse_scope_rules') return { key, kind: 'table', complex: true }
       const sub = subStructFor(sources.dediCpp, structs, consequent, structName)
       return { key, kind: 'table', keys: extractKeys(sources.dediCpp, structs, call[1], sub) }
@@ -1258,8 +1186,7 @@ export function extractServerKeys(sources, structs) {
   return { scalars, tables, arrays }
 }
 
-// Not every top-level array goes through apply_known_array_in_order - some are
-// handled inline in the dispatcher, and missing one loses a whole config key.
+// some top-level arrays are handled inline rather than by apply_known_array_in_order
 function extractInlineArrays(sources, known) {
   const body = funcBody(sources.dediCpp, /\bstatic\s+void\s+apply_config_table_in_order\s*\(/, 'apply_config_table_in_order')
   const arrayAt = body.search(/if\s*\(\s*auto\*?\s+arr\s*=\s*v\.as_array\s*\(\s*\)\s*\)/)
@@ -1295,9 +1222,8 @@ export function extractLevelKeys(sources) {
   return keys
 }
 
-// A scope's mutator list goes through the registry rather than a struct member,
-// so extractKeys cannot see it either. It is read in parse_server_rules, ahead of
-// the explicit keys, which is what makes a manual key beat a mutator.
+// mutators go through the registry, not a struct member. they must be read
+// before explicit keys so manual keys beat mutators.
 export function extractMutatorsKey(sources) {
   const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_server_rules\s*\([^)]*\)\s*\{/, 'parse_server_rules')
   expect(/\[\s*"mutators"\s*\]\s*\.as_array\s*\(\s*\)/.test(body),
@@ -1312,10 +1238,8 @@ export function extractMutatorsKey(sources) {
   return { key: 'mutators', kind: 'array', of: 'mutator' }
 }
 
-// game_type is the one rules key the scope resolves for itself rather than
-// assigning through a struct member, so extractKeys cannot see it. Since 1.4 it
-// is read once per scope in parse_scope_rules, before any key is applied, and
-// the nested [rules] table's answer beats the scope's own.
+// game_type is resolved by the scope, not a struct member. since 1.4 it is read
+// in parse_scope_rules before other keys, with [rules] winning over the scope.
 export function extractGameTypeKey(sources) {
   const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
   const reads = [...body.matchAll(/\[\s*"game_type"\s*\]\s*\.value<std::string>\s*\(\s*\)/g)]
@@ -1328,9 +1252,7 @@ export function extractGameTypeKey(sources) {
   return { key: 'game_type', kind: 'scalar', cppType: 'std::string', type: 'string' }
 }
 
-// Whether a scope that names a different game type restarts from the operator's
-// base keys instead of inheriting what it was handed. This is the layering rule
-// the provenance trail describes, so it is read out rather than assumed.
+// verifies that a game type change restarts from [base]'s manual keys
 export function extractGameTypeRebase(sources) {
   const scope = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
   expect(/game_type_changed\s*&&\s*opts\.rebase_source/.test(scope),
@@ -1345,10 +1267,8 @@ export function extractGameTypeRebase(sources) {
   return { on: 'gametype-change', source: 'base-manual-keys' }
 }
 
-// Keys a [[levels]] entry still parses without complaint but no longer acts on.
-// Alpine 1.4 removed the rules preset mechanic and left `rules_presets` in the
-// whitelist so an old config still loads quietly, which means the tool has to
-// say so rather than let the key look live.
+// [[levels]] keys still accepted but ignored. alpine 1.4 removed rules presets
+// but left rules_presets in the whitelist so old configs load.
 export function deadLevelKeys(levelKeys) {
   const live = new Set(['filename', 'rules'])
   const dead = levelKeys.filter(k => !live.has(k))
@@ -1359,10 +1279,7 @@ export function deadLevelKeys(levelKeys) {
   return dead
 }
 
-// Which commands an admin profile may be granted. The config parser only checks
-// a name against this list, so the list itself lives with the rcon code rather
-// than with the config keys - and without it the admin page would be a free-text
-// box for a value the server silently drops.
+// commands an admin profile may be granted, defined in the rcon code
 export function extractRconCommands(sources) {
   const at = sources.serverCpp.search(/\bg_rcon_cmd_masterlist\s*=/)
   expect(at !== -1, 'The rcon command masterlist is gone',
@@ -1373,9 +1290,7 @@ export function extractRconCommands(sources) {
   return commands
 }
 
-// What the old-style single rcon password can do. Setting it conjures a profile
-// nobody wrote, so a page that only listed the written ones would be describing
-// a server that is not the one being configured.
+// the legacy rcon password creates an implicit profile with these commands
 export function extractLegacyRconCommands(sources, masterlist) {
   const at = sources.dediCpp.search(/\bg_legacy_rcon_allowed_commands\s*=/)
   expect(at !== -1, 'The legacy rcon command list is gone',
@@ -1383,9 +1298,7 @@ export function extractLegacyRconCommands(sources, masterlist) {
   const body = bodyAt(sources.dediCpp, at)
   const commands = [...body.matchAll(/"([\w.]+)"/g)].map(m => m[1])
   expect(commands.length > 5, 'Too few legacy rcon commands', `Found ${commands.join(', ') || 'none'}`)
-  // the server drops anything not on the master list, so this does the same. it
-  // is returned in master list order so every command list in the tool reads the
-  // same way, whoever wrote it
+  // filtered to the master list like the server does, in master list order
   return masterlist.filter(c => commands.includes(c))
 }
 
@@ -1393,9 +1306,7 @@ export function extractLegacyRconCommands(sources, masterlist) {
 // labels the server already uses
 // ---------------------------------------------------------------------------
 
-// print_rules writes the active rules to the console, so upstream already has a
-// human label for nearly every setting. Taking them from there beats inventing
-// our own and keeps the wording in step with what an operator sees in console.
+// print_rules has a console label for nearly every setting
 function extractPrintLabels(sources, targetIndex) {
   const body = funcBody(sources.dediCpp, /\bvoid\s+print_rules\s*\(/, 'print_rules')
   const labels = {}
@@ -1444,8 +1355,7 @@ function flatten(keys, prefix = '') {
   return out
 }
 
-// C++ target path -> config key path, so the per-game-type defaults can be
-// reported against the key the user actually sees
+// c++ target path -> config key path
 function buildTargetIndex(keys, keyPrefix = '', targetPrefix = '') {
   const index = {}
   for (const k of keys) {
@@ -1456,9 +1366,8 @@ function buildTargetIndex(keys, keyPrefix = '', targetPrefix = '') {
     }
     if (k.kind !== 'scalar') continue
     if (k.target) index[targetPrefix + k.target] = keyPrefix + k.key
-    // also index the member the setter writes through, which is what the game
-    // type defaults assign to. qualify it with the setter's own path, or
-    // `cap_limit` on the rules and `cap_limit` on salvage collide.
+    // also index the setter's member, which game type defaults assign to.
+    // qualified by path so e.g. rules and salvage `cap_limit` do not collide.
     if (k.member) {
       const owner = (k.target ?? '').split('.').slice(0, -1)
       index[targetPrefix + [...owner, k.member].join('.')] = keyPrefix + k.key
@@ -1507,8 +1416,6 @@ function main() {
   const botKeys = extractKeys(sources.dediCpp, structs, 'parse_bot_config_table', 'ServerBotConfig')
   server.arrays.push(...extractInlineArrays(sources, new Set(server.arrays.map(a => a.key))))
 
-  // the commands an admin profile may run are named in the rcon code, so the
-  // key that lists them is only a set of choices once the two are put together
   const rconCommands = extractRconCommands(sources)
   const allowed = server.arrays.find(a => a.key === 'rcon_profiles')
     ?.keys?.find(k => k.key === 'allowed_commands')
@@ -1517,14 +1424,11 @@ function main() {
   allowed.choices = rconCommands
   const legacyRconCommands = extractLegacyRconCommands(sources, rconCommands)
 
-  // the Gun Game ladder is weapon names, but nothing checks that until the game
-  // builds the tiers, so the check lives with the code that uses them
   const tiers = rulesKeys.find(k => k.key === 'gg_tiers')
   expect(tiers, 'The gg_tiers key is gone', 'Expected it in parse_server_rules')
   tiers.lookup = extractTierLookup(sources)
 
-  // game_type resolves in the scope rather than through a struct member, so it
-  // is rebuilt here and put back at the top where the parser reads it
+  // game_type is synthesized and placed first, where the parser reads it
   const gt = extractGameTypeKey(sources)
   gt.choices = gametypes.map(g => g.names[0])
   gt.default = gametypes[0].names[0]
@@ -1536,15 +1440,14 @@ function main() {
 
   const targetIndex = buildTargetIndex(rulesKeys)
   const printLabels = extractPrintLabels(sources, targetIndex)
-  // an expression the reader could not evaluate would otherwise reach the app as
-  // a null and be shown to an operator as the mode's default, so it stops here
+  // an unreadable expression would otherwise reach the app as a null default
   const resolveOps = (ops, where) => ops.map(op => {
     if (op.op !== 'set') return op
     const key = targetIndex[op.target] ?? null
     expect(key === null || op.expr === undefined,
       `Could not read a game type default in ${where}`,
-      `\`${op.target} = ${op.expr}\` sets the config key '${key}', and the value is not a literal ` +
-      'this reader understands. Teach readDefaultValue the expression.')
+      `\`${op.target} = ${op.expr}\` sets '${key}' to an unsupported expression. ` +
+      'Add support in readDefaultValue.')
     return { ...op, key }
   })
 
@@ -1594,9 +1497,7 @@ function main() {
       removedLevelKeys,
       botKeys,
       legacyRconCommands,
-      // one canonical path per authored entry. the nested key sets live under
-      // the key that carries them, so a bot profile's `player_name` cannot
-      // collide with a top-level setting of the same name.
+      // nested keys are prefixed so e.g. a bot profile's `player_name` cannot collide
       flat: [...new Set([
         ...flatten(server.scalars).map(k => k.path),
         ...flatten(server.tables).map(k => k.path),

@@ -1,7 +1,7 @@
 <script module lang="ts">
   import type { Layer } from '../resolve'
 
-  /** the color a layer owns. shared, because a list shows one per row as well */
+  /** shared, since list rows show their own dots */
   export function toneFor(layer: Layer | undefined, level: boolean) {
     if (layer === 'mutator') return 'mut'
     if (layer === 'manual') return level ? 'map' : 'you'
@@ -11,8 +11,8 @@
   export function labelFor(layer: Layer | undefined, level: boolean) {
     if (layer === 'mutator') return 'a mutator'
     if (layer === 'manual') return level ? 'this map only' : 'you'
-    if (layer === 'gametype') return "the game mode's defaults"
-    return 'the Alpine default'
+    if (layer === 'gametype') return 'game type defaults'
+    return 'Alpine default'
   }
 </script>
 
@@ -21,15 +21,14 @@
 
   interface Props {
     resolved: Resolved | undefined
-    /** a level scope's own edits read as "just for this map" rather than "you" */
+    /** label a map's own edits as "this map only" rather than "you" */
     levelScope?: boolean
     onopen?: (anchor: HTMLElement) => void
   }
 
   const { resolved, levelScope = false, onopen }: Props = $props()
 
-  // a value this map did not touch still came from somewhere, so the dot keeps
-  // showing whoever set it for every map rather than going blank
+  // an inherited value shows the color of whatever set it in the base rules
   const inherited = $derived(resolved?.layer === 'inherited')
   const layer = $derived(
     inherited ? resolved!.trail[resolved!.trail.length - 1]?.layer : resolved?.layer
@@ -37,7 +36,7 @@
 
   const tone = $derived(toneFor(layer, inherited ? false : levelScope))
   const description = $derived(
-    (inherited ? 'Same as every map. Set by ' : 'Set by ')
+    (inherited ? 'From base rules. Set by ' : 'Set by ')
     + labelFor(layer, inherited ? false : levelScope)
     + (resolved?.source ? `: ${resolved.source}` : '')
   )
@@ -47,7 +46,7 @@
   class="prov"
   type="button"
   title={description}
-  aria-label="Where this value comes from. {description}"
+  aria-label="Value source: {description}"
   onclick={e => onopen?.(e.currentTarget)}
 >
   <i class="pd {tone}"></i>

@@ -1,34 +1,34 @@
-# Plain-English labels for the game rules settings.
+# Labels for the game rules settings.
 # One entry per path in schema/generated/rules.json "flat".
 #
-# unit  = the unit the value is written in inside the config file
+# unit    = the unit the value is stored in inside the config file
 # display = the unit to show the user, when it differs from the file unit
 #
-# Mode gating, for settings the server only reads in some game modes. Set at
-# most one of them, and read the answer off the code that consumes the setting
-# rather than off the key name:
-#   modes    = the modes it works in
-#   notModes = the modes it does nothing in, for when that list is the short one
-#   teamOnly = true, for anything gated on the mode having teams
-# The per-mode score limits and the rounds settings are gated by the generator
-# instead, since Alpine states which modes those apply to itself.
+# Mode gating, for settings the server only reads in some game types. Set at
+# most one, and take the answer from the code that consumes the setting, not the
+# key name:
+#   modes    = the game types it works in
+#   notModes = the game types it does nothing in, when that list is shorter
+#   teamOnly = true, for anything gated on the game type having teams
+# The per-mode score limits and the rounds settings are gated by the generator,
+# since Alpine states which modes those apply to itself.
 
 # ---------------------------------------------------------------- the match
 
 ["game_type"]
 page = "rules-mode"
-label = "Game mode"
-help = "The kind of game played on every map that does not pick its own; changing it resets that mode's own defaults, like the starting weapon and the respawn delay."
+label = "Game type"
+help = "Used on every map that does not set its own. Changing it applies that game type's defaults, such as the spawn weapon and spawn delay."
 
 ["mutators"]
 page = "rules-mutators"
 label = "Mutators"
-help = "Ready-made bundles of rule changes, such as Instagib or Jetpacks, applied in a fixed order before anything you set by hand."
+help = "Preset rule changes, such as Instagib or Jetpacks. Applied in a fixed order before any settings you change by hand."
 
 ["time_limit"]
 page = "rules-mode"
-label = "Round length"
-help = "How long a map runs before the next one loads."
+label = "Time limit"
+help = "How long each map lasts."
 unit = "seconds"
 display = "minutes"
 notModes = ["pit", "wo"]
@@ -36,228 +36,222 @@ notModes = ["pit", "wo"]
 ["overtime"]
 page = "rules-mode"
 label = "Overtime"
-help = "Keep playing past the time limit when the scores are tied."
+help = "Extends the map past the time limit when the score is tied."
 
 ["overtime.enabled"]
 page = "rules-mode"
-label = "Play overtime on a tie"
-help = "When time runs out with the scores level, give both sides extra time to break the tie instead of ending the map."
+label = "Overtime"
 notModes = ["run", "pit", "wo", "gg"]
 
 ["overtime.time"]
 page = "rules-mode"
-label = "Extra time"
-help = "How much longer play continues once overtime starts."
+label = "Overtime length"
 unit = "minutes"
 notModes = ["run", "pit", "wo", "gg"]
 
 ["overtime.tie_when_flag_stolen"]
 page = "rules-mode"
-label = "Treat a stolen flag as a tie"
-help = "In Capture the Flag, go to overtime when a flag is being carried as time expires, even if one team is ahead."
+label = "Stolen flag counts as a tie"
+help = "Goes to overtime if a flag is being carried when time runs out, even if one team is ahead."
 modes = ["ctf", "sal"]
 
 ["overtime.tie_when_hill_contested"]
 page = "rules-mode"
-label = "Treat a contested hill as a tie"
-help = "In King of the Hill, go to overtime when both teams are standing on the hill as time expires, even if one team is ahead."
+label = "Contested hill counts as a tie"
+help = "Goes to overtime if both teams are on the hill when time runs out, even if one team is ahead."
 modes = ["koth"]
 
 ["rounds"]
 page = "rules-mode"
 label = "Rounds"
-help = "Settings for the modes that play several short rounds on one map instead of one continuous match."
+help = "For game types that play several rounds per map."
 
 ["rounds.max_rounds"]
 page = "rules-mode"
 label = "Rounds per map"
-help = "How many rounds are played before the server moves on to the next map."
 unit = "rounds"
 
 ["rounds.round_time"]
 page = "rules-mode"
-label = "Length of each round"
-help = "How long a single round runs before it is called; modes that end a round only on a team wipe ignore this."
+label = "Round time limit"
+help = "Ignored by game types where a round only ends when a team is eliminated."
 unit = "seconds"
 
 ["rounds.post_round_time"]
 page = "rules-mode"
-label = "Celebration after a round"
-help = "A short pause with the winner on screen before the next round is set up."
+label = "Post-round celebration"
+help = "Time the winner is shown before the next round is set up."
 unit = "seconds"
 
 ["rounds.intermission_time"]
 page = "rules-mode"
-label = "Break between rounds"
-help = "The countdown players wait through before the next round starts."
+label = "Intermission between rounds"
+help = "Countdown before the next round starts."
 unit = "seconds"
 
 # ---------------------------------------------------------------- score limits
 
 ["individual_kill_limit"]
 page = "rules-mode"
-label = "Kills to win"
-help = "The first player to reach this many kills ends the map; used by Deathmatch and Wipeout."
+label = "Frag limit"
+help = "Used by DM and Wipeout."
 unit = "kills"
 
 ["team_kill_limit"]
 page = "rules-mode"
-label = "Team kills to win"
-help = "The first team to reach this many kills ends the map in Team Deathmatch."
+label = "TDM frag limit"
 unit = "kills"
 
 ["cap_limit"]
 page = "rules-mode"
-label = "Flag captures to win"
-help = "The first team to bring the enemy flag home this many times ends the map in Capture the Flag."
+label = "CTF cap limit"
 unit = "captures"
 
 ["koth_score_limit"]
 page = "rules-mode"
-label = "Hill points to win"
-help = "The first team to earn this many points from holding the hill ends the map in King of the Hill."
+label = "KOTH score limit"
+help = "Points a team earns by holding the hill."
 unit = "points"
 
 ["dc_score_limit"]
 page = "rules-mode"
-label = "Control points to win"
-help = "The first team to earn this many points from holding control points ends the map in Damage Control."
+label = "DC score limit"
+help = "Points a team earns by holding control points."
 unit = "points"
 
 ["pit_score_limit"]
 page = "rules-mode"
-label = "Duel wins to win"
-help = "The first player to win this many duels ends the map in Pit."
+label = "Pit score limit"
+help = "Duels a player must win."
 unit = "wins"
 
 ["gg_score_limit"]
 page = "rules-mode"
-label = "Gun Game kills to win"
-help = "How many kills a player needs to finish the weapon ladder and win in Gun Game."
+label = "Gun Game score limit"
+help = "Kills a player needs to finish the weapon progression."
 unit = "kills"
 
 ["bag_score_limit"]
 page = "rules-mode"
-label = "Bag points to win"
-help = "The first player to earn this many points from holding the bag ends the map in Bagman."
+label = "Bagman score limit"
+help = "Points a player earns by holding the bag."
 unit = "points"
 
 ["tbag_score_limit"]
 page = "rules-mode"
-label = "Team bag points to win"
-help = "The first team to earn this many points from holding the bag ends the map in Team Bagman."
+label = "Team Bagman score limit"
+help = "Points a team earns by holding the bag."
 unit = "points"
 
 ["sal_cap_limit"]
 page = "rules-mode"
-label = "Salvage captures to win"
-help = "The first team to bring the flag home this many times ends the map in Salvage."
+label = "Salvage cap limit"
 unit = "captures"
 
 # ---------------------------------------------------------------- objectives
 
 ["bag_return_time"]
 page = "rules-mode"
-label = "Dropped bag return time"
-help = "How long a dropped bag lies on the ground in Bagman before it returns to its start point on its own."
+label = "Bag return time"
+help = "Time before a dropped bag returns to its spawn point."
 unit = "seconds"
 modes = ["bag", "tbag"]
 
 ["bag_spawn_delay"]
 page = "rules-mode"
 label = "Bag spawn delay"
-help = "How long a fresh map runs in Bagman before the bag first appears, so nobody can grab it on the opening rush."
+help = "Time after the map starts before the bag first appears."
 unit = "seconds"
 modes = ["bag", "tbag"]
 
 ["sal_flag_spawn_delay"]
 page = "rules-mode"
 label = "Salvage flag spawn delay"
-help = "How long a fresh map runs in Salvage before the flag first appears, so nobody can grab it on the opening rush."
+help = "Time after the map starts before the flag first appears."
 unit = "seconds"
 modes = ["sal"]
 
 ["sal_flag_capture_respawn_delay"]
 page = "rules-mode"
-label = "Salvage flag delay after a capture"
-help = "How long the map waits before putting a new flag out once a team has scored in Salvage."
+label = "Salvage flag respawn delay after capture"
+help = "Time after a capture before a new flag appears."
 unit = "seconds"
 modes = ["sal"]
 
 ["sal_flag_return_time"]
 page = "rules-mode"
-label = "Salvage dropped flag return time"
-help = "How long a dropped flag lies on the ground in Salvage before it goes back to its start point."
+label = "Salvage flag return time"
+help = "Time before a dropped flag returns to its spawn point."
 unit = "seconds"
 modes = ["sal"]
 
 ["flag_dropping"]
 page = "rules-mode"
-label = "Players can drop the flag"
-help = "Lets a flag carrier hand the flag off deliberately instead of only losing it when killed."
+label = "Flag dropping"
+help = "Lets the flag carrier drop the flag."
 modes = ["ctf", "sal"]
 
 ["flag_captures_while_stolen"]
 page = "rules-mode"
-label = "Capture while your own flag is missing"
-help = "Lets a team score in Capture the Flag even while an enemy is carrying their flag, rather than having to get it back first."
+label = "Capture while own flag is stolen"
+help = "Lets a team capture even while the enemy has their flag."
 modes = ["ctf"]
 
 ["flag_return_time"]
 page = "rules-mode"
-label = "Dropped flag return time"
-help = "How long a dropped flag lies on the ground in Capture the Flag before it returns to base on its own."
+label = "Flag return time"
+help = "Time before a dropped flag returns to base."
 unit = "seconds"
 modes = ["ctf"]
 
 ["gg_rampage_rewards"]
 page = "rules-mode"
-label = "Reward Gun Game streaks"
-help = "Give a random powerup to any player who climbs a whole weapon level without dying in Gun Game."
+label = "Rampage rewards"
+help = "Gives a random powerup to a player who clears a whole weapon tier without dying."
 modes = ["gg"]
 
 ["gg_tiers"]
 page = "rules-mode"
-label = "Gun Game weapon ladder"
-help = "The order weapons are handed out in Gun Game, as groups that are shuffled for each player; leave it empty to use the built-in ladder."
+label = "Weapon tiers"
+help = "The Gun Game weapon progression. Weapons within a tier are shuffled per player. Leave empty to use the default tiers."
 modes = ["gg"]
 
 ["gg_final_weapon"]
 page = "rules-mode"
-label = "Gun Game final weapon"
-help = "The weapon a player has to get their last kill with to win Gun Game."
+label = "Final weapon"
+help = "The weapon a player must get their last kill with to win."
 modes = ["gg"]
 
 # ---------------------------------------------------------------- teams and population
 
 ["team_damage"]
 page = "rules-mode"
-label = "Teammates can hurt each other"
-help = "Turn this on for a stricter game where a careless rocket costs your own side."
+label = "Team damage"
+help = "Lets teammates damage each other."
 teamOnly = true
 
 ["balance_teams"]
 page = "rules-mode"
-label = "Put new players on the smaller team"
-help = "Assigns anyone joining or changing team to whichever side has fewer players."
+label = "Balance teams"
+help = "Puts players who join or switch teams on the team with fewer players."
 teamOnly = true
 
 ["auto_team_balance"]
 page = "rules-mode"
-label = "Even out the teams during a match"
-help = "Moves a player across at the moment they die if the sides have drifted badly apart, instead of waiting for the next map."
+label = "Auto team balance"
+help = "Moves a player to the other team when they die if the teams are uneven."
 teamOnly = true
 
 ["ideal_player_count"]
 page = "rules-mode"
-label = "Fill the server to this many players"
-help = "Bots join until the server holds this many players and are sent away as real players arrive; set it to 32 to never remove bots."
+label = "Ideal player count"
+help = "Bots fill the server up to this many players and leave as real players join. 32 or more never removes bots."
 unit = "players"
 
 ["saving_enabled"]
 page = "rules-mode"
-label = "Let players save and reload their position"
-help = "Gives players the save and load chat commands, which is how Run courses are normally practiced."
+label = "Position saving"
+help = "Lets players save and load their position with chat commands. Commonly used to practice Run maps."
 
 # ---------------------------------------------------------------- mutators page
 
@@ -267,403 +261,384 @@ help = "Gives players the save and load chat commands, which is how Run courses 
 
 ["force_respawn"]
 page = "rules-spawn"
-label = "Respawn players automatically"
-help = "Brings players back as soon as they are allowed to instead of leaving them on the death screen until they click."
+label = "Force respawn"
+help = "Respawns players automatically instead of waiting for them to click."
 
 ["spawn_weapon"]
 page = "rules-spawn"
-label = "Starting weapon"
-help = "The weapon a player is holding the moment they spawn."
+label = "Spawn weapon"
+help = "The weapon players are holding when they spawn."
 
 ["spawn_weapon.weapon_name"]
 page = "rules-spawn"
 label = "Weapon"
-help = "Which weapon players are holding when they appear; each game mode picks its own unless you set one here."
+help = "Each game type has its own default."
 notModes = ["gg"]
 
 ["spawn_weapon.clips"]
 page = "rules-spawn"
 label = "Spare clips"
-help = "How many extra clips of ammunition the starting weapon comes with."
 unit = "clips"
 notModes = ["gg"]
 
 ["spawn_life"]
 page = "rules-spawn"
-label = "Starting health"
-help = "Give players something other than the normal amount of health when they spawn."
+label = "Spawn health"
+help = "Overrides the health players spawn with."
 
 ["spawn_life.enabled"]
 page = "rules-spawn"
-label = "Set starting health"
-help = "Leave this off to use the game's normal 100 health."
+label = "Custom spawn health"
+help = "Default is 100."
 
 ["spawn_life.value"]
 page = "rules-spawn"
-label = "Health on spawn"
-help = "How much health players appear with; above 100 they start with an overheal that nothing else can top up."
+label = "Health"
+help = "Above 100 acts as overheal, which pickups cannot top up."
 unit = "points"
 
 ["spawn_armor"]
 page = "rules-spawn"
-label = "Starting armor"
-help = "Give players some armor when they spawn instead of none."
+label = "Spawn armor"
+help = "Gives players armor when they spawn."
 
 ["spawn_armor.enabled"]
 page = "rules-spawn"
-label = "Set starting armor"
-help = "Leave this off to have players spawn with no armor, as the game normally does."
+label = "Custom spawn armor"
+help = "Default is no armor."
 
 ["spawn_armor.value"]
 page = "rules-spawn"
-label = "Armor on spawn"
-help = "How much armor players appear with."
+label = "Armor"
 unit = "points"
 
 ["spawn_delay"]
 page = "rules-spawn"
-label = "Wait before respawning"
-help = "A short delay after dying before the player can come back."
+label = "Spawn delay"
+help = "Time a player must wait after dying before respawning."
 
 ["spawn_delay.enabled"]
 page = "rules-spawn"
-label = "Make players wait to respawn"
-help = "Slows the game down and gives the person who got the kill a moment of breathing room."
+label = "Spawn delay"
 
 ["spawn_delay.base_seconds"]
 page = "rules-spawn"
-label = "How long to wait"
-help = "The delay after dying; in Wipeout this grows with each death a player takes in the round."
+label = "Delay"
+help = "In Wipeout, this is multiplied by the player's deaths in the round."
 unit = "seconds"
 
 ["spawn_protection"]
 page = "rules-spawn"
 label = "Spawn protection"
-help = "Brief invulnerability so players cannot be killed the instant they appear."
+help = "Brief invulnerability after spawning."
 
 ["spawn_protection.enabled"]
 page = "rules-spawn"
-label = "Protect players as they appear"
-help = "Stops spawn camping from being a guaranteed kill."
+label = "Spawn protection"
 
 ["spawn_protection.duration"]
 page = "rules-spawn"
-label = "How long it lasts"
-help = "The window of invulnerability after appearing; protection ends early if the player fires."
+label = "Duration"
+help = "Ends early if the player fires."
 unit = "seconds"
 
 ["spawn_protection.use_powerup"]
 page = "rules-spawn"
-label = "Show it as an invulnerability powerup"
-help = "Gives players the visible powerup effect other people can see, rather than the silent protection the stock game uses."
+label = "Use invulnerability powerup"
+help = "Grants the visible invulnerability powerup instead of the stock hidden protection."
 
 ["spawn_selection"]
 page = "rules-spawn"
-label = "Where players appear"
-help = "How the server picks which of a map's spawn points to use."
+label = "Spawn selection"
+help = "How the server chooses a spawn point."
 
 ["spawn_selection.respect_team_spawns"]
 page = "rules-spawn"
-label = "Use each team's own spawn points"
-help = "Keeps teams in their own half of a map; turning it off lets anyone appear anywhere, which suits small maps."
+label = "Use team spawns"
+help = "When off, players can spawn at any spawn point regardless of team."
 teamOnly = true
 
 ["spawn_selection.try_avoid_players"]
 page = "rules-spawn"
-label = "Prefer spawns away from other players"
-help = "Weights the random pick toward emptier parts of the map instead of choosing completely at random."
+label = "Avoid other players"
+help = "Favors spawn points away from other players."
 
 ["spawn_selection.always_avoid_last"]
 page = "rules-spawn"
-label = "Never reuse a player's last spawn"
-help = "Stops a player being put back in exactly the place they just died."
+label = "Avoid last spawn"
+help = "Never spawns a player at the same point twice in a row."
 
 ["spawn_selection.always_use_furthest"]
 page = "rules-spawn"
-label = "Always use the furthest spawn"
-help = "Removes the randomness entirely and always picks the point furthest from anyone else, which makes spawns predictable."
+label = "Always use furthest spawn"
+help = "Always picks the spawn point furthest from other players, with no randomness."
 
 ["spawn_selection.only_avoid_enemies"]
 page = "rules-spawn"
-label = "Only stay away from enemies"
-help = "Lets players spawn right next to teammates, so a squad can regroup, while still avoiding the other side."
+label = "Only avoid enemies"
+help = "Lets players spawn near teammates."
 teamOnly = true
 
 ["spawn_selection.dynamic_respawns"]
 page = "rules-spawn"
-label = "Add spawn points at item pickups"
-help = "Helps maps that were built for a handful of players cope with a full server by treating item locations as extra spawn points."
+label = "Dynamic respawns"
+help = "Adds spawn points at item locations, for maps with too few spawn points."
 
 ["spawn_selection.dynamic_respawn_items"]
 page = "rules-spawn"
-label = "Items that create spawn points"
-help = "Which pickups get turned into extra spawn points, and how few real spawn points a map has to have before each one counts."
+label = "Dynamic respawn items"
+help = "Items whose locations become spawn points, and the spawn point count below which each one is used."
 
 ["spawn_selection.dynamic_respawn_items".fields.item_name]
-label = "Pickup"
-help = "The item whose place on the map becomes an extra spawn point."
+label = "Item"
 
 ["spawn_selection.dynamic_respawn_items".fields.min_respawn_points]
-label = "Only on maps with fewer spawns than"
-help = "Zero means always use this item's place, however many spawn points the map already has."
+label = "Used when map has fewer spawns than"
+help = "0 means always."
 
 ["spawn_loadout"]
 page = "rules-spawn"
-label = "Everything players spawn with"
-help = "Everything a player is holding the moment they spawn. The weapons the game mode hands out are already listed; turn one off to take it back out, or add weapons of your own."
+label = "Spawn loadout"
+help = "Weapons players spawn with. The game type's default weapons are already listed; turn one off to remove it, or add more."
 notModes = ["gg"]
 
 ["spawn_loadout".fields.weapon_name]
 label = "Weapon"
-help = "The weapon players are given."
 
 ["spawn_loadout".fields.ammo]
 label = "Spare ammo"
-help = "How much ammunition comes with it, on top of what is loaded."
+help = "Ammo in addition to what is loaded."
 
 ["spawn_loadout".fields.include]
-label = "Give it out"
-help = "Turn this off to take a weapon back out of the kit the game mode hands out."
+label = "Include"
+help = "Turn off to remove a weapon the game type gives by default."
 
 ["spawn_loadout_blue"]
 page = "rules-spawn"
-label = "A different kit for the blue team"
-help = "For attack and defense games, where the two sides are not meant to be even. Leave this empty and both teams get the kit above; put anything in it and the blue team gets this instead of that one, not as well as it."
+label = "Blue team loadout"
+help = "Gives the blue team its own loadout, such as for attack and defense maps. If set, it replaces the loadout above for blue players."
 teamOnly = true
 
 ["spawn_loadout_blue".fields.weapon_name]
 label = "Weapon"
-help = "The weapon blue team players are given."
 
 ["spawn_loadout_blue".fields.ammo]
 label = "Spare ammo"
-help = "How much ammunition comes with it, on top of what is loaded."
+help = "Ammo in addition to what is loaded."
 
 ["spawn_loadout_blue".fields.include]
-label = "Give it out"
-help = "Turn this off to keep a weapon in the list without handing it out."
+label = "Include"
+help = "Turn off to keep the weapon listed without giving it out."
 
 ["force_character"]
 page = "rules-spawn"
-label = "Forced character"
-help = "Make everyone play as the same character model instead of their own choice."
+label = "Force character"
+help = "Makes every player use the same character model."
 
 ["force_character.enabled"]
 page = "rules-spawn"
-label = "Force one character for everyone"
-help = "Useful when custom player models make people hard to see or tell apart."
+label = "Force character"
 
 ["force_character.character"]
 page = "rules-spawn"
 label = "Character"
-help = "The character model everyone plays as."
 
 # ---------------------------------------------------------------- weapons and items
 
 ["weapons_stay"]
 page = "rules-weapons"
 label = "Weapon stay"
-help = "Leaves weapon pickups on the map for the next person instead of making everyone wait for a respawn."
+help = "Weapon pickups stay on the map after being picked up."
 notModes = ["gg"]
 
 ["weapon_stay_exemptions"]
 page = "rules-weapons"
-label = "Weapons without weapon stay"
-help = "Weapons listed here are left out of weapon stay, so they disappear when taken. That is the usual way to stop everyone carrying the strongest gun at once."
+label = "Weapon stay exemptions"
+help = "Weapons listed here disappear when picked up, even with weapon stay on."
 notModes = ["gg"]
 
 ["weapon_stay_exemptions".fields.weapon_name]
 label = "Weapon"
-help = "The weapon this rule is about."
 
 ["weapon_stay_exemptions".fields.exempt]
-label = "Exempt from weapon stay"
-help = "On means the weapon is left out of weapon stay and disappears when taken. Turn it off to give it weapon stay, which the stock game never allowed for the Fusion Rocket Launcher."
+label = "Exempt"
+help = "Turn off to give the weapon weapon stay. The stock game always exempts the Fusion Rocket Launcher."
 
 ["drop_weapons"]
 page = "rules-weapons"
-label = "Players drop their weapon when killed"
-help = "Leaves the dead player's weapon on the ground for someone else to take."
+label = "Drop weapons"
+help = "Players drop their weapon when killed."
 notModes = ["gg"]
 
 ["drop_amps"]
 page = "rules-weapons"
-label = "Players drop their damage amp when killed"
-help = "Passes the damage amplifier on to whoever can grab it rather than losing it until the next respawn."
+label = "Drop amps"
+help = "Players drop their damage amp when killed."
 notModes = ["bag", "tbag"]
 
 ["weapon_pickups_give_full_ammo"]
 page = "rules-weapons"
 label = "Weapon pickups give full ammo"
-help = "A weapon you already own tops you all the way up instead of giving just one clip."
+help = "Picking up a weapon you already have fills its ammo instead of adding one clip."
 notModes = ["gg"]
 
 ["infinite_reloads"]
 page = "rules-weapons"
-label = "Reloading never uses up ammo"
-help = "Players can always reload, so they never run dry, but still have to stop and do it."
+label = "Infinite reloads"
+help = "Players never run out of reserve ammo, but still have to reload."
 notModes = ["gg"]
 
 ["force_rail_reload"]
 page = "rules-weapons"
-label = "Rail gun must finish reloading"
-help = "Stops players cancelling the rail gun's long reload by switching weapons and switching straight back."
+label = "Force rail reload"
+help = "The Rail Driver must finish reloading before players can switch weapons."
 
 ["item_replacements"]
 page = "rules-weapons"
-label = "Replace items around the map"
-help = "Swap one pickup for another everywhere it appears, for example turning every medkit into armor; leave the replacement blank to remove the item entirely."
+label = "Item replacements"
+help = "Replaces every instance of an item with another. Leave the replacement blank to remove the item."
 notModes = ["gg"]
 
 ["item_replacements".fields.original]
-label = "Item on the map"
-help = "The pickup as the map has it."
+label = "Item"
 
 ["item_replacements".fields.replacement]
-label = "Turns into"
-help = "What players find there instead."
+label = "Replace with"
 lookup = "item"
-emptyLabel = "Nothing, take it out"
+emptyLabel = "Nothing (remove)"
 
 ["item_respawn_time_overrides"]
 page = "rules-weapons"
-label = "Change how fast items come back"
-help = "Override the respawn time of individual pickups, usually to slow down the strongest ones."
+label = "Item respawn times"
+help = "Overrides the respawn time of specific items."
 notModes = ["gg"]
 
 ["item_respawn_time_overrides".fields.item_name]
-label = "Pickup"
-help = "The item whose respawn time changes."
+label = "Item"
 
 ["item_respawn_time_overrides".fields.respawn_ms]
-label = "Comes back after"
+label = "Respawn time"
 unit = "milliseconds"
 display = "seconds"
-help = "How long the map waits before putting this item back."
 
 ["delayed_items"]
 page = "rules-weapons"
-label = "Items that are not there at the start"
-help = "These pickups are hidden when a map loads and only appear after their first respawn time has passed, so nobody can rush them."
+label = "Delayed items"
+help = "Items that are hidden when the map starts and first appear after their respawn time."
 notModes = ["gg"]
 
 ["delayed_items".fields.item_name]
-label = "Pickup"
-help = "The item that is missing until its first respawn."
+label = "Item"
 
 # ---------------------------------------------------------------- damage and physics
 
 ["fall_damage"]
 page = "rules-damage"
 label = "Fall damage"
-help = "Hurt players who drop too far, as the single-player game does."
 
 ["pvp_damage_modifier"]
 page = "rules-damage"
-label = "Damage multiplier between players"
-help = "1 is normal; higher numbers make everyone die faster, and 0 means players cannot hurt each other at all."
+label = "PvP damage modifier"
+help = "Multiplies damage between players. 1 is normal and 0 disables it."
 unit = "multiplier"
 
 ["no_player_collide"]
 page = "rules-damage"
-label = "Players can walk through each other"
-help = "Stops teammates blocking doorways, at the cost of not being able to body-block an enemy."
+label = "No player collision"
+help = "Players can pass through each other."
 
 ["geo_limit"]
 page = "rules-damage"
-label = "How much of the map can be destroyed"
-help = "The number of holes players can blow in the level before the oldest ones repair themselves."
+label = "Geomod crater limit"
+help = "Maximum number of geomod craters per map."
 unit = "craters"
 
 ["rf2_geo_limit"]
 page = "rules-damage"
-label = "Brush-based destruction limit"
-help = "A separate limit for the newer whole-chunk destruction, which only a few maps are built to use; -1 means no limit and 0 turns it off."
+label = "RF2-style geomod limit"
+help = "Separate limit for brush-based geomod, which only some maps use. -1 is unlimited and 0 disables it."
 unit = "craters"
 
 ["geo_chunk_physics"]
 page = "rules-damage"
-label = "Blasted chunks fall away"
-help = "Lets pieces of the map that get cut loose drop under gravity instead of hanging in the air."
+label = "Geomod chunk physics"
+help = "Geometry chunks that are blasted loose fall down."
 
 ["clear_stale_movement_input"]
 page = "rules-damage"
-label = "Ignore keys held while a map loads"
-help = "Stops players sliding off on their own at the start of a map because they were holding a key during the loading screen."
+label = "Clear stale movement input"
+help = "Ignores movement keys held during the loading screen, so players do not start the map moving."
 
 ["gibbing"]
 page = "rules-damage"
 label = "Gibbing"
-help = "Blow bodies apart when a killing blow is heavy enough."
+help = "Bodies can be blown apart by a heavy enough killing blow."
 
 ["gibbing.enabled"]
 page = "rules-damage"
-label = "Players can be gibbed"
-help = "Off by default, matching the stock game; turn it on for a gorier look."
+label = "Gibbing"
+help = "Off by default."
 
 ["gibbing.damage_threshold"]
 page = "rules-damage"
-label = "Damage needed to gib"
-help = "How big a single hit has to be to blow the body apart rather than just kill it."
+label = "Damage threshold"
+help = "Minimum damage from a single hit to gib."
 unit = "damage"
 
 ["gibbing.all_damage_types"]
 page = "rules-damage"
-label = "Any kind of damage can gib"
-help = "Lets bullets and melee gib as well as explosions."
+label = "All damage types"
+help = "Allows gibbing from any damage type, not just explosions."
 
 ["kill_rewards"]
 page = "rules-damage"
-label = "Rewards for a kill"
-help = "Health and armor handed to a player for getting a kill, which keeps the fighting moving on maps with few pickups."
+label = "Kill rewards"
+help = "Health and armor given to a player for each kill."
 
 ["kill_rewards.health"]
 page = "rules-damage"
-label = "Health for a kill"
-help = "Health given to the killer; leave it at zero for none."
+label = "Health"
 unit = "points"
 
 ["kill_rewards.armor"]
 page = "rules-damage"
-label = "Armor for a kill"
-help = "Armor given to the killer; leave it at zero for none."
+label = "Armor"
 unit = "points"
 
 ["kill_rewards.effective_health"]
 page = "rules-damage"
-label = "Combined reward for a kill"
-help = "Tops the killer's health up first and puts whatever is left over into armor, so the reward is never wasted."
+label = "Effective health"
+help = "Restores health first, then gives the rest as armor."
 unit = "points"
 
 ["kill_rewards.health_is_super"]
 page = "rules-damage"
-label = "Health reward can overheal"
-help = "Lets the reward push a player past normal health, up to 200, the way a super health pickup does."
+label = "Health is super"
+help = "Health reward can exceed the normal maximum, up to 200."
 
 ["kill_rewards.armor_is_super"]
 page = "rules-damage"
-label = "Armor reward can go past normal"
-help = "Lets the reward push a player past normal armor, up to 200, the way a super armor pickup does."
+label = "Armor is super"
+help = "Armor reward can exceed the normal maximum, up to 200."
 
 # ---------------------------------------------------------------- messages
 
 ["welcome_message"]
 page = "rules-msg"
 label = "Welcome message"
-help = "A line of text shown to each player when they join."
+help = "Shown to each player when they join."
 
 ["welcome_message.enabled"]
 page = "rules-msg"
-label = "Greet players when they join"
-help = "Good for pointing people at your rules, your Discord, or how to vote."
+label = "Welcome message"
 
 ["welcome_message.text"]
 page = "rules-msg"
 label = "Message"
-help = "What each player is told when they arrive; anything past 240 characters is cut off."
+help = "Limited to 240 characters."
 
 ["location_pinging"]
 page = "rules-msg"
-label = "Players can ping locations"
-help = "Lets a player mark a spot on the map for their team to see, which only works in team modes and in Run."
+label = "Location pinging"
+help = "Lets players mark a location for their team. Only works in team game types and Run."
 notModes = ["dm", "bag", "pit", "gg"]

@@ -4,10 +4,9 @@
   import { rotationCheck } from '../mapcheck.svelte'
 
   interface Props {
-    /** already gathered, so the sidebar count and this page never disagree */
+    /** passed in so the sidebar count and this page always agree */
     findings: Finding[]
     levels: LevelEntry[]
-    /** open the page that owns a finding, in the scope it belongs to */
     onopen: (page: string, map: number | null) => void
   }
 
@@ -17,17 +16,17 @@
     {
       severity: 'broken',
       title: 'Will not work',
-      blurb: 'The server cannot do what this asks, and will start without it.',
+      blurb: 'The server cannot apply these and will start without them.',
     },
     {
       severity: 'ignored',
-      title: 'In the file, but not in effect',
-      blurb: 'The server reads these and then uses something else, or nothing.',
+      title: 'Not in effect',
+      blurb: 'The server ignores or overrides these.',
     },
     {
       severity: 'note',
-      title: 'Worth knowing',
-      blurb: 'Nothing is wrong here.',
+      title: 'Notes',
+      blurb: 'For information only.',
     },
   ]
 
@@ -46,30 +45,28 @@
 <div class="banner">
   <span class="ic">i</span>
   <div>
-    This page reads the config you have open. It does not run the server, so it
-    finds what the file says rather than what happens on the night - a password
-    nobody guessed wrong yet is not a problem here.
+    Checks cover the config file only, not the behavior of a running server.
   </div>
 </div>
 
 {#if !findings.length}
   <div class="clean">
-    <strong>Nothing here looks wrong.</strong>
+    <strong>No problems found.</strong>
     <span>
-      Every setting you have changed does something in the mode it is under, the
-      rotation is one Alpine can load, and nothing is set past what it accepts.
+      Every changed setting applies to its game type, the rotation is valid, and
+      all values are in range.
     </span>
   </div>
 {:else}
   <p class="count">
     {#if serious}
       <strong>{serious}</strong>
-      {serious === 1 ? 'thing needs' : 'things need'} a look.
+      {serious === 1 ? 'problem' : 'problems'} found.
     {:else}
-      Nothing is broken.
+      No problems found.
     {/if}
     {#if findings.length > serious}
-      {findings.length - serious} more worth knowing about.
+      {findings.length - serious} {findings.length - serious === 1 ? 'note' : 'notes'}.
     {/if}
   </p>
 
@@ -93,7 +90,7 @@
         <div class="fw">
           <span class="where">{finding.scope.label}</span>
           {#if finding.page}
-            <button type="button" class="btn" onclick={() => open(finding)}>Take me there</button>
+            <button type="button" class="btn" onclick={() => open(finding)}>Open</button>
           {/if}
         </div>
       </div>
@@ -103,10 +100,9 @@
 
 {#if rotationCheck.offline && levels.length}
   <p class="quiet">
-    FactionFiles could not be reached, so nothing here was checked against the
-    map archive.
+    Could not reach FactionFiles. Maps were not checked against the archive.
     <button type="button" class="link" onclick={() => rotationCheck.retry(levels.map(l => l.filename))}>
-      Try again
+      Retry
     </button>
   </p>
 {/if}
@@ -118,7 +114,6 @@
     margin: 0 0 6px;
   }
 
-  /* a heading's blurb sits under it, where the group heading rule leaves room */
   .sb {
     font-size: 12.5px;
     color: var(--ink-3);
@@ -151,7 +146,7 @@
     margin-bottom: 8px;
   }
 
-  /* the only color on this page: something the server will not do at all */
+  /* only broken findings get color */
   .f.bad {
     border-left-color: var(--err);
     background: var(--err-b);

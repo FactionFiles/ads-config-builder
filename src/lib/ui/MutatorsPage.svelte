@@ -11,11 +11,11 @@
 
   interface Props {
     declared: MutatorDeclaration[]
-    /** true when this is one map's page rather than the game rules */
+    /** true on a single map's page */
     levelScope?: boolean
-    /** what the base rules turned on, when this is one map's page */
+    /** mutators enabled in the base rules, on a map's page */
     inherited?: MutatorDeclaration[]
-    /** this map changed the mode, which clears what the base rules turned on */
+    /** this map changed game type, which clears the base rules' mutators */
     modeCleared?: boolean
     resolved: ResolvedRules
     gameType: string
@@ -33,8 +33,7 @@
   const running = $derived(effectiveMutators(inherited, declared, modeCleared))
   const declaredBy = $derived(new Map(declared.map(d => [d.name, d])))
   const runningBy = $derived(new Map(running.map(d => [d.name, d])))
-  // the active ones read in the server's apply order, so the note under them
-  // matches the order on the cards. the rest keep the game's own listing order.
+  // active mutators are sorted by apply order so the cards match the note below
   const on = $derived(
     all.filter(m => runningBy.has(m.name))
       .sort((a, b) => (applyRank.get(a.id) ?? 0) - (applyRank.get(b.id) ?? 0))
@@ -46,12 +45,10 @@
     all.filter(m => !runningBy.has(m.name) && !mutatorAllowsMode(m, gameType))
   )
 
-  /** on because the base rules turned it on, not because this map did */
   function fromBase(m: Mutator) {
     return !declaredBy.has(m.name) && runningBy.has(m.name)
   }
 
-  /** mutators the base rules had that this map's mode change threw away */
   const cleared = $derived(
     modeCleared ? inherited.filter(d => !declaredBy.has(d.name)) : []
   )
@@ -78,14 +75,10 @@
     ))
   }
 
-  /**
-   * What an option shows right now. Two options default to the setting's current
-   * value rather than to a constant, so they need the resolved rules to answer.
-   */
+  // some options default to the current setting value, so they need the resolved rules
   function shown(m: Mutator, option: string) {
     const decl = runningBy.get(m.name) ?? { name: m.name }
-    // an option can feed a different setting per mode - the score limit does -
-    // so read the current value from the one the mode in play actually uses
+    // an option can target a different setting per game type, like the score limit
     const target = effect(m)?.sets
       ?.filter(s => s.fromOption === option)
       .find(s => appliesToMode('rules', s.key, gameType))?.key
@@ -97,15 +90,14 @@
     return `Players need Alpine 1.${m.minClientMinorVersion} or newer`
   }
 
-  // the requirement itself reads better than the list of modes it expands to,
-  // which for team modes is nine names long
+  // name the requirement rather than listing every game type it allows
   function blockedReason(m: Mutator) {
     switch (m.gametypeReq) {
-      case 'TeamOnly': return 'Only works in modes that have teams.'
-      case 'GunGameOnly': return 'Only works in Gun Game.'
-      case 'HasScoreLimit': return 'Only works in modes that have a score limit.'
-      case 'BotsSupported': return 'Only works in modes that can run bots.'
-      default: return `Only works in ${modeTitles(modesForMutator(m))}.`
+      case 'TeamOnly': return 'Team game types only.'
+      case 'GunGameOnly': return 'Gun Game only.'
+      case 'HasScoreLimit': return 'Only in game types with a score limit.'
+      case 'BotsSupported': return 'Only in game types that support bots.'
+      default: return `Only in ${modeTitles(modesForMutator(m))}.`
     }
   }
 
@@ -114,9 +106,9 @@
 <div class="banner">
   <span class="ic">i</span>
   <div>
-    Mutators are applied <b>before</b> anything you set by hand, so your own
-    settings always win. Anything a mutator changes is marked with a
-    <i class="pd mut"></i> dot elsewhere in the tool.
+    Mutators are applied <b>before</b> manual settings, so manual settings take
+    priority. Settings changed by a mutator are marked with a
+    <i class="pd mut"></i> dot.
   </div>
 </div>
 
@@ -124,11 +116,10 @@
   <div class="banner warn">
     <span class="ic">!</span>
     <div>
-      This map plays a different mode, and changing the mode clears the mutators
-      your game rules turned on. <b>{cleared.map(d => label(d.name)).join(', ')}</b>
-      {cleared.length === 1 ? 'is' : 'are'} not running here. Add
-      {cleared.length === 1 ? 'it' : 'them'} below to get
-      {cleared.length === 1 ? 'it' : 'them'} back.
+      This map uses a different game type, which clears mutators set in the base
+      rules. <b>{cleared.map(d => label(d.name)).join(', ')}</b>
+      {cleared.length === 1 ? 'is' : 'are'} not active here. Add
+      {cleared.length === 1 ? 'it' : 'them'} below to re-enable.
     </div>
   </div>
 {/if}
@@ -157,8 +148,7 @@
 
     {#if base}
       <div class="rq base">
-        On because your game rules turn it on. Turn it off there, or change the
-        mode for this map.
+        Enabled in the base rules. Disable it there, or change this map's game type.
       </div>
     {/if}
 
@@ -209,15 +199,14 @@
 {/snippet}
 
 {#if on.length}
-  <h3 class="gh">{levelScope ? 'On for this map' : 'On for every map'}</h3>
+  <h3 class="gh">{levelScope ? 'Active on this map' : 'Active on all maps'}</h3>
   <div class="mutgrid">
     {#each on as m (m.name)}{@render card(m, 'on')}{/each}
   </div>
   {#if on.length > 1}
     <p class="order">
-      The order you add them in does not matter. These are always applied in this
-      order: {on.map(m => m.label).join(', ')}. Where two of them change the same
-      setting, the one later in that list wins.
+      Applied in this order: {on.map(m => m.label).join(', ')}. When two change
+      the same setting, the later one wins.
     </p>
   {/if}
 {/if}

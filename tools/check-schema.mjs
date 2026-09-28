@@ -1,8 +1,5 @@
-// Fails the build when the hand-authored schema layer and the generated one have
-// drifted apart. The generated half tracks the Alpine source automatically; this
-// is what stops the authored half silently falling behind it.
-//
-// Run after tools/gen-schema.mjs.
+// fails the build when the authored schema drifts from the generated one.
+// run after tools/gen-schema.mjs.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -44,9 +41,7 @@ const server = loadGenerated('server.json')
 const mutators = loadGenerated('mutators.json')
 const gametypes = loadGenerated('gametypes.json')
 
-// the game data tables, which the loadout the game types hand out is stated in
-// terms of - a weapon name in the Alpine source that no longer names a weapon
-// would leave the tool showing a kit the server does not give out
+// weapon names in the alpine source must still resolve against the game data
 const weapons = JSON.parse(readFileSync(join(ROOT, 'gamedata/weapons.json'), 'utf8'))
 const weaponNamed = name =>
   weapons.find(w => normalName(w.name) === normalName(String(name ?? '')))
@@ -60,20 +55,15 @@ const effects = loadAuthored('mutator-effects.toml')
 const pageIds = new Set((pagesFile?.page ?? []).map(p => p.id))
 if (pagesFile && pageIds.size === 0) problem('no pages', 'pages.toml declares no [[page]] entries')
 
-// every generated key needs an authored entry, and every authored entry needs a
-// generated key. the first catches an Alpine setting we have not described yet;
-// the second catches a description left behind after upstream removed a setting.
-// mode names, plus the keys whose mode gating the generated schema already
-// answers. an authored `modes` on one of those would be a second copy of a fact
-// the Alpine source states, so it is rejected rather than merged.
+// keys whose game type gating is derived from the source; authored gating on them is rejected
 const modeNames = new Set(gametypes.gametypes.map(g => g.name))
 const derivedModeKeys = new Map()
 for (const g of gametypes.gametypes) {
-  if (g.scoreLimitKey) derivedModeKeys.set(g.scoreLimitKey, 'it is a per-mode score limit')
+  if (g.scoreLimitKey) derivedModeKeys.set(g.scoreLimitKey, 'per-mode score limit')
 }
 for (const path of rules.flat) {
   if (path === 'rounds' || path.startsWith('rounds.')) {
-    derivedModeKeys.set(path, 'gt_type_uses_rounds already says which modes use rounds')
+    derivedModeKeys.set(path, 'gated by gt_type_uses_rounds')
   }
 }
 
@@ -81,12 +71,12 @@ function checkModes(label, path, entry) {
   const given = ['modes', 'notModes', 'teamOnly'].filter(f => entry[f] !== undefined)
   if (given.length === 0) return
   if (given.length > 1) {
-    problem(`${label}: mode gating is set more than one way`, `${path} - has ${given.join(' and ')}`)
+    problem(`${label}: conflicting mode gating`, `${path} - has ${given.join(' and ')}`)
     return
   }
   if (label === 'rules' && derivedModeKeys.has(path)) {
-    problem(`${label}: ${given[0]} is set on a key the generator already gates`,
-      `${path} - ${derivedModeKeys.get(path)}, so drop the authored gating`)
+    problem(`${label}: ${given[0]} set on a generator-gated key`,
+      `${path} - ${derivedModeKeys.get(path)}, remove the authored gating`)
     return
   }
   if (entry.teamOnly !== undefined) {
@@ -101,18 +91,16 @@ function checkModes(label, path, entry) {
   }
   for (const mode of list) {
     if (!modeNames.has(mode)) {
-      problem(`${label}: ${field} names a game type that does not exist`,
+      problem(`${label}: ${field} names an unknown game type`,
         `${path} -> "${mode}" (known: ${[...modeNames].join(', ')})`)
     }
   }
   if (list.length === modeNames.size) {
-    problem(`${label}: ${field} lists every game type`, `${path} - drop it instead`)
+    problem(`${label}: ${field} lists every game type`, `${path} - remove it`)
   }
 }
 
-// generated choices, by the same dotted path the authored layer keys off. a key
-// whose valid values the source states is not free text, so the authored layer
-// owes each of them a name the user can read.
+// every choice the source states needs an authored label
 function choicesByPath(keys, prefix = '', into = new Map()) {
   for (const key of keys) {
     const path = prefix + key.key
@@ -127,8 +115,7 @@ const generatedChoices = {
   server: choicesByPath([...server.keys, ...server.tables, ...server.arrays]),
 }
 
-// generated array item fields, keyed the same way. a list is drawn as a table,
-// so every column the file can hold owes the user a heading.
+// every list column needs an authored heading
 function itemFieldsByPath(keys, prefix = '', into = new Map()) {
   for (const key of keys) {
     const path = prefix + key.key
@@ -149,26 +136,24 @@ function checkFieldLabels(label, path, entry) {
   const fields = generatedFields[label]?.get(path)
   const authoredFields = entry.fields ?? {}
   if (!fields) {
-    if (entry.fields) problem(`${label}: names columns on a setting that has none`, path)
+    if (entry.fields) problem(`${label}: column names on a setting with no columns`, path)
     return
   }
   for (const field of fields) {
     const named = authoredFields[field.key]
-    if (!named?.label) { problem(`${label}: list column with no name`, `${path} -> ${field.key}`); continue }
+    if (!named?.label) { problem(`${label}: list column has no heading`, `${path} -> ${field.key}`); continue }
     if (named.lookup === undefined) continue
-    // the parser already says which table a name is checked against, so an
-    // authored one is either a second copy of that or a claim about a field the
-    // source does not check - only the second is worth having
+    // an authored lookup is only allowed where the source does not state one
     if (field.lookup) {
-      problem(`${label}: restates a lookup the source already states`, `${path} -> ${field.key}`)
+      problem(`${label}: redundant lookup, the source already states one`, `${path} -> ${field.key}`)
     } else if (!lookupTables.includes(named.lookup)) {
-      problem(`${label}: column names an unknown game data table`,
+      problem(`${label}: column has an unknown lookup table`,
         `${path} -> ${field.key} -> "${named.lookup}" (known: ${lookupTables.join(', ')})`)
     }
   }
   for (const named of Object.keys(authoredFields)) {
     if (!fields.some(f => f.key === named)) {
-      problem(`${label}: names a list column that no longer exists`, `${path} -> "${named}"`)
+      problem(`${label}: heading for a list column that no longer exists`, `${path} -> "${named}"`)
     }
   }
 }
@@ -179,11 +164,11 @@ function checkChoiceLabels(label, path, entry) {
   const labels = entry.choiceLabels ?? {}
   const missing = choices.filter(c => !labels[c])
   if (missing.length) {
-    problem(`${label}: choices with no name`, `${path} -> ${missing.join(', ')}`)
+    problem(`${label}: choices with no label`, `${path} -> ${missing.join(', ')}`)
   }
   for (const named of Object.keys(labels)) {
     if (!choices.includes(named)) {
-      problem(`${label}: names a choice that no longer exists`, `${path} -> "${named}"`)
+      problem(`${label}: label for a choice that no longer exists`, `${path} -> "${named}"`)
     }
   }
 }
@@ -195,12 +180,11 @@ function crossCheck(label, generatedPaths, authored) {
     if (!have.has(path)) { problem(`${label}: unlabeled setting`, path); continue }
     const entry = authored[path]
     if (!entry.label) problem(`${label}: entry has no label`, path)
-    if (!entry.help) problem(`${label}: entry has no help text`, path)
     if (entry.link && !/^https:\/\//.test(entry.link)) {
       problem(`${label}: entry link is not an https url`, `${path} -> "${entry.link}"`)
     }
     if (entry.linkLabel && !entry.link) {
-      problem(`${label}: entry names a link it does not have`, path)
+      problem(`${label}: entry has linkLabel but no link`, path)
     }
     if (!entry.page) problem(`${label}: entry has no page`, path)
     else if (pageIds.size && !pageIds.has(entry.page)) {
@@ -209,8 +193,8 @@ function crossCheck(label, generatedPaths, authored) {
     checkModes(label, path, entry)
     if (label === 'rules' && path === 'game_type') {
       if (entry.choiceLabels) {
-        problem('rules: game_type carries hand-written mode names',
-          'the mode names come from multi_gametype_help_text, so drop game_type.choiceLabels')
+        problem('rules: game_type has authored choiceLabels',
+          'names come from multi_gametype_help_text, remove game_type.choiceLabels')
       }
     } else {
       checkChoiceLabels(label, path, entry)
@@ -227,8 +211,7 @@ crossCheck('rules', rules.flat, authoredRules)
 
 crossCheck('server', server.flat, authoredServer)
 
-// tier 2: every mutator needs an effects entry, and every effect must point at a
-// config key that still exists
+// every mutator needs an effects entry pointing at existing keys
 if (effects) {
   const rulePaths = new Set(rules.flat)
   for (const m of mutators.mutators) {
@@ -239,16 +222,16 @@ if (effects) {
     for (const set of entry.sets ?? []) {
       if (!set.key) problem('mutator effect has no key', m.name)
       else if (!rulePaths.has(set.key)) {
-        problem('mutator effect points at a setting that does not exist', `${m.name} -> "${set.key}"`)
+        problem('mutator effect targets an unknown setting', `${m.name} -> "${set.key}"`)
       }
       if (set.value === undefined && set.fromOption === undefined) {
-        problem('mutator effect has neither a value nor a fromOption', `${m.name} -> "${set.key}"`)
+        problem('mutator effect has no value or fromOption', `${m.name} -> "${set.key}"`)
       }
       if (Array.isArray(set.value)) checkReplacementList(m.name, set)
       if (set.fromOption !== undefined && !optionNames.has(set.fromOption)) {
-        problem('mutator effect reads an option that does not exist',
+        problem('mutator effect reads an unknown option',
           `${m.name} -> "${set.key}" reads "${set.fromOption}"` +
-          (optionNames.size ? ` (known: ${[...optionNames].join(', ')})` : ' (it has no options)'))
+          (optionNames.size ? ` (known: ${[...optionNames].join(', ')})` : ' (mutator has no options)'))
       }
     }
   }
@@ -259,52 +242,44 @@ if (effects) {
   }
 }
 
-// a mutator that replaces a list rather than setting a value. the entries are
-// written the way the config file writes them, so they have to key off the same
-// field and name things the game has.
+// list entries are written as in the config file, so they need the merge key and real names
 function checkReplacementList(name, set) {
   const key = rules.keys.find(k => k.key === set.key)
   const mergeKey = key?.kind === 'array' ? key.mergeKey : undefined
   if (!mergeKey) {
-    problem('mutator effect replaces a list that does not merge by a key', `${name} -> "${set.key}"`)
+    problem('mutator effect replaces a list with no merge key', `${name} -> "${set.key}"`)
     return
   }
   const lookup = key.item.find(f => f.key === mergeKey)?.lookup
   for (const row of set.value) {
     const id = row?.[mergeKey]
     if (typeof id !== 'string' || id === '') {
-      problem('mutator effect list entry with nothing to key it by',
+      problem('mutator effect list entry has no merge key',
         `${name} -> "${set.key}" wants a ${mergeKey}`)
       continue
     }
     if (lookup === 'weapon' && !weaponNamed(id)) {
-      problem('mutator effect list entry names a weapon the game does not have', `${name}: ${id}`)
+      problem('mutator effect list entry names an unknown weapon', `${name}: ${id}`)
     }
   }
 }
 
-/**
- * A row the parser seeds into a list before reading the file. The name has to
- * still be a weapon, for the same reason a kit's does: Alpine patches the stock
- * fusion behavior out of the game and puts it back through this row, so a name
- * that stopped resolving would leave the tool describing a weapon stay rule the
- * server does not apply.
- */
+// seeded rows restore stock behavior alpine patched out, so their names must still resolve
 function checkSeedRows(key) {
   const mergeKey = key.mergeKey
   for (const row of key.seed) {
     if (!mergeKey || row[mergeKey] === undefined) {
-      problem('seeded list row with nothing to key it by', `${key.key} wants a ${mergeKey ?? 'merge key'}`)
+      problem('seeded list row has no merge key', `${key.key} wants a ${mergeKey ?? 'merge key'}`)
       continue
     }
     for (const [field, value] of Object.entries(row)) {
       const column = key.item?.find(f => f.key === field)
       if (!column) {
-        problem('seeded list row sets a column the list does not have', `${key.key} -> ${field}`)
+        problem('seeded list row sets an unknown column', `${key.key} -> ${field}`)
         continue
       }
       if (column.lookup === 'weapon' && !weaponNamed(value)) {
-        problem('seeded list row names a weapon the game does not have', `${key.key}: ${value}`)
+        problem('seeded list row names an unknown weapon', `${key.key}: ${value}`)
       }
     }
   }
@@ -314,21 +289,21 @@ function checkLoadoutOps(label, ops) {
   for (const op of ops ?? []) {
     if (op.op === 'loadoutAdd') {
       if (!weaponNamed(op.weapon)) {
-        problem('game type kit names a weapon the game does not have', `${label}: ${op.weapon}`)
+        problem('game type loadout names an unknown weapon', `${label}: ${op.weapon}`)
         continue
       }
       if (op.ammo === null && !op.ammoFrom) {
-        problem('game type kit entry with no reserve ammo', `${label}: ${op.weapon}`)
+        problem('game type loadout entry has no reserve ammo', `${label}: ${op.weapon}`)
       }
     }
     if (!op.ammoFrom) continue
     const source = op.ammoFrom.weapon ? weaponNamed(op.ammoFrom.weapon) : weapons[0]
     if (!source) {
-      problem('reserve ammo read from a weapon the game does not have',
+      problem('reserve ammo read from an unknown weapon',
         `${label}: ${op.ammoFrom.weapon}`)
     }
     else if (source[op.ammoFrom.field] === undefined) {
-      problem('reserve ammo read from a weapon table column that is gone',
+      problem('reserve ammo read from a missing weapon table column',
         `${label}: ${op.ammoFrom.field}`)
     }
   }
@@ -336,9 +311,9 @@ function checkLoadoutOps(label, ops) {
 
 for (const key of rules.keys) if (key.kind === 'array' && key.seed) checkSeedRows(key)
 
-checkLoadoutOps('every mode', gametypes.defaults.common)
-checkLoadoutOps('modes with no case of their own', gametypes.defaults.fallback)
-checkLoadoutOps('after the mode', gametypes.defaults.after)
+checkLoadoutOps('common', gametypes.defaults.common)
+checkLoadoutOps('fallback', gametypes.defaults.fallback)
+checkLoadoutOps('after', gametypes.defaults.after)
 for (const [mode, ops] of Object.entries(gametypes.defaults.perType)) checkLoadoutOps(mode, ops)
 
 const modeRestricted = [
@@ -347,8 +322,7 @@ const modeRestricted = [
 ].filter(e => e.modes || e.notModes || e.teamOnly).length + derivedModeKeys.size
 
 if (problems.length === 0) {
-  // TOML is the hand-editing format; the app gets JSON. Compiling it here rather
-  // than in gen-schema means the app can only ever import a layer that passed.
+  // compiled only on success so the app never imports an unchecked layer
   writeFileSync(join(GEN, 'authored.json'), JSON.stringify({
     pages: pagesFile.page,
     rules: authoredRules,

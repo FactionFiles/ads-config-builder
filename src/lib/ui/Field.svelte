@@ -11,12 +11,11 @@
     path: string
     resolved: ResolvedRules
     levelScope?: boolean
-    /** set when the mode in play ignores this setting, worded for the user */
+    /** shown when the active game type ignores this setting */
     offMode?: string
-    /** the control alone, for editing several maps at once where no single
-     *  provenance answer exists */
+    /** the control alone, with no provenance */
     bare?: boolean
-    /** false on repeats of the same field, where the help was already read once */
+    /** false on repeats of the same field */
     showHelp?: boolean
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
@@ -34,8 +33,7 @@
   const current = $derived<Resolved | undefined>(resolved.get(path))
   const value = $derived(current?.value)
 
-  // a setting the server only reads when a sibling is on. it stays visible but
-  // inert, so nobody sets a value that will be silently ignored.
+  // disabled rather than hidden when a sibling setting it depends on is off
   const inert = $derived(unsatisfiedGuard(scalar, path, resolved) !== undefined)
 
   const choiceLabels = $derived(choiceLabelsFor(scope, path))
@@ -46,7 +44,6 @@
         : undefined)
   )
 
-  // the unit the file stores, and what to show instead when they differ
   const shown = $derived(toDisplay(text, value))
   const unitLabel = $derived(unitFor(text))
   const choiceBlurb = $derived(
@@ -75,8 +72,8 @@
     {/if}
     {#if scalar?.typeMismatch}
       <div class="warn">
-        The server reads this as {scalar.typeMismatch.readAs} but stores it as
-        {scalar.typeMismatch.storedAs}, so it may not take effect.
+        Read as {scalar.typeMismatch.readAs} but stored as
+        {scalar.typeMismatch.storedAs}. May not take effect.
       </div>
     {/if}
   </div>
@@ -146,11 +143,11 @@
     {/if}
 
     {#if bare}
-      <!-- the caller owns the explanation -->
+      <!-- the caller shows its own explanation -->
     {:else if canReset}
       <div class="src {levelScope ? 'map' : 'you'}">
         <i class="pd {levelScope ? 'map' : 'you'}"></i>
-        {levelScope ? 'Just for this map' : 'You changed this'}
+        {levelScope ? 'Set for this map' : 'Changed'}
         <button type="button" class="rst" onclick={() => onreset?.(path)}>undo</button>
       </div>
     {:else if current?.layer === 'mutator'}

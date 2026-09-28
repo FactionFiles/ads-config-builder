@@ -1,9 +1,4 @@
-// The schema the UI runs on. Everything here is produced by `npm run schema`:
-// tools/gen-schema.mjs parses the pinned Alpine source, then
-// tools/check-schema.mjs validates the hand-authored layer and compiles it.
-//
-// schema/generated/ is gitignored - if these imports fail to resolve, run
-// `npm run schema`.
+// schema/generated/ is gitignored. if these imports fail, run `npm run schema`.
 
 import rulesJson from '../../schema/generated/rules.json'
 import serverJson from '../../schema/generated/server.json'
@@ -54,11 +49,7 @@ export function schemaFor(scope: Scope, path: string): SchemaKey | undefined {
   return (scope === 'rules' ? rulesIndex : serverIndex).get(path)
 }
 
-/**
- * What the user reads for a setting. The authored layer wins; the server's own
- * console wording is the fallback so a setting added upstream still shows a real
- * name rather than a raw key while its help text is being written.
- */
+// falls back to alpine's console labels so a new upstream setting still gets a name
 export function textFor(scope: Scope, path: string): AuthoredEntry {
   const entry = (scope === 'rules' ? authored.rules : authored.server)[path]
   if (entry) return entry
@@ -71,11 +62,7 @@ export function textFor(scope: Scope, path: string): AuthoredEntry {
   }
 }
 
-/**
- * Display names for a setting's choices. The game mode names come from the
- * game's own mode list rather than the authored layer, so a mode added upstream
- * shows up named instead of as a bare config token.
- */
+// game type names come from the generated list so new upstream game types are named
 export function choiceLabelsFor(scope: Scope, path: string): Record<string, string> | undefined {
   if (scope === 'rules' && path === 'game_type') {
     return Object.fromEntries(gametypes.gametypes.map(g => [g.name, g.title]))
@@ -83,7 +70,6 @@ export function choiceLabelsFor(scope: Scope, path: string): Record<string, stri
   return textFor(scope, path).choiceLabels
 }
 
-/** the game's own one-line description of a choice, where it has one */
 export function choiceBlurbFor(scope: Scope, path: string, choice: string): string | undefined {
   if (scope === 'rules' && path === 'game_type') return gametypesByName.get(choice)?.blurb
   return undefined
@@ -93,12 +79,7 @@ export function pagesForScope(scope: Page['scope']): Page[] {
   return pages.filter(p => p.scope === scope)
 }
 
-/**
- * Every setting in the tool, tagged with the scope it belongs to. A setting's
- * scope is a property of the setting, not of the page it is shown on - a handful
- * of server-level settings genuinely belong next to the rules they affect, and a
- * page that assumed otherwise would route their edits into the wrong place.
- */
+// scope belongs to the setting, not the page, since some pages mix server and rules settings
 export const allEntries: { scope: Scope; path: string }[] = [
   ...rules.flat.map(path => ({ scope: 'rules' as const, path })),
   ...server.flat.map(path => ({ scope: 'server' as const, path })),
@@ -112,15 +93,8 @@ export const gametypesByName = new Map(gametypes.gametypes.map(g => [g.name, g])
 
 export const allModes = gametypes.gametypes.map(g => g.name)
 
-/**
- * Which modes a setting has any effect in, or null when it applies everywhere.
- *
- * Two families are gated by the generated schema rather than by hand, because
- * the game states the answer itself and a hand-written copy would drift: the
- * per-mode score limits, and the rounds settings. Everything else comes from the
- * authored layer, where the modes were read off the code that consumes the
- * setting. check-schema.mjs rejects an authored hint on a derived key.
- */
+// score limits and rounds settings get their game types from the generated schema
+// to avoid drift. everything else comes from the authored layer.
 const derivedModes = new Map<string, string[]>()
 for (const g of gametypes.gametypes) {
   if (g.scoreLimitKey) {
@@ -149,17 +123,13 @@ export function appliesToMode(scope: Scope, path: string, mode: string): boolean
   return modes === null || modes.includes(mode)
 }
 
-/** mode names as the user reads them, for "only applies in ..." wording */
 export function modeTitles(modes: string[]): string {
   const titles = modes.map(m => gametypesByName.get(m)?.title ?? m)
   if (titles.length <= 1) return titles.join('')
   return `${titles.slice(0, -1).join(', ')} and ${titles[titles.length - 1]}`
 }
-/**
- * The modes a mutator can be used in. Alpine turns each requirement into a game
- * type mask at startup; the same answer falls out of the generated mode list, so
- * this reads the requirement rather than copying the mask.
- */
+
+// derived from the requirement rather than copying alpine's game type mask
 export function modesForMutator(m: Mutator): string[] {
   switch (m.gametypeReq) {
     case 'TeamOnly': return gametypes.gametypes.filter(g => g.isTeam).map(g => g.name)

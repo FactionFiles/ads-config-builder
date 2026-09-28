@@ -1,6 +1,5 @@
-# Page definitions for the settings UI.
-# Ids are fixed - they are in the URL. Titles follow the approved prototype
-# unless we deliberately change one.
+# page definitions for the settings UI.
+# ids are fixed because they appear in the URL.
 # scope: server | rules | other
 
 [[page]]
@@ -8,116 +7,116 @@ id = "srv-basics"
 title = "Name & players"
 scope = "server"
 order = 1
-blurb = "How your server appears in the browser and how many people can join."
+blurb = "Server name, player limit, and network setup."
 
 [[page]]
 id = "srv-access"
 title = "Passwords & access"
 scope = "server"
 order = 2
-blurb = "Who is allowed to join, and what kind of game client they have to be running."
+blurb = "Passwords and client requirements."
 
 [[page]]
 id = "srv-client"
-title = "What players can turn off"
+title = "Client options"
 scope = "server"
 order = 3
-blurb = "Visual, audio and cosmetic options you let players change on their own machine."
+blurb = "Visual, audio, and cosmetic options players are allowed to use."
 
 [[page]]
 id = "srv-voting"
 title = "Voting"
 scope = "server"
 order = 4
-blurb = "Which votes players are allowed to call, and how long each vote runs."
+blurb = "Which votes players can call, and how long each vote lasts."
 
 [[page]]
 id = "srv-idle"
 title = "Idle players"
 scope = "server"
 order = 5
-blurb = "Warn and remove players who stop playing."
+blurb = "Detect, warn, and kick idle players."
 
 [[page]]
 id = "rules-mode"
-title = "Mode & scoring"
+title = "Game type & scoring"
 scope = "rules"
 order = 6
-blurb = "Which game mode is played, how long it runs, and what it takes to win."
+blurb = "Game type, time limit, and win conditions."
 
 [[page]]
 id = "rules-mutators"
 title = "Mutators"
 scope = "rules"
 order = 7
-blurb = "Ready-made rule changes you can switch on, like Instagib or Low Gravity."
+blurb = "Preset rule changes such as Instagib or Low Gravity."
 
 [[page]]
 id = "rules-spawn"
 title = "Spawning"
 scope = "rules"
 order = 8
-blurb = "What players get when they respawn, and where they appear."
+blurb = "Spawn loadout, spawn protection, respawn delay, and spawn point selection."
 
 [[page]]
 id = "rules-weapons"
 title = "Weapons & items"
 scope = "rules"
 order = 9
-blurb = "What can be picked up, how fast it comes back, and what it turns into."
+blurb = "Weapon stay, item respawn times, and item replacements."
 
 [[page]]
 id = "rules-damage"
 title = "Damage & physics"
 scope = "rules"
 order = 10
-blurb = "How hard players hit each other, and how the world reacts."
+blurb = "Damage, gibbing, kill rewards, and physics."
 
 [[page]]
 id = "rules-msg"
 title = "Messages"
 scope = "rules"
 order = 11
-blurb = "What the server tells players while they are on it."
+blurb = "Messages the server sends to players."
 
 [[page]]
 id = "rotation"
 title = "All maps"
 scope = "other"
 order = 12
-blurb = "The list of maps the server plays, and the order it plays them in."
+blurb = "The maps the server plays, in order."
 
 [[page]]
 id = "bots"
 title = "Bots"
 scope = "other"
 order = 13
-blurb = "Computer-controlled players that fill out a quiet server."
+blurb = "Bot access and bot profiles."
 
 [[page]]
 id = "admin"
 title = "Advanced admin access"
 scope = "other"
 order = 14
-blurb = "Several named admin passwords, each allowed to run only the commands you pick."
+blurb = "Named rcon passwords, each limited to the commands you choose."
 
 [[page]]
 id = "srv-stats"
 title = "Stats tracking"
 scope = "server"
 order = 15
-blurb = "Linking this server to FactionFiles so the matches it runs are reported to the site."
+blurb = "Report matches played on this server to FactionFiles."
 
 [[page]]
 id = "srv-demos"
-title = "Recording matches"
+title = "Demos"
 scope = "server"
 order = 16
-blurb = "Recording play to demo files, and sending them to FactionFiles."
+blurb = "Record matches to demo files and upload them to FactionFiles."
 
 [[page]]
 id = "checks"
 title = "Problems"
 scope = "other"
 order = 17
-blurb = "Things in this config that look wrong or will not work together."
+blurb = "Settings that are invalid or conflict with each other."

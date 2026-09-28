@@ -1,8 +1,6 @@
 <script lang="ts">
-  // A setting that holds a list rather than one value. Three shapes share this
-  // component because they differ only in what one row holds: a small record
-  // per row, a bare name per row, or - for the Gun Game ladder - a whole group
-  // of names per row.
+  // list settings: each row is a record, a bare value, or (for the gun game
+  // ladder) a group of weapons
 
   import { schemaFor, textFor, type Scope } from '../../schema'
   import type {
@@ -17,15 +15,15 @@
     scope: Scope
     path: string
     resolved: ResolvedRules
-    /** the rows this scope holds itself, which is what an edit is written into */
+    /** the rows this scope sets itself, which edits are written into */
     manual?: unknown
     levelScope?: boolean
-    /** set when the mode in play ignores this setting, worded for the user */
+    /** shown when the active game type ignores this setting */
     offMode?: string
-    /** what each map in the rotation sets itself, for a row Alpine re-seeds */
+    /** each map's manual keys, for rows alpine reseeds per scope */
     mapManual?: Record<string, unknown>[]
     onchange?: (path: string, value: unknown) => void
-    /** write one row into every map, for a row the base rules alone cannot hold */
+    /** write one row into every map */
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
@@ -52,14 +50,13 @@
     (schema.item ?? []).map(field => ({
       key: field.key,
       type: field.type ?? 'string',
-      // the parser's own check first, then a name the authored layer offers for
-      // a field the parser takes on trust
+      // prefer the parser's lookup, then fall back to the authored one
       lookup: field.lookup ?? text.fields?.[field.key]?.lookup,
       text: text.fields?.[field.key] ?? { label: field.key },
     }))
   )
 
-  /** a list of bare values has one unnamed column, which is the setting itself */
+  /** a list of bare values has one unnamed column */
   const loose = $derived<Column>({
     key: '',
     type: schema.itemType ?? 'string',
@@ -69,10 +66,8 @@
 
   const canReset = $derived(current?.layer === 'manual')
 
-  // Some lists are folded together rather than replaced: each layer names the
-  // entries it cares about, keyed by one field, and the rest stays as the layer
-  // under it left it. Those show every layer's rows, and an edit to one this
-  // scope did not write picks it up by naming it.
+  // merged lists show rows from every layer; editing an inherited row adds an
+  // entry to this scope keyed by the merge field
   const mergeKey = $derived(schema.mergeKey)
   const mine = $derived(Array.isArray(manual) ? (manual as Record<string, unknown>[]) : [])
   const origins = $derived<RowOrigin[]>(rowSources(current, mergeKey))
@@ -86,7 +81,6 @@
     return mine.some(r => sameId(r[mergeKey], id))
   }
 
-  /** what a row's own dot says, since a merged list holds several layers at once */
   function rowTone(row: unknown, origin: RowOrigin | undefined) {
     return toneFor(origin?.by?.layer, isMine(row) && levelScope)
   }
@@ -97,27 +91,19 @@
       + (by?.source ? `: ${by.source}` : '')
   }
 
-  // taking your entry back out leaves whatever the layers under it hold, which
-  // is a different thing from the row going away
+  // removing an override of an inherited row reverts it rather than deleting it
   function removeLabel(origin: RowOrigin | undefined) {
     return origin?.first && origin.first !== origin.by ? 'Reset' : 'Remove'
   }
 
-  /**
-   * Maps that will lose this row.
-   *
-   * Some rows are put into the list by the parser itself, once for every scope
-   * it reads - which is how Alpine keeps the stock weapon stay rule for the
-   * Fusion Rocket Launcher after patching the game's own out. Because the
-   * seeding runs per scope, changing such a row in the game rules is undone for
-   * every map that does not change it too, so the row says so and offers the
-   * only thing that works.
-   */
+  // the parser seeds some rows (like the fusion weapon stay rule) once per scope,
+  // so a base rules change is undone on every map that does not repeat it.
+  // returns how many maps lose the row.
   function reseededOn(row: unknown): number {
     if (levelScope || !mergeKey || !onapplytoall) return 0
     const seed = (schema.seed ?? []).find(s => sameId(s[mergeKey], (row as Record<string, unknown>)?.[mergeKey]))
     if (!seed || !isMine(row)) return 0
-    // a row set to what the seed would put back anyway loses nothing
+    // a row that matches the seed loses nothing
     const differs = Object.entries(seed).some(
       ([field, value]) => field !== mergeKey && cellValue(row, field) !== value
     )
@@ -129,8 +115,7 @@
     }).length
   }
 
-  // an empty list means the same thing as no list at all, so clearing the last
-  // row takes the key out of the file rather than writing an empty one
+  // an empty list is the same as no list, so drop the key instead
   function set(next: unknown[]) {
     if (next.length === 0) onreset?.(path)
     else onchange?.(path, next)
@@ -146,7 +131,7 @@
     return out
   }
 
-  /** the first name the list does not already hold, since one entry means one name */
+  /** the first name not already in the list, since names must be unique */
   function unusedName(column: Column): string {
     const table = tableFor(column.lookup!)
     const taken = rows.map(row => String(cellValue(row, column.key) ?? '').toLowerCase())
@@ -160,8 +145,7 @@
     }
     const id = (rows[index] as Record<string, unknown>)[mergeKey]
     const at = mine.findIndex(r => sameId(r[mergeKey], id))
-    // an entry that names only the key and the field being changed leaves every
-    // other field as it was inherited, rather than pinning it to what it is now
+    // write only the changed field so the rest stay inherited
     if (at === -1) set([...mine, { [mergeKey]: id, [key]: value }])
     else set(mine.map((row, i) => (i === at ? { ...row, [key]: value } : row)))
   }
@@ -192,19 +176,19 @@
     return key ? (row as Record<string, unknown>)?.[key] : row
   }
 
-  /** what a name is called, for a column this scope cannot change the name in */
+  /** display name for a read-only lookup cell */
   function nameOf(column: Column, value: unknown): string {
     const shown = typeof value === 'string' ? value : ''
     if (!column.lookup) return shown
     return tableFor(column.lookup).find(e => e.name === shown)?.display ?? shown
   }
 
-  /** the names this column offers, with anything unknown kept rather than lost */
+  /** lookup options, keeping an unknown current value rather than dropping it */
   function optionsFor(column: Column, value: unknown) {
     const entries = tableFor(column.lookup!).map(e => ({ value: e.name, label: e.display }))
     const shown = typeof value === 'string' ? value : ''
     if (shown && !entries.some(e => e.value === shown)) {
-      entries.unshift({ value: shown, label: `${shown} (not a name the game knows)` })
+      entries.unshift({ value: shown, label: `${shown} (unknown)` })
     }
     if (column.text.emptyLabel) entries.unshift({ value: '', label: column.text.emptyLabel })
     return entries
@@ -215,7 +199,7 @@
     if (Number.isFinite(n)) apply(toFile(column.text, n))
   }
 
-  // the Gun Game ladder: each row is a group of weapons handed out together
+  // gun game ladder: each row is a group of weapons given together
   function editTier(index: number, next: string[]) {
     if (next.length === 0) { removeRow(index); return }
     set(rows.map((row, i) => (i === index ? next : row)))
@@ -288,7 +272,7 @@
   {#if offMode}<p class="warn">{offMode}</p>{/if}
 
   {#if !rows.length}
-    <p class="none">None yet.</p>
+    <p class="none">None.</p>
   {/if}
 
   {#if columns.length}
@@ -335,14 +319,14 @@
             {#if missing}
               <tr class="reseed">
                 <td colspan={columns.length + 1}>
-                  Alpine sets this row again at the start of every map, so on its own
-                  this does not reach {missing === mapManual.length ? 'any of them' : 'all of them'}.
+                  Alpine resets this row on every map, so this change does not apply to
+                  {missing === mapManual.length ? 'any map' : 'every map'}.
                   <button
                     type="button"
                     class="btn"
                     onclick={() => onapplytoall?.(path, row as Record<string, unknown>)}
                   >
-                    Set it on {missing === 1 ? 'the 1 map' : `all ${mapManual.length} maps`}
+                    Apply to {missing === 1 ? '1 map' : `all ${mapManual.length} maps`}
                   </button>
                 </td>
               </tr>
@@ -352,7 +336,7 @@
       </table>
     {/if}
     <button type="button" class="btn addbtn" onclick={addRow}>
-      Add a row
+      Add row
     </button>
   {:else if schema.itemsAreLists}
     {#each rows as row, i (i)}
@@ -382,13 +366,13 @@
             </span>
           {/each}
           <button type="button" class="btn" onclick={() => editTier(i, [...tier, firstName])}>
-            Add a weapon
+            Add weapon
           </button>
         </div>
       </div>
     {/each}
     <button type="button" class="btn addbtn" onclick={() => set([...rows, [firstName]])}>
-      Add a level
+      Add level
     </button>
   {:else}
     {#each rows as row, i (i)}
@@ -407,16 +391,16 @@
       class="btn addbtn"
       onclick={() => set([...rows, schema.lookup ? firstName : ''])}
     >
-      Add one
+      Add
     </button>
   {/if}
 
   {#if canReset}
     <div class="src {levelScope ? 'map' : 'you'}">
       <i class="pd {levelScope ? 'map' : 'you'}"></i>
-      {levelScope ? 'Just for this map' : 'You changed this'}
+      {levelScope ? 'Set for this map' : 'Changed'}
       <button type="button" class="rst" onclick={() => onreset?.(path)}>
-        {mergeKey ? 'undo every change here' : 'clear the list'}
+        {mergeKey ? 'undo all changes' : 'clear list'}
       </button>
     </div>
   {/if}
@@ -481,8 +465,7 @@
 
   .rows td.acts .pd { margin-right: 8px; }
 
-  /* a row that came from a layer under this one: the name is not this scope's to
-     change, but what the kit does with it is */
+  /* inherited row: the name is fixed here but its other fields are editable */
   .held {
     font-size: 13px;
     color: var(--ink-3);

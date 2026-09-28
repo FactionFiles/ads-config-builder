@@ -17,8 +17,7 @@
   let doc = $state(emptyDocument())
 
 
-  // the page and the map being edited both live in the URL, so a link can point
-  // at one and the back button does what people expect
+  // page and map live in the URL so links and the back button work
   interface Route { page: string; map: number | null }
 
   function routeFromHash(): Route {
@@ -75,13 +74,12 @@
     save(fileText, fileName)
   }
 
-  /** the same key can turn up in several scopes, and saying so twice helps nobody */
+  // the same key can appear in several scopes
   function once(paths: string[]) {
     return [...new Set(paths)]
   }
 
-  // a map only has game rules, so scoping into one from a server page lands on
-  // the first rules page rather than on a page that does not exist there
+  // a map only has game rules, so a server page falls back to the first rules page
   const rulesPages = $derived(pages.filter(p => p.scope === 'rules'))
   const level = $derived(route.map !== null ? doc.levels[route.map] : undefined)
   const page = $derived.by(() => {
@@ -93,8 +91,7 @@
   function resolve(scope: RulesScope, base?: ResolvedRules): ResolvedRules {
     return resolveScope({
       base,
-      // a map that changes the mode is rebuilt from the base rules' own keys
-      // rather than from the resolved base rules, so they travel together
+      // a map that changes game type restarts from the base scope's manual keys
       baseManual: base ? doc.base.manual : undefined,
       gameType: scope.manual.game_type as string | undefined,
       mutators: scope.mutators,
@@ -119,8 +116,7 @@
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
 
-  // the archive is asked here rather than on the problems page, so the sidebar
-  // count and the page itself are always answering with the same information
+  // checked here so the sidebar count and the problems page always agree
   $effect(() => {
     rotationCheck.schedule(doc.levels.map(level => level.filename))
   })
@@ -131,8 +127,7 @@
     findProblems({ doc, baseRules, levelRules, server: serverSettings, absentMaps })
   )
 
-  // the sidebar count, so a problem is visible from whichever page you are on.
-  // notes are left out of it - a badge that is always lit stops being read.
+  // notes are excluded, since a badge that is always lit gets ignored
   const problems = $derived(findings.filter(f => f.severity !== 'note').length)
 
   function editScope(edit: (scope: RulesScope) => RulesScope) {
@@ -157,13 +152,7 @@
     })
   }
 
-  /**
-   * Write one row of a list into every map.
-   *
-   * Repeating a key across every map is normally the worse config and the tool
-   * says so - but a row Alpine seeds per scope is put back for each map, so the
-   * base rules cannot hold it on their own and this is the only thing that works.
-   */
+  // alpine reseeds some list rows per scope, so the base rules alone cannot override them
   function applyRowToAllMaps(path: string, row: Record<string, unknown>) {
     const key = schemaFor('rules', path)
     const mergeKey = key?.kind === 'array' ? key.mergeKey : undefined
@@ -175,7 +164,6 @@
     editScope(s => ({ ...s, mutators: next }))
   }
 
-  // how many maps get their own sidebar entry before the list is cut short
   const NAV_MAPS = 4
   const navMaps = $derived(doc.levels.slice(0, NAV_MAPS))
 
@@ -204,7 +192,7 @@
       onchange={openFile}
       hidden
     />
-    <button type="button" class="btn" onclick={() => fileInput?.click()}>Open a config</button>
+    <button type="button" class="btn" onclick={() => fileInput?.click()}>Open</button>
     <button type="button" class="btn pri" onclick={download}>Download</button>
     <button type="button" class="btn" onclick={() => (fileOpen = !fileOpen)}>
       {fileOpen ? 'Hide' : 'Show'} config file
@@ -212,7 +200,7 @@
   </header>
 
   <nav class="nav">
-    <div class="scope">The whole server</div>
+    <div class="scope">Server</div>
     {#each groupsOf('server') as p (p.id)}
       <button
         type="button"
@@ -259,7 +247,7 @@
     {/if}
 
     {#if groupsOf('other').length}
-      <div class="scope">Everything else</div>
+      <div class="scope">Other</div>
       {#each groupsOf('other') as p (p.id)}
         <button
           type="button"
@@ -278,7 +266,7 @@
     {#if importError}
       <div class="notice bad">
         <div>
-          <b>That file could not be read.</b>
+          <b>Could not read file.</b>
           {importError}
         </div>
         <button type="button" class="x" aria-label="Dismiss" onclick={() => (importError = null)}>
@@ -295,31 +283,28 @@
         <div>
           <b>Opened {fileName}.</b>
           {#if imported.fromVersion !== null && imported.fromVersion !== meta.adsVersion}
-            It was written for ads_version {imported.fromVersion}; downloading
-            writes version {meta.adsVersion}.
+            File uses ads_version {imported.fromVersion} and will be saved as
+            version {meta.adsVersion}.
           {/if}
           {#if kept.length}
             <br />{kept.length}
-            {kept.length === 1 ? 'setting has' : 'settings have'} no editor here yet
-            and {kept.length === 1 ? 'was' : 'were'} kept exactly as {kept.length === 1 ? 'it' : 'they'} came in:
+            {kept.length === 1 ? 'setting is' : 'settings are'} not editable here and
+            {kept.length === 1 ? 'was' : 'were'} kept unchanged:
             <span class="keys">{kept.join(', ')}</span>.
           {/if}
           {#if strange.length}
             <br />{strange.length}
-            {strange.length === 1 ? 'key was' : 'keys were'} not recognized, and
-            {strange.length === 1 ? 'is' : 'are'} kept too:
+            unrecognized {strange.length === 1 ? 'key was' : 'keys were'} kept:
             <span class="keys">{strange.join(', ')}</span>.
           {/if}
           {#if removed.length}
-            <br /><b>Rules presets have been removed from Alpine.</b>
-            Alpine {meta.alpineVersion} no longer applies
+            <br /><b>Rules presets were removed from Alpine.</b>
+            Alpine {meta.alpineVersion} no longer supports
             <span class="keys">{removed.join(', ')}</span>, so
-            {removed.length === 1 ? 'that key was' : 'those keys were'} dropped rather than
-            written back out. Anything a preset used to set has to be set here instead,
-            in the base rules or on the map that needs it.
+            {removed.length === 1 ? 'it was' : 'they were'} dropped. Set those rules
+            in the base rules or on individual maps instead.
           {/if}
-          <br />Downloading writes the file out fresh, so comments and the order
-          you had things in are not kept.
+          <br />Comments and key order are not preserved on download.
         </div>
         <button type="button" class="x" aria-label="Dismiss" onclick={() => (imported = null)}>
           &times;
@@ -330,9 +315,8 @@
     {#if level}
       <h2>{level.filename}</h2>
       <p class="blurb">
-        Number {(route.map ?? 0) + 1} in the rotation. These are the same pages as
-        <b>Game rules</b>, for this one map. Anything you leave alone stays the
-        same as every other map.
+        Map {(route.map ?? 0) + 1} in the rotation. Settings not changed here
+        use the base <b>Game rules</b>.
       </p>
     {:else if page}
       <h2>{page.title}</h2>
@@ -498,7 +482,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* a count of things that will not work, which is not a count of maps */
+  /* problem count, distinct from the map count */
   .ni .ct.warn {
     color: var(--err);
     background: var(--err-b);

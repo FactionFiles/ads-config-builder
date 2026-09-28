@@ -1,39 +1,28 @@
-/**
- * The FactionFiles map API, as far as this tool is concerned. One place that
- * knows the wire shapes, so nothing else has to.
- *
- * The tool is a static page, so these calls go from the browser straight to
- * FactionFiles. Every one of them is a plain GET, or a text/plain POST, which is
- * what keeps them out of preflight territory. The contract is
- * `site/doc/map-api.md` in the FactionFiles repo.
- *
- * Everything here fails soft. The map picker is additive: a search that cannot
- * reach the archive leaves you typing a file name by hand, which is how the
- * rotation was built before any of this existed.
- */
+// client for the factionfiles map api (see site/doc/map-api.md in their repo).
+// requests are plain GETs or text/plain POSTs so the browser skips cors preflight.
+// everything fails soft, since typing a filename by hand still works.
 
-/** the endpoint set, overridable so a local FactionFiles can be pointed at */
+/** overridable to point at a local factionfiles */
 const BASE = String(import.meta.env?.VITE_MAP_API ?? 'https://autodl.factionfiles.com/maps/v1/')
   .replace(/\/*$/, '/')
 
-/** what the batch check accepts in one request */
+/** max names per batch request */
 const BATCH = 100
 
-/** past this we post the names instead, rather than build an unwieldy url */
+/** above this, names are posted rather than put in the url */
 const URL_NAMES = 25
 
 export interface MapCategory {
   id: number
   name: string
-  /** which game, since the archive holds more than Red Faction */
+  /** the archive holds more than red faction */
   game: { id: number; name: string }
-  /** distinct level names in it */
   maps: number
 }
 
 export interface MapResult {
   fileId: number
-  /** the level file name, exactly as the archive holds it. this is the point */
+  /** exact filename as the archive stores it */
   rfl: string
   title: string
   author: string
@@ -52,14 +41,14 @@ export interface MapResult {
 
 export interface MapSearch {
   query: string
-  /** the whole match count rather than this page, so paging can be described */
+  /** total matches across all pages */
   total: number
   limit: number
   offset: number
   results: MapResult[]
 }
 
-/** one level the autodownloader will serve. `siteUrl` is null when unlisted */
+/** `siteUrl` is null when unlisted */
 export interface MapHeld {
   rfl: string
   fileId: number
@@ -77,15 +66,14 @@ export class MapApiError extends Error {
   }
 }
 
-/** what a person should be told, per error code the api documents */
 function sayFor(code: string, status: number) {
-  if (code === 'query_too_long') return 'That search is too long.'
-  if (code === 'invalid_category') return 'That category is not one FactionFiles knows.'
-  if (code === 'too_many_names') return 'Too many maps to check in one go.'
-  if (code === 'no_names') return 'There was nothing to look up.'
+  if (code === 'query_too_long') return 'Search is too long.'
+  if (code === 'invalid_category') return 'Unknown category.'
+  if (code === 'too_many_names') return 'Too many maps to check at once.'
+  if (code === 'no_names') return 'No maps to check.'
   if (status === 0) return 'Could not reach FactionFiles.'
-  if (status >= 500) return 'FactionFiles had a problem answering.'
-  return 'FactionFiles could not answer that.'
+  if (status >= 500) return 'FactionFiles server error.'
+  return 'FactionFiles request failed.'
 }
 
 async function call(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
@@ -93,7 +81,7 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
   try {
     response = await fetch(BASE + path, init)
   } catch (cause) {
-    // a blocked origin, a dead host and an aborted call all land here
+    // network failures and aborts both land here
     if (cause instanceof DOMException && cause.name === 'AbortError') throw cause
     throw new MapApiError('unreachable', sayFor('unreachable', 0))
   }
@@ -102,8 +90,8 @@ async function call(path: string, init?: RequestInit): Promise<Record<string, un
   try {
     body = await response.json()
   } catch {
-    // a failure is documented to carry json, so anything else is a broken host
-    if (response.ok) throw new MapApiError('bad_response', 'FactionFiles sent something unreadable.')
+    // errors are documented to carry json, so only a non-json success is malformed
+    if (response.ok) throw new MapApiError('bad_response', 'FactionFiles sent an invalid response.')
   }
 
   if (!response.ok || body.ok !== true) {
@@ -121,8 +109,6 @@ function asPair(value: unknown): { id: number; name: string } {
   return { id: asCount(pair.id), name: asText(pair.name) }
 }
 
-// the wire is snake case and the rest of the tool is not, so the shapes meet
-// here and nowhere else
 function asResult(row: Record<string, unknown>): MapResult {
   return {
     fileId: asCount(row.file_id),
@@ -152,11 +138,7 @@ function asHeld(row: Record<string, unknown>): MapHeld {
   }
 }
 
-/**
- * A level name written however somebody had it, turned into the name the archive
- * stores. The same shapes the api itself accepts, done here as well so a name
- * asked about twice is only ever fetched once.
- */
+// mirrors the api's own normalization so cache keys match
 export function levelName(written: string): string {
   let name = written.trim()
   if (name.slice(0, 5).toLowerCase() === '$map:') name = name.slice(5)
@@ -200,8 +182,7 @@ export async function searchMaps(options: SearchOptions = {}): Promise<MapSearch
   }
 
   searches.set(key, search)
-  // every map the picker offers is one the autodownloader serves, so a search is
-  // also an answer about the names it returned
+  // search results are all servable, so they also answer availability checks
   for (const map of search.results) {
     held.set(map.rfl.toLowerCase(), {
       rfl: map.rfl,
@@ -227,14 +208,7 @@ export async function mapCategories(signal?: AbortSignal): Promise<MapCategory[]
   return categories
 }
 
-/**
- * Which of these levels the autodownloader will serve, keyed by the name asked
- * about. A null means it will not, which is the finding worth raising: everyone
- * who joins on that map fails to download it.
- *
- * Names already answered for are not asked about again, so checking a rotation
- * after adding one map costs one name rather than fifty.
- */
+/** null means the autodownloader cannot serve it. only uncached names are requested */
 export async function checkMaps(names: string[], signal?: AbortSignal): Promise<Map<string, MapHeld | null>> {
   const wanted = new Map<string, string>()
   for (const written of names) {
@@ -245,8 +219,7 @@ export async function checkMaps(names: string[], signal?: AbortSignal): Promise<
   const missing = [...wanted].filter(([key]) => !held.has(key)).map(([, name]) => name)
   for (let at = 0; at < missing.length; at += BATCH) {
     const batch = missing.slice(at, at + BATCH)
-    // a comma in a name would read as two names in the url, so those names go
-    // in the body where the separator is a newline instead
+    // the url form splits on commas, so names containing one must be posted
     const posted = batch.length > URL_NAMES || batch.some(name => name.includes(','))
     const body = posted
       ? await call('have.php', {
@@ -269,7 +242,7 @@ export async function checkMaps(names: string[], signal?: AbortSignal): Promise<
   return out
 }
 
-/** what is already known about a level name without asking anyone */
+/** cached answer only, no request */
 export function knownMap(written: string): MapHeld | null | undefined {
   return held.get(levelName(written).toLowerCase())
 }

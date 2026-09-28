@@ -1,7 +1,6 @@
 <script lang="ts">
-  // The rotation as one sheet rather than a form per map. Every row is a map and
-  // every cell answers the same question: does this map use your game rules, or
-  // does it do something of its own?
+  // one row per map; each cell shows whether the map inherits the base rules
+  // or sets its own value
 
   import { gametypesByName, mutatorsByName, textFor } from '../../schema'
   import { emptyLevel, parseLevelList, type LevelEntry, type RulesScope } from '../config'
@@ -20,7 +19,7 @@
     levelRules: ResolvedRules[]
     onchange: (next: LevelEntry[]) => void
     onopen: (index: number) => void
-    /** the game rules pages, which is where the top row is actually edited */
+    /** opens the base rules pages, where the top row is edited */
     onopenbase: () => void
   }
 
@@ -28,8 +27,8 @@
     levels, base, baseRules, levelRules, onchange, onopen, onopenbase,
   }: Props = $props()
 
-  // columns the sheet can show that are not one setting: the score limit follows
-  // each row's own mode, and mutators are a list rather than a value
+  // columns that are not a single setting: score limit follows each row's game
+  // type, and mutators are a list
   const PSEUDO = [
     { id: '@score', label: 'Score limit', group: 'Rotation sheet' },
     { id: '@mutators', label: 'Mutators', group: 'Rotation sheet' },
@@ -77,19 +76,16 @@
 
   const totalChanged = $derived(rows.filter(r => r.changed > 0).length)
 
-  /** what is already here, so the picker can say so rather than offer it twice */
   const taken = $derived(new Set(levels.map(level => level.filename.toLowerCase())))
 
-  // a map the autodownloader does not carry fails to download for everyone who
-  // joins on it, so the sheet asks about the rotation as it is edited
+  // flag maps the autodownloader does not carry as the rotation is edited
   $effect(() => {
     rotationCheck.schedule(levels.map(level => level.filename))
   })
 
   const absent = $derived(rotationCheck.absentAmong(levels.map(level => level.filename)))
 
-  // the examples are stock maps, so they are names anyone can type and watch
-  // work. bagman plays on the flag maps, everything else on the deathmatch ones
+  // example names use stock maps; bagman modes play on the ctf maps
   const CTF_MAPS = new Set(['ctf', 'bag', 'tbag'])
   const stock = $derived(CTF_MAPS.has(baseMode) ? 'ctf' : 'dm')
 
@@ -105,7 +101,7 @@
 
   function settingCell(row: Row, path: string, neverInherited = false): Cell {
     const r = row.rules.get(path)
-    if (!r) return { text: 'not a setting here', kind: 'muted' }
+    if (!r) return { text: 'n/a', kind: 'muted' }
     if (r.layer === 'inherited' && !neverInherited) return { text: 'same', kind: 'inherited' }
     return { text: formatValue('rules', path, r.value), kind: layerKind(r, row.index < 0) }
   }
@@ -121,23 +117,21 @@
     }
     const own = row.level.rules.mutators
     const effective = effectiveMutators(base.mutators, own, row.modeChanged)
-    // a mode change wipes the base rules' mutators, so a map that changes the
-    // mode and adds nothing back genuinely runs without them
+    // changing game type clears the base rules' mutators
     const differs = own.length > 0 || (row.modeChanged && base.mutators.length > 0)
     if (!differs) {
       return base.mutators.length
         ? { text: 'same', kind: 'inherited' }
         : { text: 'none', kind: 'muted' }
     }
-    if (!effective.length) return { text: 'none - mode changed', kind: 'map' }
+    if (!effective.length) return { text: 'none (game type changed)', kind: 'map' }
     return { text: effective.map(m => mutatorLabel(m.name)).join(', '), kind: 'mut' }
   }
 
   function scoreCell(row: Row): Cell {
     const key = gametypesByName.get(row.mode)?.scoreLimitKey
     if (!key) return { text: 'no score limit', kind: 'muted' }
-    // when a map plays a different mode it is scored by a different key, so
-    // "same" would be comparing two unrelated settings
+    // a different game type uses a different score key, so "same" would be misleading
     return settingCell(row, key, row.level !== undefined && key !== baseScoreKey)
   }
 
@@ -185,11 +179,8 @@
 
   const selected = $derived([...selection].sort((a, b) => a - b))
 
-  /**
-   * What the multi-map editor shows. It starts from the base rules, so the
-   * control opens on the value these maps inherit, and only reads as set once
-   * every selected map agrees on the same value.
-   */
+  // starts from the base rules and only shows a manual value once every
+  // selected map agrees on it
   const bulkResolved = $derived.by<ResolvedRules>(() => {
     const out = new Map(baseRules)
     if (!bulkPath) return out
@@ -204,7 +195,7 @@
     return out
   })
 
-  /** what the selected maps use today, so a shared control is not the only story */
+  // current values across the selection, since the shared control can hide differences
   const bulkSummary = $derived.by(() => {
     if (!bulkPath) return ''
     const counts = new Map<string, number>()
@@ -240,9 +231,8 @@
 <div class="banner">
   <span class="ic">i</span>
   <div>
-    The top row is your <b>game rules</b>. Every map plays by them unless it says
-    otherwise, so changing something there changes it everywhere at once. Click a
-    map to give that one map a different value.
+    The top row shows the base <b>game rules</b>, which apply to every map. Click
+    a map to override settings for that map.
   </div>
 </div>
 
@@ -253,28 +243,28 @@
   </span>
   <span class="sp"></span>
   <button type="button" class="btn" class:pressed={panel === 'columns'} onclick={() => openPanel('columns')}>
-    Choose columns
+    Columns
   </button>
   <button type="button" class="btn" class:pressed={panel === 'paste'} onclick={() => openPanel('paste')}>
-    Paste a list
+    Paste list
   </button>
   <button type="button" class="btn pri" class:pressed={panel === 'add'} onclick={() => openPanel('add')}>
-    Add a map
+    Add map
   </button>
 </div>
 
 {#if panel === 'columns'}
   <div class="panel">
     <h4>Columns</h4>
-    <p class="ph">Any setting can be a column. The sheet shows what each map does with it.</p>
+    <p class="ph">Choose settings to show for each map.</p>
     <SettingPicker extra={PSEUDO} selected={columns} onpick={toggleColumn} />
   </div>
 {:else if panel === 'paste'}
   <div class="panel">
-    <h4>Paste a list of maps</h4>
+    <h4>Paste map list</h4>
     <p class="ph">
-      One file name per line. Numbering, quotes and commas are stripped, and
-      <code>.rfl</code> is added where it is missing.
+      One file name per line. Numbering, quotes, and commas are removed, and
+      <code>.rfl</code> is added if missing.
     </p>
     <textarea class="ctl area" rows="7" bind:value={pasteText}
       placeholder={`${stock}02.rfl\n${stock}03\n${stock}04`}></textarea>
@@ -291,19 +281,18 @@
   </div>
 {:else if panel === 'add'}
   <div class="panel">
-    <h4>Add a map</h4>
+    <h4>Add map</h4>
     <MapPicker {taken} onpick={map => addMaps([map.rfl])} />
     <div class="byhand">
       <p class="ph">
-        Or type the file name, such as <code>{stock}02.rfl</code>. The
-        autodownloader carries maps the site does not list, so a name that finds
-        nothing above can still be the right one.
+        Or enter a file name, such as <code>{stock}02.rfl</code>. The
+        autodownloader includes maps not listed on the site.
       </p>
       <div class="acts">
         <input
           class="ctl grow"
           type="text"
-          placeholder="level file name"
+          placeholder="Map file name"
           bind:value={newMap}
           onkeydown={e => {
             if (e.key !== 'Enter') return
@@ -325,9 +314,8 @@
   <div class="empty">
     <p><strong>No maps yet.</strong></p>
     <p>
-      A server with an empty rotation keeps replaying whatever level it starts on.
-      Add a map above, or paste a list you already have. Your game rules apply to
-      every map you add.
+      With an empty rotation, the server repeats its starting map. Add maps or
+      paste a list above.
     </p>
   </div>
 {:else}
@@ -340,7 +328,7 @@
               type="button"
               class="box"
               class:ticked={selection.size === levels.length}
-              aria-label="Select every map"
+              aria-label="Select all maps"
               onclick={toggleAll}
             ></button>
           </th>
@@ -355,8 +343,8 @@
           <td class="tick"></td>
           <td class="n"></td>
           <td class="mapname">
-            Every map
-            <span class="sub">your game rules</span>
+            All maps
+            <span class="sub">base rules</span>
           </td>
           {#each columns as col (col)}
             {@const cell = cellFor({ index: -1, name: '', rules: baseRules, mode: baseMode, modeChanged: false, changed: 0 }, col)}
@@ -380,7 +368,7 @@
             <td class="mapname">
               {row.name}
               {#if rotationCheck.statusOf(row.name) === 'absent'}
-                <span class="nodl" title="FactionFiles does not carry this level, so a player who joins without it already installed cannot download it.">
+                <span class="nodl" title="Not available on FactionFiles. Players without this map cannot download it.">
                   no auto-download
                 </span>
               {/if}
@@ -404,17 +392,16 @@
   </div>
 
   <div class="sheetfoot">
-    <span><strong>same</strong> means this map uses your game rules unchanged.</span>
+    <span><strong>same</strong>: inherited from the base rules.</span>
     {#if absent.length}
       <span class="nodlnote">
         <strong>{absent.length}</strong>
-        {absent.length === 1 ? 'map is' : 'maps are'} not on the FactionFiles
-        autodownloader. Players who do not already have
-        {absent.length === 1 ? 'it' : 'them'} cannot download
-        {absent.length === 1 ? 'it' : 'them'} on the way in.
+        {absent.length === 1 ? 'map is' : 'maps are'} not available on the FactionFiles
+        autodownloader. Players without {absent.length === 1 ? 'it' : 'them'} cannot
+        download {absent.length === 1 ? 'it' : 'them'} when joining.
       </span>
     {:else if rotationCheck.offline}
-      <span class="quiet">FactionFiles could not be reached, so nothing here was checked against the archive.</span>
+      <span class="quiet">Could not reach FactionFiles. Maps were not checked against the archive.</span>
     {/if}
   </div>
 {/if}
@@ -424,7 +411,7 @@
     <strong>{selected.length} {selected.length === 1 ? 'map' : 'maps'} selected</strong>
     <span class="sp"></span>
     <button type="button" class="btn" class:pressed={panel === 'bulk'} onclick={() => openPanel('bulk')}>
-      Change a setting
+      Change setting
     </button>
     <button type="button" class="btn" onclick={() => removeAt(selected)}>Remove from rotation</button>
     <button type="button" class="btn" onclick={() => (selection = new Set())}>Clear selection</button>
@@ -432,16 +419,15 @@
 
   {#if panel === 'bulk'}
     <div class="panel">
-      <h4>Change one setting on {selected.length} maps</h4>
+      <h4>Change setting on {selected.length} maps</h4>
       {#if selected.length === levels.length && levels.length > 1}
         <div class="banner warn">
           <span class="ic">!</span>
           <div>
-            That is every map in the rotation. Setting it here writes the same
-            value into all {levels.length} of them; changing it in your game rules
-            does the same job once, and any map you add later picks it up too.
+            All maps are selected. Changing the base rules instead applies the value
+            once, including to maps added later.
             <button type="button" class="link" onclick={onopenbase}>
-              Change it for every map instead
+              Edit base rules
             </button>
           </div>
         </div>
@@ -449,7 +435,7 @@
       {#if bulkPath}
         <p class="ph">
           {selected.map(i => levels[i].filename).join(', ')}.
-          <br />Right now: {bulkSummary}.
+          <br />Current: {bulkSummary}.
         </p>
         <Field
           scope="rules"
@@ -459,14 +445,14 @@
           onchange={(path, value) => bulkSet(path, value)}
         />
         <div class="acts">
-          <button type="button" class="btn" onclick={() => (bulkPath = null)}>Pick a different setting</button>
+          <button type="button" class="btn" onclick={() => (bulkPath = null)}>Choose another setting</button>
           <span class="sp"></span>
           <button type="button" class="btn" onclick={() => bulkClear(bulkPath!)}>
-            Go back to the game rules value
+            Use base rules value
           </button>
         </div>
       {:else}
-        <SettingPicker onpick={id => (bulkPath = id)} placeholder="Which setting?" />
+        <SettingPicker onpick={id => (bulkPath = id)} placeholder="Search settings" />
       {/if}
     </div>
   {/if}
@@ -627,8 +613,7 @@
 
   tr.lvl:hover .sm { opacity: 1; }
 
-  /* always visible, unlike the per-map actions: this row is how most people
-     will find where the settings every map shares actually live */
+  /* always visible, since this row is the main path to the base rules */
   td.acts .sm.go {
     opacity: 1;
     font-size: 11.5px;

@@ -6,14 +6,13 @@
 
   interface Props {
     page: string
-    /** resolved values per scope, since a page can hold settings from both */
+    /** per scope, since a page can hold settings from both */
     resolved: Record<Scope, ResolvedRules>
-    /** the keys each scope holds itself, for a list that merges rather than replaces */
+    /** each scope's manual keys, for merged lists */
     manual: Record<Scope, Record<string, unknown>>
-    /** the game mode in play, which decides which settings have any effect */
     gameType: string
     levelScope?: boolean
-    /** what each map sets itself, for a row Alpine re-seeds per scope */
+    /** each map's manual keys, for rows alpine reseeds per scope */
     mapManual?: Record<string, unknown>[]
     onchange?: (scope: Scope, path: string, value: unknown) => void
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
@@ -30,26 +29,22 @@
 
   type Editor = 'field' | 'list'
 
-  // a setting the mode in play ignores. it is hidden unless this scope sets it
-  // by hand, because a value that is in the file must never be invisible - it
-  // is shown with a note instead, so it can be found and cleared.
+  // settings the game type ignores are hidden, unless set manually so they can
+  // still be found and cleared
   function offMode(scope: Scope, path: string): string | undefined {
     if (appliesToMode(scope, path, gameType)) return undefined
     const modes = modesFor(scope, path)
     return modes ? `Only applies in ${modeTitles(modes)}.` : undefined
   }
 
-  // ads_version and friends are written by the tool, not chosen by the user, so
-  // they get an authored entry for completeness but never a field
+  // keys like ads_version are written by the tool and never get a field
   function isToolOwned(scope: Scope, path: string) {
     const key = schemaFor(scope, path)
     return key?.kind === 'scalar' && (key as { global?: boolean }).global === true
   }
 
-  // Only a setting this config file actually holds gets an editor. A table is a
-  // group heading, and the authored layer also describes keys that belong to
-  // other documents - a bot profile - which are labeled for completeness and
-  // would be written into the wrong file from here.
+  // tables are group headings, and some authored keys belong to other files
+  // (bot profiles), so neither gets an editor
   function editorFor(scope: Scope, path: string): Editor | null {
     const schema = schemaFor(scope, path)
     if (schema?.kind === 'scalar') return 'field'
@@ -59,9 +54,7 @@
 
   interface Group { key: string; title: string; help: string; entries: Entry[] }
 
-  // settings on this page, gathered under the group they belong to. the group is
-  // just the parent path, so the layout follows the config file's own shape
-  // instead of being maintained by hand a second time.
+  // groups are keyed by parent path so the layout follows the file's structure
   const groups = $derived.by(() => {
     const out: Group[] = []
     const byKey = new Map<string, Group>()
@@ -84,14 +77,13 @@
 
     for (const entry of onPage) {
       const editor = editorFor(entry.scope, entry.path)
-      // a path other paths hang off is a group heading, unless it is a setting
-      // in its own right - the list of bot profiles carries the keys of the file
-      // each one names, and is still a list of file names itself
+      // a parent path is a group heading unless it is also a setting itself,
+      // like the bot profile list
       if (!editor && [...paths].some(p => p.startsWith(entry.path + '.'))) {
         const g = group(entry.path, entry.scope)
         const text = textFor(entry.scope, entry.path)
         g.title = text.label
-        g.help = text.help
+        g.help = text.help ?? ''
         continue
       }
       if (!editor) continue

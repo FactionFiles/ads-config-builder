@@ -23,11 +23,11 @@
   /* provenance: which layer set a value */
   --p-def: #5F646B;
   --p-mut: #EE85B3;
-  --p-you: #E0A24A;
+  --p-you: #A3CBF8;
   --p-map: #A98CF5;
 
   --p-mut-b: #361D2A;
-  --p-you-b: #372A13;
+  --p-you-b: #1A2B3E;
   --p-map-b: #241E3C;
 
   /* the provenance colors are light enough to need dark type on top of them */

@@ -34,8 +34,13 @@ architecture:
 - **Frame**: sidebar, one page at a time, and a hideable config file pane on the
   right. The user is always in a named scope: the whole server, all maps, or one
   map.
-- **The rotation is a table**, not a form. Clicking a row scopes the same pages to
-  that one map.
+- **The rotation is a table**, not a form. The sidebar's Game rules section is
+  always the base rules. Clicking a row opens a separate Map overrides
+  section with the same pages scoped to that one map, each page showing how many
+  overrides the map sets there. That section only shows while one of its pages is
+  open. Ticking several rows and choosing Edit settings opens the same pages for
+  all of them at once: a setting the maps disagree on shows as mixed, and an edit
+  is written to every selected map, replacing lists and mutators wholesale.
 - **Provenance dots**: every setting has a colored dot for the layer that set it
   (default, game mode, mutator, set by the user, or set for one map). Clicking it
   opens a popover listing every layer that touched the value and which one won.
@@ -250,14 +255,13 @@ per-setting trail; `ProvenancePopover.svelte` renders it.
 
 `src/lib/ui/RotationPage.svelte`: a pinned row for the base rules and one row per
 map, each cell reading "same" or the map's override. Any setting can be a column,
-chosen through `SettingPicker.svelte`, which the multi-map editor also uses. Maps
-can be added, pasted as a list, reordered, removed, and multi-selected to change
-one setting across all of them.
+chosen through `SettingPicker.svelte`. Maps can be added, pasted as a list,
+reordered, removed, and multi-selected to edit their settings together.
 
-The base row is read-only and links to the pages that own the base rules. Setting
-a value on every selected map is caught and redirected to the base rules, since
-it would otherwise repeat the key in every `[[levels]]` entry and give no
-inheritance to maps added later.
+The base row is read-only and links to the pages that own the base rules. Editing
+with every map selected shows a link to the base rules, since the edit would
+otherwise repeat the key in every `[[levels]]` entry and give no inheritance to
+maps added later.
 
 ### M6
 

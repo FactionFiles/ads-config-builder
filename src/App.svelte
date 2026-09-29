@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { meta, pages, schemaFor, type Scope } from './schema'
+  import { meta, pages, schemaFor, textFor, type Scope } from './schema'
   import {
     emptyDocument, fromToml, toToml, withRowOnEveryLevel,
     type ImportReport, type RulesScope,
@@ -17,24 +17,29 @@
   let doc = $state(emptyDocument())
 
 
-  // page and map live in the URL so links and the back button work
-  interface Route { page: string; map: number | null }
+  // page and maps live in the URL so links and the back button work
+  interface Route { page: string; maps: number[] }
 
   function routeFromHash(): Route {
     const raw = location.hash.replace(/^#/, '')
-    const scoped = raw.match(/^map\/(\d+)\/(.*)$/)
+    const scoped = raw.match(/^maps?\/([\d,]+)\/(.*)$/)
     const page = scoped ? scoped[2] : raw
     return {
       page: pages.some(p => p.id === page) ? page : (pages[0]?.id ?? ''),
-      map: scoped ? Number(scoped[1]) : null,
+      maps: scoped ? [...new Set(scoped[1].split(',').filter(Boolean).map(Number))] : [],
     }
   }
 
   let route = $state(routeFromHash())
 
-  function go(page: string, map: number | null = null) {
-    location.hash = map === null ? page : `map/${map}/${page}`
+  function go(page: string, maps: number[] = []) {
+    location.hash = maps.length === 0 ? page
+      : maps.length === 1 ? `map/${maps[0]}/${page}`
+      : `maps/${maps.join(',')}/${page}`
   }
+
+  // rotation rows ticked in the sheet, kept here so they survive leaving the page
+  let selection = $state<number[]>([])
 
   let fileOpen = $state(true)
   let popover = $state<{ scope: Scope; path: string; anchor: HTMLElement } | null>(null)
@@ -54,6 +59,7 @@
       fileName = picked.name
       imported = report
       importError = null
+      selection = []
       location.hash = pages[0].id
     } catch (err) {
       imported = null
@@ -81,10 +87,13 @@
 
   // a map only has game rules, so a server page falls back to the first rules page
   const rulesPages = $derived(pages.filter(p => p.scope === 'rules'))
-  const level = $derived(route.map !== null ? doc.levels[route.map] : undefined)
+  // the maps being edited; empty means the base rules
+  const targets = $derived(route.maps.filter(i => i >= 0 && i < doc.levels.length))
+  const level = $derived(targets.length === 1 ? doc.levels[targets[0]] : undefined)
+  const multi = $derived(targets.length > 1)
   const page = $derived.by(() => {
     const found = pages.find(p => p.id === route.page)
-    if (!level) return found
+    if (!targets.length) return found
     return found?.scope === 'rules' ? found : rulesPages[0]
   })
 
@@ -103,9 +112,42 @@
   const levelRules = $derived<ResolvedRules[]>(doc.levels.map(l => resolve(l.rules, baseRules)))
   const serverSettings = $derived<ResolvedRules>(resolveServer(doc.server))
 
-  const activeScope = $derived<RulesScope>(level ? level.rules : doc.base)
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+  // several maps read as one: each setting shows a map that sets it by hand if
+  // any does, and is flagged when the maps disagree
+  const combined = $derived.by(() => {
+    const rules: ResolvedRules = new Map()
+    const manual: Record<string, unknown> = {}
+    const mixed = new Set<string>()
+    const partial = new Set<string>()
+    const scopes = targets.map(i => doc.levels[i].rules)
+    const each = targets.map(i => levelRules[i] ?? baseRules)
+    for (const path of new Set(each.flatMap(r => [...r.keys()]))) {
+      const found = each.map(r => r.get(path))
+      const byHand = found.filter(r => r?.layer === 'manual').length
+      const shown = found.find(r => r?.layer === 'manual') ?? found.find(r => r)
+      if (shown) rules.set(path, shown)
+      if (found.some(r => !same(r?.value, found[0]?.value))) mixed.add(path)
+      if (byHand > 0 && byHand < found.length) partial.add(path)
+    }
+    for (const scope of scopes) {
+      for (const [path, value] of Object.entries(scope.manual)) {
+        if (!(path in manual)) manual[path] = value
+      }
+    }
+    const declared = scopes.find(s => s.mutators.length)?.mutators ?? []
+    const mutatorsMixed = scopes.some(s => !same(s.mutators, scopes[0].mutators))
+    return { rules, manual, mixed, partial, declared, mutatorsMixed }
+  })
+
+  const activeScope = $derived<RulesScope>(
+    level ? level.rules
+      : multi ? { ...doc.levels[targets[0]].rules, manual: combined.manual, mutators: combined.declared }
+      : doc.base
+  )
   const activeRules = $derived<ResolvedRules>(
-    level && route.map !== null ? levelRules[route.map] ?? baseRules : baseRules
+    level ? levelRules[targets[0]] ?? baseRules : multi ? combined.rules : baseRules
   )
 
   const resolved = $derived<Record<Scope, ResolvedRules>>({ rules: activeRules, server: serverSettings })
@@ -113,6 +155,11 @@
     rules: activeScope.manual, server: doc.server,
   })
   const gameType = $derived((activeRules.get('game_type')?.value as string) ?? '')
+  const gameTypes = $derived(
+    multi
+      ? [...new Set(targets.map(i => (levelRules[i]?.get('game_type')?.value as string) ?? ''))]
+      : [gameType]
+  )
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
 
@@ -131,8 +178,8 @@
   const problems = $derived(findings.filter(f => f.severity !== 'note').length)
 
   function editScope(edit: (scope: RulesScope) => RulesScope) {
-    if (route.map === null) doc.base = edit(doc.base)
-    else doc.levels[route.map] = { ...doc.levels[route.map], rules: edit(doc.levels[route.map].rules) }
+    if (!targets.length) doc.base = edit(doc.base)
+    for (const i of targets) doc.levels[i] = { ...doc.levels[i], rules: edit(doc.levels[i].rules) }
   }
 
   function change(scope: Scope, path: string, value: unknown) {
@@ -164,8 +211,18 @@
     editScope(s => ({ ...s, mutators: next }))
   }
 
-  const NAV_MAPS = 4
-  const navMaps = $derived(doc.levels.slice(0, NAV_MAPS))
+  // settings any open map overrides, per rules page
+  const overrideCounts = $derived.by(() => {
+    const counts = new Map<string, number>()
+    const scopes = targets.map(i => doc.levels[i].rules)
+    for (const path of new Set(scopes.flatMap(s => Object.keys(s.manual)))) {
+      const id = textFor('rules', path).page
+      counts.set(id, (counts.get(id) ?? 0) + 1)
+    }
+    const mutators = new Set(scopes.flatMap(s => s.mutators.map(m => m.name)))
+    if (mutators.size) counts.set('rules-mutators', mutators.size)
+    return counts
+  })
 
   function groupsOf(kind: 'server' | 'rules') {
     return pages.filter(p => p.scope === kind && p.id !== 'rotation')
@@ -214,20 +271,18 @@
       <button
         type="button"
         class="ni"
-        class:on={!level && p.id === route.page}
+        class:on={!targets.length && p.id === route.page}
         onclick={() => go(p.id)}
       >{p.title}</button>
     {/each}
 
-    <div class="scope">
-      Game rules &middot; {level ? level.filename : 'all maps'}
-    </div>
+    <div class="scope">Game rules</div>
     {#each groupsOf('rules') as p (p.id)}
       <button
         type="button"
         class="ni"
-        class:on={p.id === page?.id}
-        onclick={() => go(p.id, route.map)}
+        class:on={!targets.length && p.id === page?.id}
+        onclick={() => go(p.id)}
       >{p.title}</button>
     {/each}
 
@@ -235,24 +290,34 @@
     <button
       type="button"
       class="ni"
-      class:on={!level && route.page === 'rotation'}
+      class:on={!targets.length && route.page === 'rotation'}
       onclick={() => go('rotation')}
     >
-      All maps
+      Edit map rotation
       {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
     </button>
-    {#each navMaps as map, i (map.filename + i)}
-      <button
-        type="button"
-        class="ni sub"
-        class:on={route.map === i}
-        onclick={() => go(page?.scope === 'rules' ? route.page : rulesPages[0].id, i)}
-      >{map.filename}</button>
-    {/each}
-    {#if doc.levels.length > NAV_MAPS}
-      <button type="button" class="ni sub more" onclick={() => go('rotation')}>
-        {doc.levels.length - NAV_MAPS} more...
-      </button>
+
+    {#if targets.length}
+      <div class="scope">
+        Map overrides &middot;
+        {#if level}
+          <span class="file">#{targets[0] + 1} {level.filename}</span>
+        {:else}
+          {targets.length} maps
+        {/if}
+      </div>
+      {#each groupsOf('rules') as p (p.id)}
+        {@const count = overrideCounts.get(p.id)}
+        <button
+          type="button"
+          class="ni"
+          class:on={p.id === page?.id}
+          onclick={() => go(p.id, targets)}
+        >
+          {p.title}
+          {#if count}<span class="ct">{count}</span>{/if}
+        </button>
+      {/each}
     {/if}
 
   </nav>
@@ -310,9 +375,25 @@
     {#if level}
       <h2>{level.filename}</h2>
       <p class="blurb">
-        Map {(route.map ?? 0) + 1} in the rotation. Settings not changed here
+        Map {targets[0] + 1} in the rotation. Settings not changed here
         use the base <b>Game rules</b>.
       </p>
+    {:else if multi}
+      <h2>{targets.length} maps</h2>
+      <div class="banner warn">
+        <span class="ic">!</span>
+        <div>
+          <b>Editing {targets.length} maps at once.</b> Changes apply to
+          {targets.map(i => `#${i + 1} ${doc.levels[i].filename}`).join(', ')}.
+          {#if targets.length === doc.levels.length}
+            <br />All maps are selected. Changing the base rules instead applies the
+            value once, including to maps added later.
+            <button type="button" class="link" onclick={() => go(page?.id ?? rulesPages[0].id)}>
+              Edit base rules
+            </button>
+          {/if}
+        </div>
+      </div>
     {:else if page}
       <h2>{page.title}</h2>
       {#if page.blurb}<p class="blurb">{page.blurb}</p>{/if}
@@ -324,15 +405,17 @@
         base={doc.base}
         {baseRules}
         {levelRules}
+        {selection}
         onchange={next => (doc.levels = next)}
-        onopen={i => go(rulesPages[0].id, i)}
+        onselect={next => (selection = next)}
+        onopen={maps => go(rulesPages[0].id, maps)}
         onopenbase={() => go(rulesPages[0].id)}
       />
     {:else if page?.id === 'checks'}
       <ProblemsPage
         {findings}
         levels={doc.levels}
-        onopen={(target, map) => go(target, map)}
+        onopen={(target, map) => go(target, map === null ? [] : [map])}
       />
     {:else if page?.id === 'admin'}
       <AdminPage
@@ -343,9 +426,10 @@
     {:else if page?.id === 'rules-mutators'}
       <MutatorsPage
         declared={activeScope.mutators}
-        levelScope={level !== undefined}
-        inherited={level ? doc.base.mutators : []}
-        modeCleared={level !== undefined && gameType !== baseGameType}
+        levelScope={targets.length > 0}
+        inherited={targets.length ? doc.base.mutators : []}
+        modeCleared={targets.length > 0 && gameType !== baseGameType}
+        mixed={multi && combined.mutatorsMixed}
         resolved={activeRules}
         {gameType}
         onchange={setMutators}
@@ -353,10 +437,13 @@
     {:else if page}
       <SettingsPage
         page={page.id}
-        {gameType}
+        {gameTypes}
         {resolved}
         {manual}
-        levelScope={level !== undefined}
+        levelScope={targets.length > 0}
+        maps={targets.length}
+        mixed={multi ? combined.mixed : undefined}
+        partial={multi ? combined.partial : undefined}
         mapManual={doc.levels.map(l => l.rules.manual)}
         onchange={change}
         onreset={reset}
@@ -435,6 +522,9 @@
 
   .scope:first-child { padding-top: 2px; }
 
+  /* filenames read as written, not uppercased */
+  .scope .file { text-transform: none; letter-spacing: normal; }
+
   .ni {
     display: flex;
     align-items: center;
@@ -461,14 +551,6 @@
     color: var(--ink);
     font-weight: 600;
   }
-
-  .ni.sub {
-    padding-left: 28px;
-    font-size: 13px;
-    overflow-wrap: anywhere;
-  }
-
-  .ni.more { color: var(--ink-3); }
 
   .topbar .btn .ct {
     margin-left: 4px;
@@ -531,6 +613,17 @@
     line-height: 1;
     cursor: pointer;
     padding: 0 2px;
+  }
+
+  .link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
   }
 
   .blurb {

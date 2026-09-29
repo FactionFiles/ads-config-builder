@@ -34,6 +34,10 @@
   --err: #E8837B;
   --err-b: #3A1E1C;
 
+  /* warning banners only, never provenance */
+  --warn: #E6C25C;
+  --warn-b: #33291A;
+
   --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -209,6 +213,9 @@ select.ctl { cursor: pointer; }
 .sw.on { background: var(--p-you); }
 .sw.on::after { left: 18px; }
 
+/* differs across the selected maps */
+.sw.mixed::after { left: 10.5px; }
+
 .fr .src {
   font-size: 11.5px;
   color: var(--ink-3);
@@ -341,9 +348,17 @@ textarea.ctl {
 }
 
 .banner.warn {
-  border-color: var(--p-you);
-  background: var(--p-you-b);
+  border-color: var(--warn);
+  background: var(--warn-b);
   color: var(--ink-2);
 }
 
-.banner.warn .ic { background: var(--p-you); }
+.banner.warn .ic {
+  width: 19px;
+  border-radius: 0;
+  background: var(--warn);
+  color: var(--warn-b);
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  padding-top: 4px;
+  font-size: 10px;
+}

@@ -7,7 +7,6 @@
   import { formatValue } from '../format'
   import { effectiveMutators, type Resolved, type ResolvedRules } from '../resolve'
   import { rotationCheck } from '../mapcheck.svelte'
-  import Field from './Field.svelte'
   import MapPicker from './MapPicker.svelte'
   import SettingPicker from './SettingPicker.svelte'
 
@@ -17,14 +16,18 @@
     baseRules: ResolvedRules
     /** resolved rules per level, in rotation order */
     levelRules: ResolvedRules[]
+    /** ticked rows, by rotation index */
+    selection: number[]
     onchange: (next: LevelEntry[]) => void
-    onopen: (index: number) => void
+    onselect: (next: number[]) => void
+    /** opens the rules pages for one or more maps */
+    onopen: (indexes: number[]) => void
     /** opens the base rules pages, where the top row is edited */
     onopenbase: () => void
   }
 
   const {
-    levels, base, baseRules, levelRules, onchange, onopen, onopenbase,
+    levels, base, baseRules, levelRules, selection, onchange, onselect, onopen, onopenbase,
   }: Props = $props()
 
   // columns that are not a single setting: score limit follows each row's game
@@ -35,11 +38,9 @@
   ]
 
   let columns = $state(['game_type', 'time_limit', '@score', '@mutators'])
-  let panel = $state<'columns' | 'paste' | 'add' | 'bulk' | null>(null)
+  let panel = $state<'columns' | 'paste' | 'add' | null>(null)
   let pasteText = $state('')
   let newMap = $state('')
-  let selection = $state(new Set<number>())
-  let bulkPath = $state<string | null>(null)
 
   const baseMode = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const baseScoreKey = $derived(gametypesByName.get(baseMode)?.scoreLimitKey ?? null)
@@ -156,71 +157,26 @@
     const next = [...levels]
     const [moved] = next.splice(index, 1)
     next.splice(to, 0, moved)
-    selection = new Set()
+    onselect([])
     onchange(next)
   }
 
   function removeAt(indexes: number[]) {
     const drop = new Set(indexes)
-    selection = new Set()
+    onselect([])
     onchange(levels.filter((_, i) => !drop.has(i)))
   }
 
+  const ticked = $derived(new Set(selection))
+
   function toggleRow(index: number) {
-    const next = new Set(selection)
-    if (next.has(index)) next.delete(index)
-    else next.add(index)
-    selection = next
+    onselect(ticked.has(index)
+      ? selection.filter(i => i !== index)
+      : [...selection, index].sort((a, b) => a - b))
   }
 
   function toggleAll() {
-    selection = selection.size === levels.length ? new Set() : new Set(levels.map((_, i) => i))
-  }
-
-  const selected = $derived([...selection].sort((a, b) => a - b))
-
-  // starts from the base rules and only shows a manual value once every
-  // selected map agrees on it
-  const bulkResolved = $derived.by<ResolvedRules>(() => {
-    const out = new Map(baseRules)
-    if (!bulkPath) return out
-    const values = selected.map(i => levels[i].rules.manual[bulkPath!])
-    if (!values.length || values.some(v => v === undefined || v !== values[0])) return out
-    const inherited = baseRules.get(bulkPath)
-    out.set(bulkPath, {
-      value: values[0],
-      layer: 'manual',
-      trail: [...(inherited?.trail ?? []), { layer: 'manual', value: values[0] }],
-    })
-    return out
-  })
-
-  // current values across the selection, since the shared control can hide differences
-  const bulkSummary = $derived.by(() => {
-    if (!bulkPath) return ''
-    const counts = new Map<string, number>()
-    for (const i of selected) {
-      const r = levelRules[i]?.get(bulkPath)
-      const text = r ? formatValue('rules', bulkPath, r.value) : 'not set'
-      counts.set(text, (counts.get(text) ?? 0) + 1)
-    }
-    return [...counts]
-      .map(([text, n]) => `${text} on ${n} ${n === 1 ? 'map' : 'maps'}`)
-      .join(', ')
-  })
-
-  function bulkSet(path: string, value: unknown) {
-    onchange(levels.map((level, i) => selection.has(i)
-      ? { ...level, rules: { ...level.rules, manual: { ...level.rules.manual, [path]: value } } }
-      : level))
-  }
-
-  function bulkClear(path: string) {
-    onchange(levels.map((level, i) => {
-      if (!selection.has(i)) return level
-      const { [path]: _dropped, ...rest } = level.rules.manual
-      return { ...level, rules: { ...level.rules, manual: rest } }
-    }))
+    onselect(selection.length === levels.length ? [] : levels.map((_, i) => i))
   }
 
   function openPanel(which: typeof panel) {
@@ -231,8 +187,8 @@
 <div class="banner">
   <span class="ic">i</span>
   <div>
-    The top row shows the base <b>game rules</b>, which apply to every map. Click
-    a map to override settings for that map.
+    The top row shows the base <b>game rules</b>, which apply to every map. Use
+    <b>Edit</b> on a map to override settings for that map.
   </div>
 </div>
 
@@ -327,7 +283,7 @@
             <button
               type="button"
               class="box"
-              class:ticked={selection.size === levels.length}
+              class:ticked={selection.length === levels.length}
               aria-label="Select all maps"
               onclick={toggleAll}
             ></button>
@@ -339,7 +295,7 @@
         </tr>
       </thead>
       <tbody>
-        <tr class="baserow" onclick={onopenbase}>
+        <tr class="baserow">
           <td class="tick"></td>
           <td class="n"></td>
           <td class="mapname">
@@ -350,23 +306,25 @@
             {@const cell = cellFor({ index: -1, name: '', rules: baseRules, mode: baseMode, modeChanged: false, changed: 0 }, col)}
             <td><span class="v {cell.kind}">{cell.text}</span></td>
           {/each}
-          <td class="acts"><span class="sm go">Edit</span></td>
+          <td class="acts">
+            <button type="button" class="sm go" aria-label="Edit base rules" onclick={onopenbase}>Edit</button>
+          </td>
         </tr>
 
         {#each rows as row (row.index)}
-          <tr class="lvl" class:sel={selection.has(row.index)} onclick={() => onopen(row.index)}>
+          <tr class="lvl" class:sel={ticked.has(row.index)}>
             <td class="tick">
               <button
                 type="button"
                 class="box"
-                class:ticked={selection.has(row.index)}
+                class:ticked={ticked.has(row.index)}
                 aria-label="Select {row.name}"
-                onclick={e => { e.stopPropagation(); toggleRow(row.index) }}
+                onclick={() => toggleRow(row.index)}
               ></button>
             </td>
             <td class="n">{row.index + 1}</td>
             <td class="mapname">
-              {row.name}
+              <button type="button" class="open" onclick={() => onopen([row.index])}>{row.name}</button>
               {#if rotationCheck.statusOf(row.name) === 'absent'}
                 <span class="nodl" title="Not available on FactionFiles. Players without this map cannot download it.">
                   no auto-download
@@ -379,11 +337,13 @@
             {/each}
             <td class="acts">
               <button type="button" class="sm" title="Move up" aria-label="Move {row.name} up"
-                onclick={e => { e.stopPropagation(); move(row.index, -1) }}>&uarr;</button>
+                onclick={() => move(row.index, -1)}>&uarr;</button>
               <button type="button" class="sm" title="Move down" aria-label="Move {row.name} down"
-                onclick={e => { e.stopPropagation(); move(row.index, 1) }}>&darr;</button>
+                onclick={() => move(row.index, 1)}>&darr;</button>
               <button type="button" class="sm" title="Remove" aria-label="Remove {row.name}"
-                onclick={e => { e.stopPropagation(); removeAt([row.index]) }}>&times;</button>
+                onclick={() => removeAt([row.index])}>&times;</button>
+              <button type="button" class="sm go" aria-label="Edit {row.name}"
+                onclick={() => onopen([row.index])}>Edit</button>
             </td>
           </tr>
         {/each}
@@ -406,56 +366,14 @@
   </div>
 {/if}
 
-{#if selected.length}
+{#if selection.length}
   <div class="bulkbar">
-    <strong>{selected.length} {selected.length === 1 ? 'map' : 'maps'} selected</strong>
+    <strong>{selection.length} {selection.length === 1 ? 'map' : 'maps'} selected</strong>
     <span class="sp"></span>
-    <button type="button" class="btn" class:pressed={panel === 'bulk'} onclick={() => openPanel('bulk')}>
-      Change setting
-    </button>
-    <button type="button" class="btn" onclick={() => removeAt(selected)}>Remove from rotation</button>
-    <button type="button" class="btn" onclick={() => (selection = new Set())}>Clear selection</button>
+    <button type="button" class="btn pri" onclick={() => onopen(selection)}>Edit settings</button>
+    <button type="button" class="btn" onclick={() => removeAt(selection)}>Remove from rotation</button>
+    <button type="button" class="btn" onclick={() => onselect([])}>Clear selection</button>
   </div>
-
-  {#if panel === 'bulk'}
-    <div class="panel">
-      <h4>Change setting on {selected.length} maps</h4>
-      {#if selected.length === levels.length && levels.length > 1}
-        <div class="banner warn">
-          <span class="ic">!</span>
-          <div>
-            All maps are selected. Changing the base rules instead applies the value
-            once, including to maps added later.
-            <button type="button" class="link" onclick={onopenbase}>
-              Edit base rules
-            </button>
-          </div>
-        </div>
-      {/if}
-      {#if bulkPath}
-        <p class="ph">
-          {selected.map(i => levels[i].filename).join(', ')}.
-          <br />Current: {bulkSummary}.
-        </p>
-        <Field
-          scope="rules"
-          path={bulkPath}
-          resolved={bulkResolved}
-          bare
-          onchange={(path, value) => bulkSet(path, value)}
-        />
-        <div class="acts">
-          <button type="button" class="btn" onclick={() => (bulkPath = null)}>Choose another setting</button>
-          <span class="sp"></span>
-          <button type="button" class="btn" onclick={() => bulkClear(bulkPath!)}>
-            Use base rules value
-          </button>
-        </div>
-      {:else}
-        <SettingPicker onpick={id => (bulkPath = id)} placeholder="Search settings" />
-      {/if}
-    </div>
-  {/if}
 {/if}
 
 <style>
@@ -563,18 +481,12 @@
 
   table.sheet tr:last-child td { border-bottom: 0; }
 
-  table.sheet tr.baserow {
-    cursor: pointer;
-  }
-
   table.sheet tr.baserow td {
     background: var(--surface-2);
     font-weight: 600;
     border-bottom: 2px solid var(--line-2);
   }
 
-  table.sheet tr.baserow:hover td { background: var(--sunk); }
-  table.sheet tr.baserow:hover .go { opacity: 1; }
 
   td.mapname .sub {
     display: block;
@@ -583,7 +495,6 @@
     color: var(--ink-3);
   }
 
-  table.sheet tr.lvl { cursor: pointer; }
   table.sheet tr.lvl:hover td { background: var(--sunk); }
   table.sheet tr.lvl.sel td { background: var(--p-map-b); }
 
@@ -598,7 +509,21 @@
   td.tick, th.tick { width: 34px; padding-right: 0; }
   td.mapname { font-weight: 500; }
 
-  td.acts, th.acts { width: 84px; text-align: right; }
+  td.mapname .open {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  td.mapname .open:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  td.acts, th.acts { width: 124px; text-align: right; white-space: nowrap; }
 
   td.acts .sm {
     border: 0;
@@ -613,7 +538,7 @@
 
   tr.lvl:hover .sm { opacity: 1; }
 
-  /* always visible, since this row is the main path to the base rules */
+  /* always visible, since it is the only way into a map's overrides */
   td.acts .sm.go {
     opacity: 1;
     font-size: 11.5px;
@@ -678,17 +603,6 @@
   .sheetfoot .nodlnote strong { color: var(--err); }
 
   .sheetfoot .quiet { color: var(--ink-3); }
-
-  .link {
-    border: 0;
-    background: none;
-    padding: 0;
-    color: inherit;
-    font-size: inherit;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-  }
 
   .bulkbar {
     position: sticky;

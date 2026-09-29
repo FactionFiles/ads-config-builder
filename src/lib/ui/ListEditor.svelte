@@ -22,6 +22,12 @@
     offMode?: string
     /** each map's manual keys, for rows alpine reseeds per scope */
     mapManual?: Record<string, unknown>[]
+    /** how many maps this scope edits at once */
+    maps?: number
+    /** the maps in scope hold different lists */
+    mixed?: boolean
+    /** set by hand on only some of the maps in scope */
+    partial?: boolean
     onchange?: (path: string, value: unknown) => void
     /** write one row into every map */
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
@@ -31,7 +37,7 @@
 
   const {
     scope, path, resolved, manual, levelScope = false, offMode, mapManual = [],
-    onchange, onreset, onprovenance, onapplytoall,
+    maps = 1, mixed = false, partial = false, onchange, onreset, onprovenance, onapplytoall,
   }: Props = $props()
 
   interface Column {
@@ -270,6 +276,11 @@
 
   {#if text.help}<p class="lead">{text.help}</p>{/if}
   {#if offMode}<p class="warn">{offMode}</p>{/if}
+  {#if mixed}
+    <p class="warn">
+      Differs across the selected maps. Editing replaces this list on all of them.
+    </p>
+  {/if}
 
   {#if !rows.length}
     <p class="none">None.</p>
@@ -398,7 +409,8 @@
   {#if canReset}
     <div class="src {levelScope ? 'map' : 'you'}">
       <i class="pd {levelScope ? 'map' : 'you'}"></i>
-      {levelScope ? 'Set for this map' : 'Changed'}
+      {maps > 1 ? (partial ? 'Set on some maps' : 'Set for these maps')
+        : levelScope ? 'Set for this map' : 'Changed'}
       <button type="button" class="rst" onclick={() => onreset?.(path)}>
         {mergeKey ? 'undo all changes' : 'clear list'}
       </button>

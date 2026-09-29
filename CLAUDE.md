@@ -69,7 +69,8 @@ npm run check          svelte-check plus tsc
   community's established terms, as the Alpine changelog does, rather than
   invented plain-language substitutes. No justifications, asides or hedging.
 - The only fixed-width type in the UI is the config file pane.
-- Color means provenance and nothing else. UI chrome uses `--graphite`.
+- Color means provenance and nothing else. UI chrome uses `--graphite`. The
+  exceptions are `--err` for problems and `--warn` for warning banners.
 - The tool is dark only, with a single palette; no light-mode tokens or branches.
 - American English throughout, including generated and authored text.
 - No unicode special characters in code, comments or authored text. Use `->`.

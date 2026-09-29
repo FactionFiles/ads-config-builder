@@ -10,10 +10,17 @@
     resolved: Record<Scope, ResolvedRules>
     /** each scope's manual keys, for merged lists */
     manual: Record<Scope, Record<string, unknown>>
-    gameType: string
+    /** several when editing maps with different game types */
+    gameTypes: string[]
     levelScope?: boolean
     /** each map's manual keys, for rows alpine reseeds per scope */
     mapManual?: Record<string, unknown>[]
+    /** how many maps this scope edits at once */
+    maps?: number
+    /** settings that differ across the maps in scope */
+    mixed?: Set<string>
+    /** settings set by hand on only some of the maps in scope */
+    partial?: Set<string>
     onchange?: (scope: Scope, path: string, value: unknown) => void
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
     onreset?: (scope: Scope, path: string) => void
@@ -21,8 +28,8 @@
   }
 
   const {
-    page, resolved, manual, gameType, levelScope = false, mapManual = [],
-    onchange, onreset, onprovenance, onapplytoall,
+    page, resolved, manual, gameTypes, levelScope = false, mapManual = [],
+    maps = 1, mixed = new Set(), partial = new Set(), onchange, onreset, onprovenance, onapplytoall,
   }: Props = $props()
 
   interface Entry { scope: Scope; path: string; offMode?: string; editor?: Editor }
@@ -32,7 +39,7 @@
   // settings the game type ignores are hidden, unless set manually so they can
   // still be found and cleared
   function offMode(scope: Scope, path: string): string | undefined {
-    if (appliesToMode(scope, path, gameType)) return undefined
+    if (gameTypes.some(mode => appliesToMode(scope, path, mode))) return undefined
     const modes = modesFor(scope, path)
     return modes ? `Only applies in ${modeTitles(modes)}.` : undefined
   }
@@ -108,6 +115,9 @@
         manual={manual[entry.scope][entry.path]}
         {levelScope}
         {mapManual}
+        {maps}
+        mixed={mixed.has(entry.path)}
+        partial={partial.has(entry.path)}
         offMode={entry.offMode}
         onchange={(path, value) => onchange?.(entry.scope, path, value)}
         onreset={path => onreset?.(entry.scope, path)}
@@ -120,6 +130,9 @@
         path={entry.path}
         resolved={resolved[entry.scope]}
         {levelScope}
+        {maps}
+        mixed={mixed.has(entry.path)}
+        partial={partial.has(entry.path)}
         offMode={entry.offMode}
         onchange={(path, value) => onchange?.(entry.scope, path, value)}
         onreset={path => onreset?.(entry.scope, path)}

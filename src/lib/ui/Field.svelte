@@ -17,6 +17,12 @@
     bare?: boolean
     /** false on repeats of the same field */
     showHelp?: boolean
+    /** how many maps this scope edits at once */
+    maps?: number
+    /** the maps in scope hold different values */
+    mixed?: boolean
+    /** set by hand on only some of the maps in scope */
+    partial?: boolean
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
@@ -24,7 +30,7 @@
 
   const {
     scope, path, resolved, levelScope = false, offMode, bare = false, showHelp = true,
-    onchange, onreset, onprovenance,
+    maps = 1, mixed = false, partial = false, onchange, onreset, onprovenance,
   }: Props = $props()
 
   const schema = $derived(schemaFor(scope, path))
@@ -47,9 +53,13 @@
   const shown = $derived(toDisplay(text, value))
   const unitLabel = $derived(unitFor(text))
   const choiceBlurb = $derived(
-    typeof value === 'string' ? choiceBlurbFor(scope, path, value) : undefined
+    typeof value === 'string' && !mixed ? choiceBlurbFor(scope, path, value) : undefined
   )
   const canReset = $derived(current !== undefined && (current.layer === 'manual'))
+  const setLabel = $derived(
+    maps > 1 ? (partial ? 'Set on some maps' : 'Set for these maps')
+      : levelScope ? 'Set for this map' : 'Changed'
+  )
 
   function setBool(next: boolean) { onchange?.(path, next) }
   function setNumber(raw: string) {
@@ -84,21 +94,23 @@
         <button
           type="button"
           class="sw"
-          class:on={value === true}
+          class:on={value === true && !mixed}
+          class:mixed
           role="switch"
-          aria-checked={value === true}
+          aria-checked={mixed ? 'mixed' : value === true}
           aria-label={text.label}
           disabled={inert}
-          onclick={() => setBool(!(value === true))}
+          onclick={() => setBool(mixed || !(value === true))}
         ></button>
       {:else if options}
         <select
           class="ctl"
-          value={String(shown ?? '')}
+          value={mixed ? '' : String(shown ?? '')}
           disabled={inert}
           aria-label={text.label}
           onchange={e => onchange?.(path, e.currentTarget.value)}
         >
+          {#if mixed}<option value="" disabled>Mixed</option>{/if}
           {#each options as option (option.value)}
             <option value={option.value}>{option.label}</option>
           {/each}
@@ -107,7 +119,8 @@
         <span class="ctl">
           <input
             type="number"
-            value={shown as number}
+            value={mixed ? '' : shown as number}
+            placeholder={mixed ? 'Mixed' : undefined}
             min={scalar.min}
             max={scalar.max}
             step={scalar.type === 'int' ? 1 : 'any'}
@@ -121,7 +134,8 @@
         <input
           class="ctl"
           type="text"
-          value={(shown as string) ?? ''}
+          value={mixed ? '' : (shown as string) ?? ''}
+          placeholder={mixed ? 'Mixed' : undefined}
           maxlength={scalar?.maxLength}
           disabled={inert}
           aria-label={text.label}
@@ -142,12 +156,16 @@
       <div class="blurb">{choiceBlurb}</div>
     {/if}
 
+    {#if mixed}
+      <div class="src">Differs across the selected maps</div>
+    {/if}
+
     {#if bare}
       <!-- the caller shows its own explanation -->
     {:else if canReset}
       <div class="src {levelScope ? 'map' : 'you'}">
         <i class="pd {levelScope ? 'map' : 'you'}"></i>
-        {levelScope ? 'Set for this map' : 'Changed'}
+        {setLabel}
         <button type="button" class="rst" onclick={() => onreset?.(path)}>undo</button>
       </div>
     {:else if current?.layer === 'mutator'}

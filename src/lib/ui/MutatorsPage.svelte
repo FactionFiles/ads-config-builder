@@ -17,13 +17,15 @@
     inherited?: MutatorDeclaration[]
     /** this map changed game type, which clears the base rules' mutators */
     modeCleared?: boolean
+    /** the maps in scope declare different mutators */
+    mixed?: boolean
     resolved: ResolvedRules
     gameType: string
     onchange: (next: MutatorDeclaration[]) => void
   }
 
   const {
-    declared, levelScope = false, inherited = [], modeCleared = false,
+    declared, levelScope = false, inherited = [], modeCleared = false, mixed = false,
     resolved, gameType, onchange,
   }: Props = $props()
 
@@ -111,6 +113,15 @@
     <i class="pd mut"></i> dot.
   </div>
 </div>
+
+{#if mixed}
+  <div class="banner warn">
+    <span class="ic">!</span>
+    <div>
+      Mutators differ across the selected maps. Editing replaces them on all of them.
+    </div>
+  </div>
+{/if}
 
 {#if cleared.length}
   <div class="banner warn">

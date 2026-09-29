@@ -36,12 +36,12 @@
   }
 
   // the server skips a profile with no name or no password
-  function missing(profile: RconProfile): string | null {
+  const REQUIRED = new Set(['name', 'password'])
+
+  function incomplete(profile: RconProfile): boolean {
     const name = profile.fields.name
     const password = profile.fields.password
-    if (typeof name !== 'string' || !name.trim()) return 'Profile has no name and will be ignored.'
-    if (typeof password !== 'string' || !password) return 'Profile has no password and will be ignored.'
-    return null
+    return typeof name !== 'string' || !name.trim() || typeof password !== 'string' || !password
   }
 
   // full admins can run every command, so the list does not apply
@@ -105,8 +105,11 @@
       <button type="button" class="btn" onclick={() => remove(i)}>Remove</button>
     </header>
 
-    {#if missing(profile)}
-      <p class="flag">{missing(profile)}</p>
+    {#if incomplete(profile)}
+      <p class="flag">
+        A profile name and password are both required. The server ignores this
+        profile until both are set.
+      </p>
     {/if}
 
     {#each fields as field (field.key)}
@@ -115,6 +118,7 @@
         path={`rcon_profiles.${field.key}`}
         resolved={resolvedFor[i]}
         bare
+        required={REQUIRED.has(field.key)}
         showHelp={i === 0}
         onchange={(path, value) => setField(i, path, value)}
       />

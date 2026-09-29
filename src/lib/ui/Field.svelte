@@ -23,6 +23,8 @@
     mixed?: boolean
     /** set by hand on only some of the maps in scope */
     partial?: boolean
+    /** the value cannot be left empty */
+    required?: boolean
     onchange?: (path: string, value: unknown) => void
     onreset?: (path: string) => void
     onprovenance?: (path: string, anchor: HTMLElement) => void
@@ -30,7 +32,7 @@
 
   const {
     scope, path, resolved, levelScope = false, offMode, bare = false, showHelp = true,
-    maps = 1, mixed = false, partial = false, onchange, onreset, onprovenance,
+    maps = 1, mixed = false, partial = false, required = false, onchange, onreset, onprovenance,
   }: Props = $props()
 
   const schema = $derived(schemaFor(scope, path))
@@ -55,6 +57,7 @@
   const choiceBlurb = $derived(
     typeof value === 'string' && !mixed ? choiceBlurbFor(scope, path, value) : undefined
   )
+  const empty = $derived(required && (value === undefined || value === null || String(value).trim() === ''))
   const canReset = $derived(current !== undefined && (current.layer === 'manual'))
   const setLabel = $derived(
     maps > 1 ? (partial ? 'Set on some maps' : 'Set for these maps')
@@ -70,7 +73,10 @@
 
 <div class="fr" class:inert class:offmode={offMode}>
   <div>
-    <div class="lab">{text.label}</div>
+    <div class="lab">
+      {text.label}
+      {#if required}<span class="req">Required</span>{/if}
+    </div>
     {#if text.help && showHelp}<div class="help">{text.help}</div>{/if}
     {#if text.link && showHelp}
       <a class="help" href={text.link} target="_blank" rel="noreferrer noopener">
@@ -133,6 +139,7 @@
       {:else}
         <input
           class="ctl"
+          class:need={empty}
           type="text"
           value={mixed ? '' : (shown as string) ?? ''}
           placeholder={mixed ? 'Mixed' : undefined}

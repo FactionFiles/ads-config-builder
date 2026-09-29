@@ -201,7 +201,10 @@
           maxlength={scalar?.maxLength}
           disabled={inert}
           aria-label={text.label}
-          onchange={e => onchange?.(path, e.currentTarget.value)}
+          onchange={e => {
+            e.currentTarget.value = e.currentTarget.value.trim()
+            onchange?.(path, e.currentTarget.value)
+          }}
         />
       {/if}
 

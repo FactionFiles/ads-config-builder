@@ -259,7 +259,10 @@
       type="text"
       value={typeof value === 'string' ? value : ''}
       aria-label={label}
-      onchange={e => apply(e.currentTarget.value)}
+      onchange={e => {
+        e.currentTarget.value = e.currentTarget.value.trim()
+        apply(e.currentTarget.value)
+      }}
     />
   {/if}
 {/snippet}

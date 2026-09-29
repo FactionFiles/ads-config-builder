@@ -40,7 +40,6 @@
   let columns = $state(['game_type', 'time_limit', '@score', '@mutators'])
   let panel = $state<'columns' | 'paste' | 'add' | null>(null)
   let pasteText = $state('')
-  let newMap = $state('')
 
   const baseMode = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const baseScoreKey = $derived(gametypesByName.get(baseMode)?.scoreLimitKey ?? null)
@@ -246,31 +245,10 @@
 {:else if panel === 'add'}
   <div class="panel">
     <h4>Add map</h4>
-    <MapPicker {taken} onpick={map => addMaps([map.rfl])} />
-    <div class="byhand">
-      <p class="ph">
-        Or enter a file name, such as <code>{stock}02.rfl</code>. The
-        autodownloader includes maps not listed on the site.
-      </p>
-      <div class="acts">
-        <input
-          class="ctl grow"
-          type="text"
-          placeholder="Map file name"
-          bind:value={newMap}
-          onkeydown={e => {
-            if (e.key !== 'Enter') return
-            addMaps(parseLevelList(newMap))
-            newMap = ''
-          }}
-        />
-        <button
-          type="button"
-          class="btn pri"
-          onclick={() => { addMaps(parseLevelList(newMap)); newMap = '' }}
-        >Add</button>
-      </div>
-    </div>
+    <MapPicker
+      {taken}
+      onpick={name => { addMaps([name]); panel = null }}
+    />
   </div>
 {/if}
 
@@ -588,12 +566,6 @@
   }
 
   .sheetfoot strong { color: var(--ink); }
-
-  .byhand {
-    margin-top: 14px;
-    padding-top: 13px;
-    border-top: 1px solid var(--line);
-  }
 
   .ovr {
     display: inline-block;

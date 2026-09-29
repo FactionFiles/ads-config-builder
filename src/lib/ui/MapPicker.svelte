@@ -1,13 +1,15 @@
 <script lang="ts">
   // only the level file name is used; the rest of the card helps tell similar
-  // maps apart
+  // maps apart. a full file name can be added directly, since the autodownloader
+  // carries maps the site does not list
 
   import { mapCategories, searchMaps, type MapCategory, type MapResult } from '../maps'
 
   interface Props {
     /** level names already in the rotation, lowercased */
     taken: Set<string>
-    onpick: (map: MapResult) => void
+    /** a level file name, from a search result or typed in full */
+    onpick: (rfl: string) => void
   }
 
   const { taken, onpick }: Props = $props()
@@ -86,17 +88,16 @@
     }
   })
 
+  const typed = $derived(query.trim())
+  const typedRfl = $derived(/^[^\s,]+\.rfl$/i.test(typed) ? typed : '')
+  const typedTaken = $derived(typedRfl !== '' && taken.has(typedRfl.toLowerCase()))
+
   const shown = $derived(results.length)
   const more = $derived(!ended && total > shown)
 
   function sizeOf(bytes: number) {
     if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
     return Math.max(1, Math.round(bytes / 1024)) + ' KB'
-  }
-
-  function whenOf(seconds: number) {
-    if (!seconds) return ''
-    return new Date(seconds * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'short' })
   }
 
   // strip the "Maps - " prefix the site puts on every category
@@ -108,10 +109,22 @@
     <input
       class="ctl grow"
       type="search"
-      placeholder="Search by name or file name"
+      placeholder="Search by name, or enter a full .rfl file name"
       aria-label="Search FactionFiles for a map"
       bind:value={query}
+      onkeydown={e => {
+        if (e.key === 'Enter' && typedRfl && !typedTaken) onpick(typedRfl)
+      }}
     />
+    {#if typedRfl}
+      <button
+        type="button"
+        class="btn pri"
+        disabled={typedTaken}
+        title={typedTaken ? `${typedRfl} is already in the rotation` : `Add ${typedRfl}`}
+        onclick={() => onpick(typedRfl)}
+      >{typedTaken ? 'Added' : 'Add RFL'}</button>
+    {/if}
     {#if categories.length}
       <select class="ctl" aria-label="Category" bind:value={category}>
         <option value={null}>All categories</option>
@@ -125,14 +138,14 @@
   {#if problem}
     <div class="miss">
       <strong>{problem}</strong>
-      Search is unavailable. You can still add a map by file name below.
+      Search is unavailable. Enter a full .rfl file name to add a map.
     </div>
   {:else if loading && !shown}
     <p class="ph">Searching...</p>
   {:else if searched && !shown}
     <p class="ph">
-      No matches. Maps not listed on FactionFiles can still be added by file name
-      below.
+      No matches. Maps not listed on FactionFiles can be added by entering the full
+      .rfl file name.
     </p>
   {:else if shown}
     <p class="ph count">
@@ -153,16 +166,14 @@
               <span>{map.author || 'Unknown author'}</span>
               <span>{shortName(map.category.name)}</span>
               <span>{sizeOf(map.size)}</span>
-              {#if map.uploadedAt}<span>{whenOf(map.uploadedAt)}</span>{/if}
             </div>
-            {#if map.description}<p class="blurb">{map.description}</p>{/if}
           </div>
           <div class="pick">
             <button
               type="button"
               class="btn pri"
               disabled={already}
-              onclick={() => onpick(map)}
+              onclick={() => onpick(map.rfl)}
             >{already ? 'Added' : 'Add'}</button>
             {#if map.siteUrl}
               <a class="link" href={map.siteUrl} target="_blank" rel="noreferrer noopener">View on FactionFiles</a>
@@ -270,16 +281,6 @@
     gap: 10px;
   }
 
-  .blurb {
-    margin: 5px 0 0;
-    font-size: 12.5px;
-    color: var(--ink-2);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
 
   .pick {
     display: flex;

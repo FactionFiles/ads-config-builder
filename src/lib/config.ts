@@ -61,7 +61,7 @@ export function parseLevelList(text: string): string[] {
   return text
     .split(/[\n,]/)
     .map(line => line.trim()
-      .replace(/^[-*\d.)\s]+/, '')
+      .replace(/^(?:[-*]|\d+[.)])\s+/, '')
       .replace(/^["']|["'],?$/g, '')
       .replace(/^filename\s*=\s*/, '')
       .replace(/^["']|["']$/g, '')

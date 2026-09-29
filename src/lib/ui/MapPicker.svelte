@@ -89,7 +89,7 @@
   })
 
   const typed = $derived(query.trim())
-  const typedRfl = $derived(/^[^\s,]+\.rfl$/i.test(typed) ? typed : '')
+  const typedRfl = $derived(/^.+\.rfl$/i.test(typed) ? typed : '')
   const typedTaken = $derived(typedRfl !== '' && taken.has(typedRfl.toLowerCase()))
 
   const shown = $derived(results.length)

@@ -22,6 +22,8 @@
     /** settings set by hand on only some of the maps in scope */
     partial?: Set<string>
     showAdvanced?: boolean
+    /** advanced controls the caller renders itself, counted in the hidden note */
+    alsoHidden?: number
     onshowadvanced?: () => void
     onchange?: (scope: Scope, path: string, value: unknown) => void
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
@@ -31,7 +33,7 @@
 
   const {
     page, resolved, manual, gameTypes, levelScope = false, mapManual = [],
-    maps = 1, mixed = new Set(), partial = new Set(), showAdvanced = true, onshowadvanced,
+    maps = 1, mixed = new Set(), partial = new Set(), showAdvanced = true, alsoHidden = 0, onshowadvanced,
     onchange, onreset, onprovenance, onapplytoall,
   }: Props = $props()
 
@@ -111,7 +113,7 @@
       group(cut === -1 ? '' : entry.path.slice(0, cut), entry.scope).entries.push({ ...entry, editor })
     }
 
-    return { groups: out.filter(g => g.entries.length > 0), hidden }
+    return { groups: out.filter(g => g.entries.length > 0), hidden: hidden + (showAdvanced ? 0 : alsoHidden) }
   })
 </script>
 

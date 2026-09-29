@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { untrack } from 'svelte'
   import { meta, pages, schemaFor, textFor, type Scope } from './schema'
   import {
-    emptyDocument, fromToml, toToml, withRowOnEveryLevel,
-    type ImportReport, type RulesScope,
+    defaultPort, emptyDocument, fromToml, launchComment, portFromLaunchComment, sanitizeConfigName,
+    toToml, withRowOnEveryLevel, type ImportReport, type RulesScope,
   } from './lib/config'
   import { resolveScope, resolveServer, type MutatorDeclaration, type ResolvedRules } from './lib/resolve'
   import { findProblems } from './lib/checks'
@@ -13,6 +14,7 @@
   import AdminPage from './lib/ui/AdminPage.svelte'
   import ProblemsPage from './lib/ui/ProblemsPage.svelte'
   import ProvenancePopover from './lib/ui/ProvenancePopover.svelte'
+  import LaunchFields from './lib/ui/LaunchFields.svelte'
 
   let doc = $state(emptyDocument())
 
@@ -44,7 +46,10 @@
   let fileOpen = $state(true)
   let popover = $state<{ scope: Scope; path: string; anchor: HTMLElement } | null>(null)
 
-  let fileName = $state('ads.toml')
+  // empty means named after the server
+  let configName = $state('')
+  let port = $state(defaultPort)
+  let openedName = $state('')
   let fileInput = $state<HTMLInputElement | null>(null)
   let imported = $state<ImportReport | null>(null)
   let importError = $state<string | null>(null)
@@ -71,10 +76,14 @@
       return
     }
     try {
-      const report = fromToml(await picked.text())
+      const text = await picked.text()
+      const report = fromToml(text)
       doc = report.doc
-      savedText = toToml(report.doc)
-      fileName = picked.name
+      // kept as uploaded, since the operator's launch command already uses it
+      configName = picked.name.replace(/\.toml$/i, '')
+      port = portFromLaunchComment(text) ?? defaultPort
+      savedText = launchComment(configName, port) + toToml(report.doc)
+      openedName = picked.name
       imported = report
       importError = null
       selection = []
@@ -180,11 +189,13 @@
       : [gameType]
   )
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
-  const fileText = $derived(toToml(doc))
+  const autoName = $derived(sanitizeConfigName(String(serverSettings.get('server_name')?.value ?? '')) || 'ads')
+  const fileName = $derived(`${configName || autoName}.toml`)
+  const fileText = $derived(launchComment(configName || autoName, port) + toToml(doc))
   const fileLines = $derived(fileText.replace(/\n$/, '').split('\n'))
 
   // compared as text so undoing an edit counts as unchanged
-  let savedText = $state(toToml(emptyDocument()))
+  let savedText = $state(untrack(() => fileText))
   const unsaved = $derived(fileText !== savedText)
 
   // checked here so the header count and the problems page always agree
@@ -410,7 +421,7 @@
       {@const removed = once(imported.removed)}
       <div class="notice">
         <div>
-          <b>Opened {fileName}.</b>
+          <b>Opened {openedName}.</b>
           {#if imported.fromVersion !== null && imported.fromVersion !== meta.adsVersion}
             File uses ads_version {imported.fromVersion} and will be saved as
             version {meta.adsVersion}.
@@ -516,6 +527,15 @@
         onchange={setMutators}
       />
     {:else if page}
+      {#if page.id === 'srv-basics' && showAdvanced}
+        <LaunchFields
+          {configName}
+          {autoName}
+          {port}
+          onname={next => (configName = next)}
+          onport={next => (port = next)}
+        />
+      {/if}
       <SettingsPage
         page={page.id}
         {gameTypes}
@@ -527,6 +547,7 @@
         partial={multi ? combined.partial : undefined}
         mapManual={doc.levels.map(l => l.rules.manual)}
         {showAdvanced}
+        alsoHidden={page.id === 'srv-basics' ? 2 : 0}
         onshowadvanced={() => (showAdvanced = true)}
         onchange={change}
         onreset={reset}
@@ -538,7 +559,7 @@
 
   {#if fileOpen}
     <aside class="filepane">
-      <div class="fp-h">ads.toml</div>
+      <div class="fp-h">{fileName}</div>
       <div class="fp-b">
         {#each fileLines as line, i (i)}
           <div class="ln">{line}</div>
@@ -778,8 +799,7 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--ink-3);
-    letter-spacing: .06em;
-    text-transform: uppercase;
+    overflow-wrap: anywhere;
   }
 
   .fp-b {

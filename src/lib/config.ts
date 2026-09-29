@@ -300,3 +300,35 @@ export function fromToml(text: string): ImportReport {
 
   return report
 }
+
+// ---------------------------------------------------------------------------
+// the launch command. the config name and port are launcher arguments rather
+// than config keys, so the only place they live in the file is this comment.
+// ---------------------------------------------------------------------------
+
+export const defaultPort = 7755
+export const configNameMax = 32
+
+export function sanitizeConfigName(raw: string): string {
+  return raw
+    .replace(/\.toml$/i, '')
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .slice(0, configNameMax)
+    .replace(/^-+|-+$/g, '')
+}
+
+export function launchComment(configName: string, port: number): string {
+  const file = `${configName}.toml`
+  const arg = /\s/.test(file) ? `"${file}"` : file
+  return `# Launch using command: AlpineFactionLauncher.exe -ads ${arg} -port ${port}\n`
+}
+
+// only reads the comment this tool writes, so a hand-edited header falls back to the default
+export function portFromLaunchComment(text: string): number | null {
+  const found = text.match(/^#\s*Launch using command:.*\s-port\s+(\d+)/m)
+  const port = found ? Number(found[1]) : NaN
+  return port >= 1 && port <= 65535 ? port : null
+}

@@ -6,7 +6,7 @@
 
 [[page]]
 id = "srv-basics"
-title = "Name & players"
+title = "Basic"
 scope = "server"
 order = 1
 blurb = "Server name, player limit, and network setup."

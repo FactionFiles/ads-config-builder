@@ -79,8 +79,7 @@
       const text = await picked.text()
       const report = fromToml(text)
       doc = report.doc
-      // kept as uploaded, since the operator's launch command already uses it
-      configName = picked.name.replace(/\.toml$/i, '')
+      configName = sanitizeConfigName(picked.name)
       port = portFromLaunchComment(text) ?? defaultPort
       savedText = launchComment(configName, port) + toToml(report.doc)
       openedName = picked.name
@@ -189,7 +188,7 @@
       : [gameType]
   )
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
-  const autoName = $derived(sanitizeConfigName(String(serverSettings.get('server_name')?.value ?? '')) || 'ads')
+  const autoName = $derived(sanitizeConfigName(String(serverSettings.get('server_name')?.value ?? '').toLowerCase()) || 'ads')
   const fileName = $derived(`${configName || autoName}.toml`)
   const fileText = $derived(launchComment(configName || autoName, port) + toToml(doc))
   const fileLines = $derived(fileText.replace(/\n$/, '').split('\n'))

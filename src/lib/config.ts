@@ -312,18 +312,15 @@ export const configNameMax = 32
 export function sanitizeConfigName(raw: string): string {
   return raw
     .replace(/\.toml$/i, '')
-    .toLowerCase()
     .replace(/[\s_]+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
+    .replace(/[^A-Za-z0-9-]/g, '')
     .replace(/-{2,}/g, '-')
     .slice(0, configNameMax)
     .replace(/^-+|-+$/g, '')
 }
 
 export function launchComment(configName: string, port: number): string {
-  const file = `${configName}.toml`
-  const arg = /\s/.test(file) ? `"${file}"` : file
-  return `# Launch using command: AlpineFactionLauncher.exe -ads ${arg} -port ${port}\n`
+  return `# Launch using command: AlpineFactionLauncher.exe -ads ${configName}.toml -port ${port}\n`
 }
 
 // only reads the comment this tool writes, so a hand-edited header falls back to the default

@@ -76,10 +76,35 @@
   }
 
   function setBool(next: boolean) { onchange?.(path, next) }
-  function setNumber(raw: string) {
-    const n = Number(raw)
-    if (Number.isFinite(n)) onchange?.(path, toFile(text, n))
+  // clamped the way alpine clamps on load, so the box never holds a value the server would change
+  function setNumber(input: HTMLInputElement) {
+    const n = Number(input.value)
+    if (input.value === '' || !Number.isFinite(n)) {
+      input.value = String(shown ?? '')
+      return
+    }
+    let next = toFile(text, n)
+    if (scalar?.type === 'int') next = Math.round(next)
+    if (scalar?.min !== undefined) next = Math.max(scalar.min, next)
+    if (scalar?.max !== undefined) next = Math.min(scalar.max, next)
+    // rewritten even when unchanged, so a clamped entry does not linger in the box
+    input.value = String(toDisplay(text, next))
+    onchange?.(path, next)
   }
+
+  const rangeText = $derived.by(() => {
+    const low = scalar?.min !== undefined ? toDisplay(text, scalar.min) : undefined
+    const high = scalar?.max !== undefined ? toDisplay(text, scalar.max) : undefined
+    const unit = unitLabel ? ` ${unitLabel}` : ''
+    if (low !== undefined && high !== undefined) return `Must be ${low} to ${high}${unit}.`
+    return low !== undefined ? `Must be at least ${low}${unit}.` : `Must be at most ${high}${unit}.`
+  })
+
+  // only reachable through an imported file
+  const outOfRange = $derived(
+    !mixed && typeof value === 'number'
+      && ((scalar?.min !== undefined && value < scalar.min) || (scalar?.max !== undefined && value > scalar.max))
+  )
 </script>
 
 <div class="fr" class:inert class:offmode={offMode}>
@@ -96,6 +121,9 @@
     {/if}
     {#if offMode}
       <div class="warn">{offMode}</div>
+    {/if}
+    {#if outOfRange}
+      <div class="warn">{rangeText}</div>
     {/if}
     {#if scalar?.typeMismatch}
       <div class="warn">
@@ -149,7 +177,7 @@
           onchange={e => setDigits(e.currentTarget.value)}
         />
       {:else if scalar?.type === 'int' || scalar?.type === 'float'}
-        <span class="ctl">
+        <span class="ctl" class:need={outOfRange}>
           <input
             type="number"
             value={mixed ? '' : shown as number}
@@ -159,7 +187,7 @@
             step={scalar.type === 'int' ? 1 : 'any'}
             disabled={inert}
             aria-label={text.label}
-            onchange={e => setNumber(e.currentTarget.value)}
+            onchange={e => setNumber(e.currentTarget)}
           />
           {#if unitLabel}<span class="unit">{unitLabel}</span>{/if}
         </span>

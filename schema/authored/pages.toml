@@ -89,14 +89,14 @@ blurb = "The maps the server plays, in order."
 [[page]]
 id = "bots"
 title = "Bots"
-scope = "other"
+scope = "server"
 order = 13
 blurb = "Bot access and bot profiles."
 
 [[page]]
 id = "admin"
 title = "Advanced admin access"
-scope = "other"
+scope = "server"
 order = 14
 blurb = "Named rcon passwords, each limited to the commands you choose."
 

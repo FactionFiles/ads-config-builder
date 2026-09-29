@@ -116,7 +116,7 @@
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
 
-  // checked here so the sidebar count and the problems page always agree
+  // checked here so the header count and the problems page always agree
   $effect(() => {
     rotationCheck.schedule(doc.levels.map(level => level.filename))
   })
@@ -167,7 +167,7 @@
   const NAV_MAPS = 4
   const navMaps = $derived(doc.levels.slice(0, NAV_MAPS))
 
-  function groupsOf(kind: 'server' | 'rules' | 'other') {
+  function groupsOf(kind: 'server' | 'rules') {
     return pages.filter(p => p.scope === kind && p.id !== 'rotation')
   }
 </script>
@@ -192,6 +192,15 @@
       onchange={openFile}
       hidden
     />
+    <button
+      type="button"
+      class="btn"
+      class:pressed={page?.id === 'checks'}
+      onclick={() => go('checks')}
+    >
+      Problems
+      {#if problems}<span class="ct">{problems}</span>{/if}
+    </button>
     <button type="button" class="btn" onclick={() => fileInput?.click()}>Open</button>
     <button type="button" class="btn pri" onclick={download}>Download</button>
     <button type="button" class="btn" onclick={() => (fileOpen = !fileOpen)}>
@@ -246,20 +255,6 @@
       </button>
     {/if}
 
-    {#if groupsOf('other').length}
-      <div class="scope">Other</div>
-      {#each groupsOf('other') as p (p.id)}
-        <button
-          type="button"
-          class="ni"
-          class:on={!level && p.id === route.page}
-          onclick={() => go(p.id)}
-        >
-          {p.title}
-          {#if p.id === 'checks' && problems}<span class="ct warn">{problems}</span>{/if}
-        </button>
-      {/each}
-    {/if}
   </nav>
 
   <main class="main">
@@ -475,6 +470,16 @@
 
   .ni.more { color: var(--ink-3); }
 
+  .topbar .btn .ct {
+    margin-left: 4px;
+    font-size: 11.5px;
+    color: var(--err);
+    background: var(--err-b);
+    border-radius: 4px;
+    padding: 0 5px;
+    font-variant-numeric: tabular-nums;
+  }
+
   .ni .ct {
     margin-left: auto;
     font-size: 11.5px;
@@ -482,13 +487,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* problem count, distinct from the map count */
-  .ni .ct.warn {
-    color: var(--err);
-    background: var(--err-b);
-    border-radius: 4px;
-    padding: 0 5px;
-  }
 
   .main {
     overflow-y: auto;

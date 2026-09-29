@@ -2,8 +2,8 @@
 // written. everything else is derived by the resolver.
 
 import { parse, stringify } from 'smol-toml'
-import { meta, rulesIndex, server as serverSchema, serverIndex } from '../schema'
-import type { SchemaKey } from '../schema/types'
+import { meta, rconCommandAliases, rulesIndex, server as serverSchema, serverIndex } from '../schema'
+import type { ArrayKey, SchemaKey } from '../schema/types'
 import type { MutatorDeclaration } from './resolve'
 
 /** flat dotted path -> value, e.g. { "overtime.enabled": true } */
@@ -242,14 +242,25 @@ function levelFromToml(table: Record<string, unknown>, report: ImportReport): Le
   return level
 }
 
-const rconFields = new Set(
-  (serverSchema.arrays.find(a => a.key === 'rcon_profiles')?.keys ?? []).map(k => k.key)
-)
+const rconKeys = serverSchema.arrays.find(a => a.key === 'rcon_profiles')?.keys ?? []
+const rconFields = new Set(rconKeys.map(k => k.key))
+const rconCommands = (rconKeys.find(k => k.key === 'allowed_commands') as ArrayKey | undefined)?.choices ?? []
+
+// an alias is granted and revoked with its command, in the master list's order
+export function withCommandAliases(commands: string[]): string[] {
+  const have = new Set(commands.map(c => c.toLowerCase()))
+  for (const [alias, target] of Object.entries(rconCommandAliases)) {
+    if (have.has(alias) || have.has(target)) { have.add(alias); have.add(target) }
+  }
+  return [...rconCommands.filter(c => have.has(c)), ...[...have].filter(c => !rconCommands.includes(c))]
+}
 
 function rconProfileFromToml(table: Record<string, unknown>, report: ImportReport): RconProfile {
   const profile = emptyRconProfile()
   for (const [key, value] of Object.entries(table)) {
-    if (rconFields.has(key)) profile.fields[key] = value
+    if (key === 'allowed_commands' && Array.isArray(value)) {
+      profile.fields[key] = withCommandAliases(value.filter((c): c is string => typeof c === 'string'))
+    } else if (rconFields.has(key)) profile.fields[key] = value
     else {
       profile.unknown[key] = value
       report.unrecognized.push(`rcon_profiles.${key}`)

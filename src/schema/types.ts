@@ -203,6 +203,8 @@ export interface AuthoredEntry {
   display?: string
   uncertain?: boolean
   choiceLabels?: Record<string, string>
+  /** alternate choice names kept in step with the choice they stand for */
+  aliases?: Record<string, string>
   /** column headings for a list setting */
   fields?: Record<string, AuthoredField>
   /** game types this applies in; absent means all */

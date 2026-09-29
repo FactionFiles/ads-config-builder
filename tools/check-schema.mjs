@@ -171,6 +171,13 @@ function checkChoiceLabels(label, path, entry) {
       problem(`${label}: label for a choice that no longer exists`, `${path} -> "${named}"`)
     }
   }
+  for (const [alias, target] of Object.entries(entry.aliases ?? {})) {
+    for (const name of [alias, target]) {
+      if (!choices.includes(name)) {
+        problem(`${label}: alias names a choice that no longer exists`, `${path} -> "${name}"`)
+      }
+    }
+  }
 }
 
 function crossCheck(label, generatedPaths, authored) {

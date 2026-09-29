@@ -539,6 +539,11 @@ sv_timelimit = "Set the time limit"
 download_level = "Download a map from FactionFiles"
 sv_loadconfig = "Reload the server config"
 
+# alpine checks the command name as typed, so an alias is granted with its command
+["rcon_profiles.allowed_commands".aliases]
+map = "level"
+gt = "sv_gametype"
+
 # ---------------------------------------------------------------- base rules
 
 ["base"]

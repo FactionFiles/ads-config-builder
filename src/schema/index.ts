@@ -75,6 +75,9 @@ export function choiceBlurbFor(scope: Scope, path: string, choice: string): stri
   return undefined
 }
 
+export const rconCommandAliases: Record<string, string> =
+  textFor('server', 'rcon_profiles.allowed_commands').aliases ?? {}
+
 export function pagesForScope(scope: Page['scope']): Page[] {
   return pages.filter(p => p.scope === scope)
 }

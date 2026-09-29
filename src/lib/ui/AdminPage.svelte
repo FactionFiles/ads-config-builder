@@ -1,9 +1,9 @@
 <script lang="ts">
   // profiles are not layered, so fields render bare with no provenance
 
-  import { choiceLabelsFor, schemaFor, server, textFor } from '../../schema'
+  import { choiceLabelsFor, rconCommandAliases, schemaFor, server, textFor } from '../../schema'
   import type { ArrayKey, ScalarKey } from '../../schema/types'
-  import { emptyRconProfile, type RconProfile } from '../config'
+  import { emptyRconProfile, withCommandAliases, type RconProfile } from '../config'
   import { resolveEntry } from '../resolve'
   import Field from './Field.svelte'
 
@@ -20,6 +20,8 @@
   const fields = (root.keys ?? []).filter(k => k.kind === 'scalar') as ScalarKey[]
   const commandsKey = (root.keys ?? []).find(k => k.key === 'allowed_commands') as ArrayKey | undefined
   const commands = commandsKey?.choices ?? []
+  // aliases follow their command, so they get no checkbox of their own
+  const shownCommands = commands.filter(c => !(c in rconCommandAliases))
   const commandLabels = choiceLabelsFor('server', 'rcon_profiles.allowed_commands') ?? {}
   const commandsText = textFor('server', 'rcon_profiles.allowed_commands')
 
@@ -63,7 +65,7 @@
 
   function setCommands(index: number, next: string[]) {
     // canonical order keeps the file stable regardless of click order
-    const ordered = commands.filter(c => next.includes(c))
+    const ordered = withCommandAliases(next.filter(c => !(c in rconCommandAliases)))
     edit(index, p => ({ ...p, fields: { ...p.fields, allowed_commands: ordered } }))
   }
 
@@ -84,7 +86,7 @@
   const legacyTaken = $derived(
     legacyPassword !== '' && profiles.some(p => p.fields.password === legacyPassword)
   )
-  const legacyCommands = server.legacyRconCommands
+  const legacyCommands = server.legacyRconCommands.filter(c => !(c in rconCommandAliases))
 </script>
 
 <div class="banner">
@@ -127,7 +129,9 @@
     <div class="cmds" class:off={!restricted}>
       <h4 class="gh">
         {commandsText.label}
-        <span class="count">{chosen.length} of {commands.length}</span>
+        <span class="count">
+          {chosen.filter(c => shownCommands.includes(c)).length} of {shownCommands.length}
+        </span>
       </h4>
 
       {#if !restricted}
@@ -139,7 +143,7 @@
       {/if}
 
       <div class="grid">
-        {#each commands as command (command)}
+        {#each shownCommands as command (command)}
           <label class="cmd">
             <input
               type="checkbox"

@@ -1,9 +1,9 @@
-// findings for anything the server will not do as the file says. unusual but
-// deliberate choices are not problems. network results are passed in, so this
+// findings for anything the server will not do as the file says, plus setups
+// that are valid but likely unintended. network results are passed in, so this
 // stays pure.
 
 import {
-  appliesToMode, gametypesByName, modeTitles, modesFor, mutatorsByName,
+  allEntries, appliesToMode, gametypesByName, modeTitles, modesFor, mutatorsByName,
   rules as rulesSchema, rulesIndex, schemaFor, textFor, mutatorAllowsMode, type Scope,
 } from '../schema'
 import type { ArrayKey, ScalarKey } from '../schema/types'
@@ -13,8 +13,8 @@ import { formatValue } from './format'
 import { tableFor } from './gamedata'
 
 export type Severity =
-  | 'broken'   // the server will not do this at all
-  | 'ignored'  // the server uses a different value, or none
+  | 'error'    // the server will not do this at all
+  | 'warning'  // the server uses a different value or none, or the setup is likely a mistake
   | 'note'     // informational
 
 export interface FindingScope {
@@ -92,7 +92,7 @@ function settingFindings(
       const modes = modesFor(scope, path)
       out.push({
         id: `${id}:offmode`,
-        severity: 'ignored',
+        severity: 'warning',
         scope: where,
         title: `${label} does nothing in ${modeTitle(gameType)}`,
         detail: modes
@@ -109,7 +109,7 @@ function settingFindings(
       const sibling = path.split('.').slice(0, -1).concat(guard.key).join('.')
       out.push({
         id: `${id}:guard`,
-        severity: 'ignored',
+        severity: 'warning',
         scope: where,
         title: `${label} is not used`,
         detail: `Only used when ${labelOf(scope, sibling)} is ${
@@ -131,7 +131,7 @@ function settingFindings(
         const limit = low ? scalar.min! : scalar.max!
         out.push({
           id: `${id}:range`,
-          severity: 'ignored',
+          severity: 'warning',
           scope: where,
           title: `${label} is out of range`,
           detail: `Set to ${formatValue(scope, path, value)}. The server uses ${
@@ -146,7 +146,7 @@ function settingFindings(
     if (typeof value === 'string' && scalar.maxLength !== undefined && value.length > scalar.maxLength) {
       out.push({
         id: `${id}:length`,
-        severity: 'ignored',
+        severity: 'warning',
         scope: where,
         title: `${label} is too long`,
         detail: `Alpine truncates it to ${scalar.maxLength} characters.`,
@@ -181,7 +181,7 @@ function mutatorFindings(
 
   out.push({
     id: `${where.kind}${where.map ?? ''}:mutators:mode`,
-    severity: 'ignored',
+    severity: 'warning',
     scope: where,
     title: blocked.length === 1
       ? `${blocked[0]!.label} does nothing in ${modeTitle(gameType)}`
@@ -289,7 +289,7 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
   if (blank.length) {
     out.push({
       id: 'rotation:blank',
-      severity: 'broken',
+      severity: 'error',
       scope: mapScope(blank[0].i, ''),
       title: blank.length === 1
         ? 'A map in the rotation has no filename'
@@ -302,7 +302,7 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
   if (absent.length) {
     out.push({
       id: 'rotation:absent',
-      severity: 'broken',
+      severity: 'error',
       scope: ROTATION_SCOPE,
       title: absent.length === 1
         ? 'A map in the rotation is not on the FactionFiles autodownloader'
@@ -314,15 +314,13 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
     })
   }
 
-  const written = Object.keys(doc.base.manual).length + doc.base.mutators.length
-    + Object.keys(doc.server).length
-  if (!doc.levels.length && written > 0) {
+  if (!doc.levels.length) {
     out.push({
       id: 'rotation:empty',
-      severity: 'note',
+      severity: 'warning',
       scope: ROTATION_SCOPE,
       title: 'The rotation is empty',
-      detail: 'No maps are listed. This is only intended for servers that run on votes alone.',
+      detail: 'Add at least one map to the rotation.',
       page: 'rotation',
     })
   }
@@ -345,7 +343,7 @@ function clearedMutatorFindings(
 
     out.push({
       id: `map${i}:mutators:cleared`,
-      severity: 'broken',
+      severity: 'error',
       scope: mapScope(i, level.filename),
       title: `This map changes the game type and drops ${
         lost.length === 1 ? 'a mutator' : 'mutators'
@@ -393,7 +391,7 @@ function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
 
       out.push({
         id: `reseed:${list.key}:${String(row[mergeKey])}`,
-        severity: 'broken',
+        severity: 'error',
         scope: BASE_SCOPE,
           title: `${name} settings from the game rules do not apply to ${
           missing.length === doc.levels.length ? 'any map' : 'every map'
@@ -407,7 +405,105 @@ function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
   }
 }
 
-const RANK: Record<Severity, number> = { broken: 0, ignored: 1, note: 2 }
+function valueAt(resolved: ResolvedRules, path: string): unknown {
+  return resolved.get(path)?.value
+}
+
+function blank(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim() === ''
+}
+
+function serverFindings(doc: ConfigDocument, server: ResolvedRules, out: Finding[]) {
+  const warn = (id: string, path: string, title: string, detail: string, items?: string[]) => {
+    out.push({ id: `server:${id}`, severity: 'warning', scope: SERVER_SCOPE, title, detail, page: pageOf('server', path), items })
+  }
+
+  const hasKey = !blank(valueAt(server, 'fflink_gsk'))
+  if (!hasKey) {
+    warn('gsk', 'fflink_gsk', 'No FactionFiles Game Server Key',
+      'Statistics will not be tracked on FactionFiles.')
+  } else if (!valueAt(server, 'demo_auto_record') || !valueAt(server, 'fflink_demo_upload')) {
+    warn('demos', 'demo_auto_record', 'Demos are not uploaded to FactionFiles',
+      'Statistics are tracked on FactionFiles, but game demos will not be available.')
+  }
+
+  const bots = valueAt(server, 'bot_profiles')
+  if (Array.isArray(bots) && bots.length && !valueAt(server, 'bot_shared_secret')) {
+    warn('botsecret', 'bot_shared_secret', 'Bot profiles are set but there is no bot shared secret',
+      'Bots cannot join the server.')
+  }
+
+  if (blank(valueAt(server, 'rcon_password')) && !doc.rconProfiles.length) {
+    warn('rcon', 'rcon_password', 'No rcon password or rcon profiles',
+      'No one can use rcon to manage the server.')
+  }
+
+  const maxPlayers = valueAt(server, 'max_players')
+  if (typeof maxPlayers === 'number' && maxPlayers <= 1) {
+    warn('maxplayers', 'max_players', `${labelOf('server', 'max_players')} is ${maxPlayers}`,
+      'No more than 1 player is allowed to join.')
+  }
+
+  if (valueAt(server, 'vote_level.enabled')
+    && !valueAt(server, 'vote_level.add_rotation_to_allowed_levels')
+    && !valueAt(server, 'vote_level.add_installed_to_allowed_levels')) {
+    warn('votelevel', 'vote_level', 'Map votes are allowed but no maps can be voted for',
+      'No maps will be available for voting.')
+  }
+
+  const shortVotes = allEntries
+    .filter(e => e.scope === 'server' && /^vote_\w+\.enabled$/.test(e.path) && valueAt(server, e.path))
+    .map(e => e.path.slice(0, -'.enabled'.length))
+    .filter(vote => {
+      const time = valueAt(server, `${vote}.time`)
+      return typeof time === 'number' && time <= 5
+    })
+  if (shortVotes.length) {
+    warn('votetime', shortVotes[0], shortVotes.length === 1
+      ? `${labelOf('server', shortVotes[0])} has a time limit of 5 seconds or less`
+      : `${shortVotes.length} votes have a time limit of 5 seconds or less`,
+      'Votes will typically complete before everyone has a chance to respond.',
+      shortVotes.map(vote => labelOf('server', vote)))
+  }
+
+  doc.rconProfiles.forEach((profile, i) => {
+    const name = blank(profile.fields.name) ? `${i + 1}` : `"${String(profile.fields.name)}"`
+    const push = (id: string, title: string, detail: string) => {
+      out.push({ id: `rcon${i}:${id}`, severity: 'warning', scope: SERVER_SCOPE, title, detail, page: 'admin' })
+    }
+    if (blank(profile.fields.name) || blank(profile.fields.password)) {
+      push('required', `Rcon profile ${name} has no ${blank(profile.fields.name) ? 'name' : 'password'}`,
+        'The server ignores a profile without both a name and a password.')
+    }
+    const commands = profile.fields.allowed_commands
+    if (!profile.fields.full_admin && (!Array.isArray(commands) || !commands.length)) {
+      push('nocommands', `Rcon profile ${name} has no allowed commands`,
+        `Rcon profile ${name} will not grant access to any rcon commands.`)
+    }
+  })
+}
+
+// maps are only checked when they set the welcome message themselves, to avoid
+// repeating the base rules finding for every map
+function welcomeFindings(doc: ConfigDocument, baseRules: ResolvedRules, levelRules: ResolvedRules[], out: Finding[]) {
+  const empty = (r: ResolvedRules) => !!valueAt(r, 'welcome_message.enabled') && blank(valueAt(r, 'welcome_message.text'))
+  const push = (where: FindingScope) => out.push({
+    id: `${where.kind}${where.map ?? ''}:welcome`,
+    severity: 'warning',
+    scope: where,
+    title: 'The welcome message is on but has no text',
+    detail: 'No welcome message will be sent.',
+    page: pageOf('rules', 'welcome_message'),
+  })
+
+  if (empty(baseRules)) push(BASE_SCOPE)
+  doc.levels.forEach((level, i) => {
+    const own = Object.keys(level.rules.manual).some(p => p.startsWith('welcome_message.'))
+    if (own && empty(levelRules[i] ?? baseRules)) push(mapScope(i, level.filename))
+  })
+}
+
+const RANK: Record<Severity, number> = { error: 0, warning: 1, note: 2 }
 
 export function findProblems(input: CheckInput): Finding[] {
   const { doc, baseRules, levelRules, server, absentMaps = [] } = input
@@ -417,7 +513,9 @@ export function findProblems(input: CheckInput): Finding[] {
   const modeOf = (i: number) => (levelRules[i]?.get('game_type')?.value as string) ?? baseMode
   const modeChanged = doc.levels.map((_, i) => modeOf(i) !== baseMode)
 
+  serverFindings(doc, server, out)
   rotationFindings(doc, absentMaps, out)
+  welcomeFindings(doc, baseRules, levelRules, out)
   reseededRowFindings(doc, out)
   clearedMutatorFindings(doc, doc.base.mutators, modeChanged, out)
 

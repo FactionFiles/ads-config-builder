@@ -14,14 +14,14 @@
 
   const SECTIONS: { severity: Severity; title: string; blurb: string }[] = [
     {
-      severity: 'broken',
-      title: 'Will not work',
+      severity: 'error',
+      title: 'Errors',
       blurb: 'The server cannot apply these and will start without them.',
     },
     {
-      severity: 'ignored',
-      title: 'Not in effect',
-      blurb: 'The server ignores or overrides these.',
+      severity: 'warning',
+      title: 'Warnings',
+      blurb: 'The server ignores or overrides these, or the setup is likely unintended.',
     },
     {
       severity: 'note',
@@ -35,7 +35,10 @@
       .filter(s => s.found.length > 0)
   )
 
-  const serious = $derived(findings.filter(f => f.severity !== 'note').length)
+  const count = (severity: Severity) => findings.filter(f => f.severity === severity).length
+  const errors = $derived(count('error'))
+  const warnings = $derived(count('warning'))
+  const notes = $derived(count('note'))
 
   function open(finding: Finding) {
     if (finding.page) onopen(finding.page, finding.scope.map)
@@ -59,14 +62,14 @@
   </div>
 {:else}
   <p class="count">
-    {#if serious}
-      <strong>{serious}</strong>
-      {serious === 1 ? 'problem' : 'problems'} found.
+    {#if errors || warnings}
+      {#if errors}<strong>{errors}</strong> {errors === 1 ? 'error' : 'errors'}{warnings ? ',' : '.'}{/if}
+      {#if warnings}<strong>{warnings}</strong> {warnings === 1 ? 'warning' : 'warnings'}.{/if}
     {:else}
       No problems found.
     {/if}
-    {#if findings.length > serious}
-      {findings.length - serious} {findings.length - serious === 1 ? 'note' : 'notes'}.
+    {#if notes}
+      {notes} {notes === 1 ? 'note' : 'notes'}.
     {/if}
   </p>
 
@@ -75,7 +78,7 @@
     <p class="sb">{section.blurb}</p>
 
     {#each section.found as finding (finding.id)}
-      <div class="f" class:bad={finding.severity === 'broken'}>
+      <div class="f" class:bad={finding.severity === 'error'} class:warn={finding.severity === 'warning'}>
         <div class="ft">{finding.title}</div>
         <div class="fd">{finding.detail}</div>
 
@@ -146,11 +149,12 @@
     margin-bottom: 8px;
   }
 
-  /* only broken findings get color */
   .f.bad {
     border-left-color: var(--err);
     background: var(--err-b);
   }
+
+  .f.warn { border-left-color: var(--warn); }
 
   .ft {
     font-size: 14px;

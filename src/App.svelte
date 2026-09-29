@@ -199,7 +199,8 @@
   )
 
   // notes are excluded, since a badge that is always lit gets ignored
-  const problems = $derived(findings.filter(f => f.severity !== 'note').length)
+  const errors = $derived(findings.filter(f => f.severity === 'error').length)
+  const warnings = $derived(findings.filter(f => f.severity === 'warning').length)
 
   function editScope(edit: (scope: RulesScope) => RulesScope) {
     if (!targets.length) doc.base = edit(doc.base)
@@ -288,12 +289,29 @@
     />
     <button
       type="button"
-      class="btn"
+      class="btn probs"
       class:pressed={page?.id === 'checks'}
       onclick={() => go('checks')}
     >
       Problems
-      {#if problems}<span class="ct">{problems}</span>{/if}
+      {#if warnings}
+        <span class="ct" title="Warnings">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 1.5 15.2 14.5H.8z" fill="var(--warn)" stroke="var(--warn)" stroke-linejoin="round" />
+            <path d="M8 6v4M8 11.8v.4" stroke="var(--warn-b)" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+          {warnings}
+        </span>
+      {/if}
+      {#if errors}
+        <span class="ct" title="Errors">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" fill="var(--err)" />
+            <path d="M8 4.2v4.6M8 11.3v.4" stroke="var(--err-b)" stroke-width="1.7" stroke-linecap="round" />
+          </svg>
+          {errors}
+        </span>
+      {/if}
     </button>
     <button type="button" class="btn" onclick={() => fileInput?.click()}>Open</button>
     <button type="button" class="btn pri" onclick={download}>Download</button>
@@ -636,14 +654,24 @@
     font-weight: 600;
   }
 
-  .topbar .btn .ct {
-    margin-left: 4px;
-    font-size: 11.5px;
-    color: var(--err);
-    background: var(--err-b);
-    border-radius: 4px;
-    padding: 0 5px;
+  /* flex so the badge icons center on the label instead of sitting on its baseline */
+  .probs {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .probs .ct {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 7px;
+    line-height: 1;
     font-variant-numeric: tabular-nums;
+  }
+
+  .probs .ct svg {
+    width: 13px;
+    height: 13px;
   }
 
   .ni .ct {

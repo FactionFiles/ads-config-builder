@@ -519,7 +519,7 @@
         onshowadvanced={() => (showAdvanced = true)}
         onchange={change}
         onreset={reset}
-        onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
+        onprovenance={(scope, path, anchor) => (popover = popover?.anchor === anchor ? null : { scope, path, anchor })}
         onapplytoall={applyRowToAllMaps}
       />
     {/if}

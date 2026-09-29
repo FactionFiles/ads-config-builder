@@ -60,15 +60,15 @@
     display: grid;
     place-items: center;
     flex: none;
-    border: 1px solid transparent;
+    border: 0;
     background: none;
     padding: 0;
     cursor: pointer;
   }
 
-  .prov:hover {
-    border-color: var(--line-2);
-    background: var(--sunk);
+  /* the ring is drawn from the dot itself so the two stay concentric at any scale */
+  .prov:hover .pd {
+    box-shadow: 0 0 0 3.5px var(--sunk), 0 0 0 4.5px var(--line-2);
   }
 
   .pd {

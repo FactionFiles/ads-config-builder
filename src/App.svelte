@@ -73,6 +73,7 @@
     try {
       const report = fromToml(await picked.text())
       doc = report.doc
+      savedText = toToml(report.doc)
       fileName = picked.name
       imported = report
       importError = null
@@ -95,6 +96,7 @@
 
   function download() {
     save(fileText, fileName)
+    savedText = fileText
   }
 
   // the same key can appear in several scopes
@@ -180,6 +182,10 @@
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
 
+  // compared as text so undoing an edit counts as unchanged
+  let savedText = $state(toToml(emptyDocument()))
+  const unsaved = $derived(fileText !== savedText)
+
   // checked here so the header count and the problems page always agree
   $effect(() => {
     rotationCheck.schedule(doc.levels.map(level => level.filename))
@@ -259,6 +265,7 @@
 </script>
 
 <svelte:window
+  onbeforeunload={e => { if (unsaved) e.preventDefault() }}
   onhashchange={() => (route = routeFromHash())}
   onclick={e => {
     const el = e.target as HTMLElement

@@ -266,60 +266,67 @@
   </header>
 
   <nav class="nav">
-    <div class="scope">Server</div>
-    {#each groupsOf('server') as p (p.id)}
-      <button
-        type="button"
-        class="ni"
-        class:on={!targets.length && p.id === route.page}
-        onclick={() => go(p.id)}
-      >{p.title}</button>
-    {/each}
-
-    <div class="scope">Game rules</div>
-    {#each groupsOf('rules') as p (p.id)}
-      <button
-        type="button"
-        class="ni"
-        class:on={!targets.length && p.id === page?.id}
-        onclick={() => go(p.id)}
-      >{p.title}</button>
-    {/each}
-
-    <div class="scope">Map rotation</div>
-    <button
-      type="button"
-      class="ni"
-      class:on={!targets.length && route.page === 'rotation'}
-      onclick={() => go('rotation')}
-    >
-      Edit map rotation
-      {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
-    </button>
-
-    {#if targets.length}
-      <div class="scope">
-        Map overrides &middot;
-        {#if level}
-          <span class="file">#{targets[0] + 1} {level.filename}</span>
-        {:else}
-          {targets.length} maps
-        {/if}
-      </div>
-      {#each groupsOf('rules') as p (p.id)}
-        {@const count = overrideCounts.get(p.id)}
+    <div class="sec">
+      <div class="scope">Server</div>
+      {#each groupsOf('server') as p (p.id)}
         <button
           type="button"
           class="ni"
-          class:on={p.id === page?.id}
-          onclick={() => go(p.id, targets)}
-        >
-          {p.title}
-          {#if count}<span class="ct">{count}</span>{/if}
-        </button>
+          class:on={!targets.length && p.id === route.page}
+          onclick={() => go(p.id)}
+        >{p.title}</button>
       {/each}
-    {/if}
+    </div>
 
+    <div class="sec">
+      <div class="scope">Game rules</div>
+      {#each groupsOf('rules') as p (p.id)}
+        <button
+          type="button"
+          class="ni"
+          class:on={!targets.length && p.id === page?.id}
+          onclick={() => go(p.id)}
+        >{p.title}</button>
+      {/each}
+    </div>
+
+    <div class="sec">
+      <div class="scope">Map rotation</div>
+      <button
+        type="button"
+        class="ni"
+        class:on={!targets.length && route.page === 'rotation'}
+        onclick={() => go('rotation')}
+      >
+        Edit map rotation
+        {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
+      </button>
+    </div>
+
+    {#if targets.length}
+      <div class="sec">
+        <div class="scope">
+          Map overrides &middot;
+          {#if level}
+            <span class="file">#{targets[0] + 1} {level.filename}</span>
+          {:else}
+            {targets.length} maps
+          {/if}
+        </div>
+        {#each groupsOf('rules') as p (p.id)}
+          {@const count = overrideCounts.get(p.id)}
+          <button
+            type="button"
+            class="ni"
+            class:on={p.id === page?.id}
+            onclick={() => go(p.id, targets)}
+          >
+            {p.title}
+            {#if count}<span class="ct">{count}</span>{/if}
+          </button>
+        {/each}
+      </div>
+    {/if}
   </nav>
 
   <main class="main">
@@ -510,17 +517,22 @@
     overflow-y: auto;
   }
 
+  .sec + .sec {
+    border-top: 1px solid var(--line);
+    margin-top: 10px;
+  }
+
   .scope {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: .09em;
     text-transform: uppercase;
-    color: var(--ink-3);
-    padding: 16px 16px 6px;
+    color: var(--ink);
+    padding: 14px 16px 6px;
     overflow-wrap: anywhere;
   }
 
-  .scope:first-child { padding-top: 2px; }
+  .sec:first-child .scope { padding-top: 2px; }
 
   /* filenames read as written, not uppercased */
   .scope .file { text-transform: none; letter-spacing: normal; }
@@ -534,7 +546,7 @@
     border: 0;
     border-left: 2px solid transparent;
     background: none;
-    padding: 6px 16px;
+    padding: 6px 16px 6px 24px;
     font-size: 13.5px;
     color: var(--ink-2);
     cursor: pointer;

@@ -103,6 +103,7 @@
 </script>
 
 {#each groups as group (group.key)}
+  <section class="grp">
   {#if group.title}
     <h3 class="gh">{group.title}</h3>
   {/if}
@@ -140,4 +141,10 @@
       />
     {/if}
   {/each}
+  </section>
 {/each}
+
+<style>
+  /* each group owns its spacing, so the last row needs no border of its own */
+  .grp + .grp { margin-top: 30px; }
+</style>

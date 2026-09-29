@@ -429,11 +429,9 @@
 
   .rows tr.reseed .btn { margin-left: 8px; }
 
-  .le {
-    padding-bottom: 18px;
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 18px;
-  }
+  .le { margin: 30px 0; }
+  .le:first-child { margin-top: 0; }
+  .le:last-child { margin-bottom: 0; }
 
   .le.offmode { opacity: .75; }
 

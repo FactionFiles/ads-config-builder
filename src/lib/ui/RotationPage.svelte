@@ -162,6 +162,7 @@
   // the same maps rather than the same row numbers
   function reorder(order: number[]) {
     if (order.every((from, i) => from === i)) return
+    confirming = null
     onselect(order.flatMap((from, i) => (ticked.has(from) ? [i] : [])))
     onchange(order.map(from => levels[from]))
   }
@@ -179,7 +180,26 @@
     return ticked.has(index) ? selection : [index]
   }
 
+  // row index awaiting a remove confirmation, or 'bulk' for the selection
+  let confirming = $state<number | 'bulk' | null>(null)
+
+  // cancel takes focus so a stray enter does not remove anything
+  function focusNow(el: HTMLElement) {
+    requestAnimationFrame(() => el.focus())
+  }
+
+  // returns focus to the button that opened the confirmation
+  function cancelConfirm() {
+    const was = confirming
+    confirming = null
+    requestAnimationFrame(() => {
+      const el = was === 'bulk' ? document.querySelector('.bulkrm') : rowEls[was as number]?.querySelector('.trash')
+      ;(el as HTMLElement | null)?.focus()
+    })
+  }
+
   function removeAt(indexes: number[]) {
+    confirming = null
     const drop = new Set(indexes)
     const keep = levels.map((_, i) => i).filter(i => !drop.has(i))
     onselect(keep.flatMap((from, i) => (ticked.has(from) ? [i] : [])))
@@ -247,6 +267,7 @@
   function gripDown(e: PointerEvent, index: number) {
     if (e.button !== 0) return
     e.preventDefault()
+    confirming = null
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     drag = {
       grabbed: index,
@@ -307,7 +328,21 @@
   }
 </script>
 
-<svelte:window onkeydown={e => { if (e.key === 'Escape' && drag) { e.preventDefault(); endDrag(false) } }} />
+<svelte:window
+  onkeydown={e => {
+    if (e.key !== 'Escape') return
+    if (drag) { e.preventDefault(); endDrag(false) }
+    else if (confirming !== null) { e.preventDefault(); cancelConfirm() }
+  }}
+  onclick={e => { if (!(e.target as HTMLElement).closest('.confirm, .trash, .bulkrm')) confirming = null }}
+/>
+
+{#snippet trashIcon()}
+  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4"
+      fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+  </svg>
+{/snippet}
 
 <div class="banner">
   <span class="ic">i</span>
@@ -413,7 +448,10 @@
             <td><span class="v {cell.kind}">{cell.text}</span></td>
           {/each}
           <td class="acts">
-            <button type="button" class="sm go" aria-label="Edit base rules" onclick={onopenbase}>Edit</button>
+            <div class="rowacts">
+              <button type="button" class="edit" aria-label="Edit base rules" onclick={onopenbase}>Edit</button>
+              <span class="trashgap"></span>
+            </div>
           </td>
         </tr>
 
@@ -476,10 +514,21 @@
               <td><span class="v {cell.kind}">{cell.text}</span></td>
             {/each}
             <td class="acts">
-              <button type="button" class="sm" title="Remove" aria-label="Remove {row.name}"
-                onclick={() => removeAt([row.index])}>&times;</button>
-              <button type="button" class="sm go" aria-label="Edit {row.name}"
-                onclick={() => onopen([row.index])}>Edit</button>
+              <div class="rowacts">
+                <button type="button" class="edit" aria-label="Edit {row.name}"
+                  onclick={() => onopen([row.index])}>Edit</button>
+                <button type="button" class="trash" title="Remove from rotation" aria-label="Remove {row.name}"
+                  onclick={() => (confirming = confirming === row.index ? null : row.index)}>
+                  {@render trashIcon()}
+                </button>
+              </div>
+              {#if confirming === row.index}
+                <div class="confirm" role="alertdialog" aria-label="Remove {row.name}?">
+                  <span>Remove <b>{row.name}</b>?</span>
+                  <button type="button" class="yes" onclick={() => removeAt([row.index])}>Remove</button>
+                  <button type="button" class="no" use:focusNow onclick={cancelConfirm}>Cancel</button>
+                </div>
+              {/if}
             </td>
           </tr>
         {/each}
@@ -507,7 +556,15 @@
     <strong>{selection.length} {selection.length === 1 ? 'map' : 'maps'} selected</strong>
     <span class="sp"></span>
     <button type="button" class="btn pri" onclick={() => onopen(selection)}>Edit settings</button>
-    <button type="button" class="btn" onclick={() => removeAt(selection)}>Remove from rotation</button>
+    {#if confirming === 'bulk'}
+      <span class="confirm inline" role="alertdialog" aria-label="Remove selected maps?">
+        <span>Remove {selection.length} {selection.length === 1 ? 'map' : 'maps'}?</span>
+        <button type="button" class="yes" onclick={() => removeAt(selection)}>Remove</button>
+        <button type="button" class="no" use:focusNow onclick={cancelConfirm}>Cancel</button>
+      </span>
+    {:else}
+      <button type="button" class="btn bulkrm" onclick={() => (confirming = 'bulk')}>Remove from rotation</button>
+    {/if}
     <button type="button" class="btn" onclick={() => onselect([])}>Clear selection</button>
   </div>
 {/if}
@@ -681,30 +738,90 @@
     text-underline-offset: 2px;
   }
 
-  td.acts, th.acts { width: 80px; text-align: right; white-space: nowrap; }
+  td.acts, th.acts { width: 1%; text-align: right; white-space: nowrap; }
+  td.acts { position: relative; padding-top: 5px; padding-bottom: 5px; }
 
-  td.acts .sm {
-    border: 0;
+  .rowacts {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .edit {
+    border: 1px solid var(--line-2);
+    background: var(--surface);
+    border-radius: 5px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+
+  .edit:hover { border-color: var(--ink-3); background: var(--sunk); color: var(--ink); }
+
+  .trash, .trashgap {
+    width: 26px;
+    height: 24px;
+    flex: none;
+  }
+
+  .trash {
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
     background: none;
+    border-radius: 5px;
+    padding: 0;
     color: var(--ink-3);
     cursor: pointer;
-    padding: 2px 4px;
-    font-size: 13px;
-    border-radius: 4px;
-    opacity: 0;
   }
 
-  tr.lvl:hover .sm { opacity: 1; }
+  /* destructive actions are the one non-provenance use of --err besides problems */
+  .trash:hover, .trash:focus-visible { color: var(--err); background: var(--err-b); border-color: var(--err-b); }
 
-  /* always visible, since it is the only way into a map's overrides */
-  td.acts .sm.go {
-    opacity: 1;
-    font-size: 11.5px;
-    padding-right: 8px;
+  .confirm {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 4px 4px 11px;
+    border: 1px solid var(--err);
+    border-radius: 6px;
+    background: var(--surface);
+    box-shadow: var(--sh);
+    font-size: 12.5px;
+    font-weight: 400;
+    color: var(--ink-2);
   }
 
-  td.acts .sm:hover { background: var(--surface-2); color: var(--ink); }
-  td.acts .sm:focus-visible { opacity: 1; }
+  .confirm b { color: var(--ink); font-weight: 600; }
+
+  .confirm.inline {
+    position: static;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .confirm button {
+    border: 1px solid var(--line-2);
+    border-radius: 5px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+
+  .confirm .no:hover { border-color: var(--ink-3); color: var(--ink); }
+  .confirm .yes { background: var(--err); border-color: var(--err); color: var(--on-accent); }
+  .confirm .yes:hover { filter: brightness(.9); }
 
   .v.inherited { color: var(--ink-3); }
   .v.muted { color: var(--ink-3); font-style: italic; }

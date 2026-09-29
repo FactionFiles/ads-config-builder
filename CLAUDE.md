@@ -72,7 +72,8 @@ npm run check          svelte-check plus tsc
   invented plain-language substitutes. No justifications, asides or hedging.
 - The only fixed-width type in the UI is the config file pane.
 - Color means provenance and nothing else. UI chrome uses `--graphite`. The
-  exceptions are `--err` for problems and `--warn` for warning banners.
+  exceptions are `--err` for problems and destructive actions, and `--warn` for
+  warning banners.
 - The tool is dark only, with a single palette; no light-mode tokens or branches.
 - American English throughout, including generated and authored text.
 - No unicode special characters in code, comments or authored text. Use `->`.

@@ -1,6 +1,8 @@
 # Labels for the game rules settings.
 # One entry per path in schema/generated/rules.json "flat".
 #
+# basic = true shows the setting while advanced settings are hidden; anything
+#   unmarked is advanced
 # unit    = the unit the value is stored in inside the config file
 # display = the unit to show the user, when it differs from the file unit
 #
@@ -17,16 +19,19 @@
 
 ["game_type"]
 page = "rules-mode"
+basic = true
 label = "Game type"
 help = "Used on every map that does not set its own. Changing it applies that game type's defaults, such as the spawn weapon and spawn delay."
 
 ["mutators"]
 page = "rules-mutators"
+basic = true
 label = "Mutators"
 help = "Preset rule changes, such as Instagib or Jetpacks. Applied in a fixed order before any settings you change by hand."
 
 ["time_limit"]
 page = "rules-mode"
+basic = true
 label = "Time limit"
 help = "How long each map lasts."
 unit = "seconds"
@@ -68,6 +73,7 @@ help = "For game types that play several rounds per map."
 
 ["rounds.max_rounds"]
 page = "rules-mode"
+basic = true
 label = "Rounds per map"
 unit = "rounds"
 
@@ -93,58 +99,68 @@ unit = "seconds"
 
 ["individual_kill_limit"]
 page = "rules-mode"
+basic = true
 label = "Frag limit"
 help = "Used by DM and Wipeout."
 unit = "kills"
 
 ["team_kill_limit"]
 page = "rules-mode"
+basic = true
 label = "TDM frag limit"
 unit = "kills"
 
 ["cap_limit"]
 page = "rules-mode"
+basic = true
 label = "CTF cap limit"
 unit = "captures"
 
 ["koth_score_limit"]
 page = "rules-mode"
+basic = true
 label = "KOTH score limit"
 help = "Points a team earns by holding the hill."
 unit = "points"
 
 ["dc_score_limit"]
 page = "rules-mode"
+basic = true
 label = "DC score limit"
 help = "Points a team earns by holding control points."
 unit = "points"
 
 ["pit_score_limit"]
 page = "rules-mode"
+basic = true
 label = "Pit score limit"
 help = "Duels a player must win."
 unit = "wins"
 
 ["gg_score_limit"]
 page = "rules-mode"
+basic = true
 label = "Gun Game score limit"
 help = "Kills a player needs to finish the weapon progression."
 unit = "kills"
 
 ["bag_score_limit"]
 page = "rules-mode"
+basic = true
 label = "Bagman score limit"
 help = "Points a player earns by holding the bag."
 unit = "points"
 
 ["tbag_score_limit"]
 page = "rules-mode"
+basic = true
 label = "Team Bagman score limit"
 help = "Points a team earns by holding the bag."
 unit = "points"
 
 ["sal_cap_limit"]
 page = "rules-mode"
+basic = true
 label = "Salvage cap limit"
 unit = "captures"
 
@@ -226,6 +242,7 @@ modes = ["gg"]
 
 ["team_damage"]
 page = "rules-mode"
+basic = true
 label = "Team damage"
 help = "Lets teammates damage each other."
 teamOnly = true
@@ -238,6 +255,7 @@ teamOnly = true
 
 ["auto_team_balance"]
 page = "rules-mode"
+basic = true
 label = "Auto team balance"
 help = "Moves a player to the other team when they die if the teams are uneven."
 teamOnly = true
@@ -261,6 +279,7 @@ help = "Lets players save and load their position with chat commands. Commonly u
 
 ["force_respawn"]
 page = "rules-spawn"
+basic = true
 label = "Force respawn"
 help = "Respawns players automatically instead of waiting for them to click."
 
@@ -447,6 +466,7 @@ label = "Character"
 
 ["weapons_stay"]
 page = "rules-weapons"
+basic = true
 label = "Weapon stay"
 help = "Weapon pickups stay on the map after being picked up."
 notModes = ["gg"]
@@ -478,6 +498,7 @@ notModes = ["bag", "tbag"]
 
 ["weapon_pickups_give_full_ammo"]
 page = "rules-weapons"
+basic = true
 label = "Weapon pickups give full ammo"
 help = "Picking up a weapon you already have fills its ammo instead of adding one clip."
 notModes = ["gg"]
@@ -630,10 +651,12 @@ help = "Shown to each player when they join."
 
 ["welcome_message.enabled"]
 page = "rules-msg"
+basic = true
 label = "Welcome message"
 
 ["welcome_message.text"]
 page = "rules-msg"
+basic = true
 label = "Message"
 help = "Limited to 240 characters."
 

@@ -49,6 +49,17 @@
   let imported = $state<ImportReport | null>(null)
   let importError = $state<string | null>(null)
 
+  // a per-browser preference, so storage failing just means it starts hidden
+  let showAdvanced = $state(readShowAdvanced())
+
+  function readShowAdvanced() {
+    try { return localStorage.getItem('showAdvanced') === '1' } catch { return false }
+  }
+
+  $effect(() => {
+    try { localStorage.setItem('showAdvanced', showAdvanced ? '1' : '0') } catch { /* private mode */ }
+  })
+
   async function openFile(e: Event & { currentTarget: HTMLInputElement }) {
     const picked = e.currentTarget.files?.[0]
     e.currentTarget.value = ''
@@ -224,8 +235,20 @@
     return counts
   })
 
+  // advanced pages holding hand-set values stay listed so those values can be found
+  const handSetPages = $derived.by(() => {
+    const ids = new Set<string>()
+    for (const path of Object.keys(doc.server)) ids.add(textFor('server', path).page)
+    for (const path of Object.keys(doc.base.manual)) ids.add(textFor('rules', path).page)
+    if (doc.rconProfiles.length) ids.add('admin')
+    return ids
+  })
+
   function groupsOf(kind: 'server' | 'rules') {
-    return pages.filter(p => p.scope === kind && p.id !== 'rotation')
+    return pages.filter(p =>
+      p.scope === kind && p.id !== 'rotation'
+      && (!p.advanced || showAdvanced || handSetPages.has(p.id) || p.id === route.page
+        || (targets.length > 0 && overrideCounts.has(p.id))))
   }
 </script>
 
@@ -266,67 +289,74 @@
   </header>
 
   <nav class="nav">
-    <div class="sec">
-      <div class="scope">Server</div>
-      {#each groupsOf('server') as p (p.id)}
-        <button
-          type="button"
-          class="ni"
-          class:on={!targets.length && p.id === route.page}
-          onclick={() => go(p.id)}
-        >{p.title}</button>
-      {/each}
-    </div>
-
-    <div class="sec">
-      <div class="scope">Game rules</div>
-      {#each groupsOf('rules') as p (p.id)}
-        <button
-          type="button"
-          class="ni"
-          class:on={!targets.length && p.id === page?.id}
-          onclick={() => go(p.id)}
-        >{p.title}</button>
-      {/each}
-    </div>
-
-    <div class="sec">
-      <div class="scope">Map rotation</div>
-      <button
-        type="button"
-        class="ni"
-        class:on={!targets.length && route.page === 'rotation'}
-        onclick={() => go('rotation')}
-      >
-        Edit map rotation
-        {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
-      </button>
-    </div>
-
-    {#if targets.length}
+    <div class="navlist">
       <div class="sec">
-        <div class="scope">
-          Map overrides &middot;
-          {#if level}
-            <span class="file">#{targets[0] + 1} {level.filename}</span>
-          {:else}
-            {targets.length} maps
-          {/if}
-        </div>
-        {#each groupsOf('rules') as p (p.id)}
-          {@const count = overrideCounts.get(p.id)}
+        <div class="scope">Server</div>
+        {#each groupsOf('server') as p (p.id)}
           <button
             type="button"
             class="ni"
-            class:on={p.id === page?.id}
-            onclick={() => go(p.id, targets)}
-          >
-            {p.title}
-            {#if count}<span class="ct">{count}</span>{/if}
-          </button>
+            class:on={!targets.length && p.id === route.page}
+            onclick={() => go(p.id)}
+          >{p.title}</button>
         {/each}
       </div>
-    {/if}
+  
+      <div class="sec">
+        <div class="scope">Game rules</div>
+        {#each groupsOf('rules') as p (p.id)}
+          <button
+            type="button"
+            class="ni"
+            class:on={!targets.length && p.id === page?.id}
+            onclick={() => go(p.id)}
+          >{p.title}</button>
+        {/each}
+      </div>
+  
+      <div class="sec">
+        <div class="scope">Map rotation</div>
+        <button
+          type="button"
+          class="ni"
+          class:on={!targets.length && route.page === 'rotation'}
+          onclick={() => go('rotation')}
+        >
+          Edit map rotation
+          {#if doc.levels.length}<span class="ct">{doc.levels.length}</span>{/if}
+        </button>
+      </div>
+  
+      {#if targets.length}
+        <div class="sec">
+          <div class="scope">
+            Map overrides &middot;
+            {#if level}
+              <span class="file">#{targets[0] + 1} {level.filename}</span>
+            {:else}
+              {targets.length} maps
+            {/if}
+          </div>
+          {#each groupsOf('rules') as p (p.id)}
+            {@const count = overrideCounts.get(p.id)}
+            <button
+              type="button"
+              class="ni"
+              class:on={p.id === page?.id}
+              onclick={() => go(p.id, targets)}
+            >
+              {p.title}
+              {#if count}<span class="ct">{count}</span>{/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <label class="adv">
+      <input type="checkbox" bind:checked={showAdvanced} />
+      Show advanced settings
+    </label>
   </nav>
 
   <main class="main">
@@ -453,6 +483,8 @@
         mixed={multi ? combined.mixed : undefined}
         partial={multi ? combined.partial : undefined}
         mapManual={doc.levels.map(l => l.rules.manual)}
+        {showAdvanced}
+        onshowadvanced={() => (showAdvanced = true)}
         onchange={change}
         onreset={reset}
         onprovenance={(scope, path, anchor) => (popover = { scope, path, anchor })}
@@ -511,11 +543,20 @@
     padding: 1px 9px;
   }
 
+  /* the list scrolls so the advanced toggle stays pinned below it */
   .nav {
     border-right: 1px solid var(--line);
     background: var(--surface-2);
-    padding: 14px 0 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .navlist {
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
+    padding: 14px 0 20px;
   }
 
   .sec + .sec {
@@ -548,6 +589,18 @@
     border-left: 2px solid transparent;
     background: none;
     padding: 6px 16px 6px 24px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+
+  .adv {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    border-top: 1px solid var(--line);
+    padding: 12px 16px;
     font-size: 13.5px;
     color: var(--ink-2);
     cursor: pointer;

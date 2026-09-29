@@ -1,6 +1,7 @@
 # page definitions for the settings UI.
 # ids are fixed because they appear in the URL.
 # scope: server | rules | other
+# advanced = true hides the whole page until advanced settings are shown
 
 [[page]]
 id = "srv-basics"
@@ -36,6 +37,7 @@ title = "Idle players"
 scope = "server"
 order = 5
 blurb = "Detect, warn, and kick idle players."
+advanced = true
 
 [[page]]
 id = "rules-mode"
@@ -71,6 +73,7 @@ title = "Damage & physics"
 scope = "rules"
 order = 10
 blurb = "Damage, gibbing, kill rewards, and physics."
+advanced = true
 
 [[page]]
 id = "rules-msg"
@@ -92,6 +95,7 @@ title = "Bots"
 scope = "server"
 order = 13
 blurb = "Bot access and bot profiles."
+advanced = true
 
 [[page]]
 id = "admin"
@@ -99,6 +103,7 @@ title = "Advanced admin access"
 scope = "server"
 order = 14
 blurb = "Named rcon passwords, each limited to the commands you choose."
+advanced = true
 
 [[page]]
 id = "srv-stats"

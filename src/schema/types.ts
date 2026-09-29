@@ -216,6 +216,8 @@ export interface AuthoredEntry {
   /** preferred over a long `modes` list, since new upstream game types stay included */
   notModes?: string[]
   teamOnly?: boolean
+  /** shown while advanced settings are hidden */
+  basic?: boolean
 }
 
 export interface AuthoredField {
@@ -235,6 +237,8 @@ export interface Page {
   scope: 'server' | 'rules' | 'other'
   order: number
   blurb: string
+  /** hidden, settings and all, until advanced settings are shown */
+  advanced?: boolean
 }
 
 export interface MutatorEffect {

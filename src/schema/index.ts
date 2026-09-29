@@ -62,6 +62,11 @@ export function textFor(scope: Scope, path: string): AuthoredEntry {
   }
 }
 
+// a setting with no authored entry is new upstream, so it starts out advanced
+export function isBasic(scope: Scope, path: string): boolean {
+  return textFor(scope, path).basic === true
+}
+
 // game type names come from the generated list so new upstream game types are named
 export function choiceLabelsFor(scope: Scope, path: string): Record<string, string> | undefined {
   if (scope === 'rules' && path === 'game_type') {

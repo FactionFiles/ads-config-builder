@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { allEntries, appliesToMode, modesFor, modeTitles, schemaFor, textFor, type Scope } from '../../schema'
-  import type { ResolvedRules } from '../resolve'
+  import { allEntries, appliesToMode, isBasic, modesFor, modeTitles, schemaFor, textFor, type Scope } from '../../schema'
+  import type { Resolved, ResolvedRules } from '../resolve'
   import Field from './Field.svelte'
   import ListEditor from './ListEditor.svelte'
 
@@ -21,6 +21,8 @@
     mixed?: Set<string>
     /** settings set by hand on only some of the maps in scope */
     partial?: Set<string>
+    showAdvanced?: boolean
+    onshowadvanced?: () => void
     onchange?: (scope: Scope, path: string, value: unknown) => void
     onapplytoall?: (path: string, row: Record<string, unknown>) => void
     onreset?: (scope: Scope, path: string) => void
@@ -29,7 +31,8 @@
 
   const {
     page, resolved, manual, gameTypes, levelScope = false, mapManual = [],
-    maps = 1, mixed = new Set(), partial = new Set(), onchange, onreset, onprovenance, onapplytoall,
+    maps = 1, mixed = new Set(), partial = new Set(), showAdvanced = true, onshowadvanced,
+    onchange, onreset, onprovenance, onapplytoall,
   }: Props = $props()
 
   interface Entry { scope: Scope; path: string; offMode?: string; editor?: Editor }
@@ -59,11 +62,17 @@
     return null
   }
 
+  // hand-set here or in the base rules, so a hidden advanced setting can still be found and cleared
+  function handSet(r: Resolved | undefined) {
+    return !!r && (r.layer === 'manual' || r.trail.some(c => c.layer === 'manual' || c.layer === 'inherited'))
+  }
+
   interface Group { key: string; title: string; help: string; entries: Entry[] }
 
   // groups are keyed by parent path so the layout follows the file's structure
-  const groups = $derived.by(() => {
+  const layout = $derived.by(() => {
     const out: Group[] = []
+    let hidden = 0
     const byKey = new Map<string, Group>()
     const onPage: Entry[] = allEntries
       .filter(e => textFor(e.scope, e.path).page === page && !isToolOwned(e.scope, e.path))
@@ -94,15 +103,19 @@
         continue
       }
       if (!editor) continue
+      if (!showAdvanced && !isBasic(entry.scope, entry.path) && !handSet(resolved[entry.scope].get(entry.path))) {
+        hidden++
+        continue
+      }
       const cut = entry.path.lastIndexOf('.')
       group(cut === -1 ? '' : entry.path.slice(0, cut), entry.scope).entries.push({ ...entry, editor })
     }
 
-    return out.filter(g => g.entries.length > 0)
+    return { groups: out.filter(g => g.entries.length > 0), hidden }
   })
 </script>
 
-{#each groups as group (group.key)}
+{#each layout.groups as group (group.key)}
   <section class="grp">
   {#if group.title}
     <h3 class="gh">{group.title}</h3>
@@ -144,7 +157,31 @@
   </section>
 {/each}
 
+{#if layout.hidden}
+  <p class="more">
+    {layout.hidden} advanced {layout.hidden === 1 ? 'setting' : 'settings'} hidden.
+    <button type="button" class="link" onclick={() => onshowadvanced?.()}>Show</button>
+  </p>
+{/if}
+
 <style>
   /* each group owns its spacing, so the last row needs no border of its own */
   .grp + .grp { margin-top: 30px; }
+
+  .more {
+    margin: 30px 0 0;
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  .link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
 </style>

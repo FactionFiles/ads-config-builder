@@ -218,6 +218,27 @@ crossCheck('rules', rules.flat, authoredRules)
 
 crossCheck('server', server.flat, authoredServer)
 
+// with advanced settings hidden, a basic setting must be reachable and a settings
+// page must not render empty
+if (pagesFile) {
+  const advancedPages = new Set(pagesFile.page.filter(p => p.advanced).map(p => p.id))
+  const basicPages = new Set()
+  for (const [label, entries] of [['rules', authoredRules], ['server', authoredServer]]) {
+    for (const [path, entry] of Object.entries(entries ?? {})) {
+      if (!entry.basic) continue
+      if (advancedPages.has(entry.page)) {
+        problem(`${label}: basic setting on an advanced page`, `${path} -> "${entry.page}"`)
+      }
+      basicPages.add(entry.page)
+    }
+  }
+  for (const p of pagesFile.page) {
+    if (p.scope !== 'other' && !p.advanced && !basicPages.has(p.id)) {
+      problem('page has no basic settings and is not marked advanced', p.id)
+    }
+  }
+}
+
 // every mutator needs an effects entry pointing at existing keys
 if (effects) {
   const rulePaths = new Set(rules.flat)

@@ -6,6 +6,8 @@
 #   levels.*        keys allowed inside a [[levels]] entry
 #   bot_profiles.*  keys allowed inside a bot profile file
 #
+# basic = true shows the setting while advanced settings are hidden; anything
+#   unmarked is advanced
 # unit  = the unit the value is written in inside the config file
 # display = the unit to show the user, when it differs from the file unit
 
@@ -18,22 +20,26 @@ help = "Set automatically. Does not need to be changed."
 
 ["server_name"]
 page = "srv-basics"
+basic = true
 label = "Server name"
 help = "Name shown in the server browser."
 
 ["max_players"]
 page = "srv-basics"
+basic = true
 label = "Max players"
 help = "Up to 32."
 unit = "players"
 
 ["upnp"]
 page = "srv-basics"
+basic = true
 label = "Enable UPnP"
 help = "Attempts to forward the server port automatically on routers that support UPnP."
 
 ["fflink_gsk"]
 page = "srv-stats"
+basic = true
 label = "FactionFiles Game Server Key"
 help = "Enables stats tracking on FactionFiles. Leave blank to disable."
 link = "https://www.factionfiles.com/ff.php?action=manageservers"
@@ -43,11 +49,13 @@ linkLabel = "Register a key on FactionFiles"
 
 ["password"]
 page = "srv-access"
+basic = true
 label = "Join password"
 help = "Leave blank for a public server."
 
 ["rcon_password"]
 page = "srv-access"
+basic = true
 label = "Rcon password"
 help = "Grants access to admin commands. For multiple passwords with different permissions, see Advanced admin access."
 
@@ -72,6 +80,7 @@ help = "Players not using Alpine Faction can still join, but are told the server
 
 ["alpine_restrict.clients_require_alpine"]
 page = "srv-access"
+basic = true
 label = "Require Alpine Faction"
 help = "Needed for features the original game does not support, such as mutators."
 
@@ -123,6 +132,7 @@ help = "Lets players hear other players' footsteps with weapons other than the p
 
 ["allow_outlines"]
 page = "srv-client"
+basic = true
 label = "Player outlines"
 help = "Lets players draw outlines around other players."
 
@@ -137,6 +147,7 @@ label = "Sprays"
 
 ["sprays.enabled"]
 page = "srv-client"
+basic = true
 label = "Enable sprays"
 help = "Lets players use sprays."
 
@@ -170,6 +181,7 @@ help = "Vote to start a match between two teams, with a ready up phase before it
 
 ["vote_match.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow match votes"
 help = "Lets players vote to start a match on a chosen map and team size."
 
@@ -191,6 +203,7 @@ help = "Vote to kick a player from the server."
 
 ["vote_kick.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow kick votes"
 
 ["vote_kick.ignore_nonvoters"]
@@ -211,6 +224,7 @@ help = "Vote to change to a specific map."
 
 ["vote_level.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow map votes"
 
 ["vote_level.ignore_nonvoters"]
@@ -246,6 +260,7 @@ help = "Vote to extend the time limit on the current map."
 
 ["vote_extend.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow extend votes"
 
 ["vote_extend.ignore_nonvoters"]
@@ -266,6 +281,7 @@ help = "Vote to restart the current map."
 
 ["vote_restart.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow restart votes"
 
 ["vote_restart.ignore_nonvoters"]
@@ -286,6 +302,7 @@ help = "Vote to go to the next map in the server rotation."
 
 ["vote_next.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow next votes"
 
 ["vote_next.ignore_nonvoters"]
@@ -306,6 +323,7 @@ help = "Vote to go to a random map in the server rotation. With dynamic rotation
 
 ["vote_rand.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow random votes"
 
 ["vote_rand.ignore_nonvoters"]
@@ -326,6 +344,7 @@ help = "Vote to go back to the previous map in the server rotation."
 
 ["vote_previous.enabled"]
 page = "srv-voting"
+basic = true
 label = "Allow previous votes"
 
 ["vote_previous.ignore_nonvoters"]
@@ -391,6 +410,7 @@ label = "Damage notifications"
 
 ["damage_notifications.enabled"]
 page = "rules-msg"
+basic = true
 label = "Enable damage notifications"
 help = "Shows players how much damage they dealt on each hit."
 
@@ -557,16 +577,19 @@ help = "Rules used by every map unless the map overrides them."
 
 ["demo_auto_record"]
 page = "srv-demos"
+basic = true
 label = "Auto record demos"
 help = "Records each map to a demo file in the demos folder. Demos are discarded if no players were connected, and on match servers only live matches are recorded."
 
 ["demo_chat_record"]
 page = "srv-demos"
+basic = true
 label = "Record chat"
 help = "Includes chat messages in demos."
 
 ["fflink_demo_upload"]
 page = "srv-demos"
+basic = true
 label = "Upload demos to FactionFiles"
 help = "Uploads each auto-recorded demo and links it to the match on FactionFiles. Requires a Game Server Key."
 

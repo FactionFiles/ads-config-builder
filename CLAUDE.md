@@ -36,12 +36,14 @@ npm run check          svelte-check plus tsc
 - `tools/check-schema.mjs` - the anti-drift check. Fails on a setting with no
   authored entry, an authored entry for a setting that no longer exists, a
   mutator with no effects entry, a source-allowed value with no name, a list
-  column with no heading, or a name the source states that the game's tables no
-  longer hold.
+  column with no heading, a name the source states that the game's tables no
+  longer hold, or a settings page that would be empty with advanced settings
+  hidden.
 - `tools/extract-tables.mjs` - one-shot, run by hand. Produces `gamedata/*.json`
   from the game's `tables.vpp`, since those names are not in the Alpine repo.
 - `schema/authored/` - the hand-written layer (TOML): labels, optional help text,
-  page assignment, names for enumerated values, list column headings, and
+  page assignment, names for enumerated values, list column headings, which
+  settings are basic (anything unmarked is advanced and hidden by default), and
   mutator effects.
 - `src/schema/` - types and the loader the UI imports.
 - `src/lib/resolve.ts` - the layering and the provenance trail. Some list keys

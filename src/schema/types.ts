@@ -239,6 +239,10 @@ export interface Page {
   blurb: string
   /** hidden, settings and all, until advanced settings are shown */
   advanced?: boolean
+  /** shown in a banner under the blurb */
+  note?: string
+  link?: string
+  linkLabel?: string
 }
 
 export interface MutatorEffect {

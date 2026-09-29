@@ -233,6 +233,8 @@ if (pagesFile) {
     }
   }
   for (const p of pagesFile.page) {
+    if (p.link && !/^https:\/\//.test(p.link)) problem('page link is not an https url', `${p.id} -> "${p.link}"`)
+    if ((p.link || p.linkLabel) && !p.note) problem('page has a link but no note', p.id)
     if (p.scope !== 'other' && !p.advanced && !basicPages.has(p.id)) {
       problem('page has no basic settings and is not marked advanced', p.id)
     }

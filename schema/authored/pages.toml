@@ -2,6 +2,7 @@
 # ids are fixed because they appear in the URL.
 # scope: server | rules | other
 # advanced = true hides the whole page until advanced settings are shown
+# note, with optional link and linkLabel, is shown in a banner under the blurb
 
 [[page]]
 id = "srv-basics"
@@ -96,6 +97,9 @@ scope = "server"
 order = 13
 blurb = "Bot access and bot profiles."
 advanced = true
+note = "Bots require further setup, explained on the Red Faction Wiki:"
+link = "https://www.redfactionwiki.com/wiki/Launching_Alpine_Faction_Bots"
+linkLabel = "Launching Alpine Faction Bots"
 
 [[page]]
 id = "admin"

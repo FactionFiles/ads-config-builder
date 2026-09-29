@@ -465,7 +465,7 @@ emptyLabel = "Disabled"
 ["bot_profiles"]
 page = "bots"
 label = "Bot profiles"
-help = "Each bot on the server uses one profile file."
+help = "Specify the TOML file names for your bots."
 
 ["bot_profiles.player_name"]
 page = "bots"

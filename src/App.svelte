@@ -466,6 +466,17 @@
     {:else if page}
       <h2>{page.title}</h2>
       {#if page.blurb}<p class="blurb">{page.blurb}</p>{/if}
+      {#if page.note}
+        <div class="banner note">
+          <span class="ic">i</span>
+          <div>
+            {page.note}
+            {#if page.link}
+              <a href={page.link} target="_blank" rel="noreferrer noopener">{page.linkLabel ?? page.link}</a>
+            {/if}
+          </div>
+        </div>
+      {/if}
     {/if}
 
     {#if page?.id === 'rotation'}
@@ -740,6 +751,10 @@
     text-underline-offset: 2px;
     cursor: pointer;
   }
+
+  .note { margin: -8px 0 22px; width: fit-content; }
+
+  .note a { color: var(--ink); }
 
   .blurb {
     color: var(--ink-2);

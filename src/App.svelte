@@ -181,6 +181,7 @@
   )
   const baseGameType = $derived((baseRules.get('game_type')?.value as string) ?? '')
   const fileText = $derived(toToml(doc))
+  const fileLines = $derived(fileText.replace(/\n$/, '').split('\n'))
 
   // compared as text so undoing an edit counts as unchanged
   let savedText = $state(toToml(emptyDocument()))
@@ -273,7 +274,7 @@
   }}
 />
 
-<div class="app">
+<div class="app" class:filed={fileOpen}>
   <header class="topbar">
     <strong>Alpine Faction server config</strong>
     <span class="sp"></span>
@@ -509,7 +510,11 @@
   {#if fileOpen}
     <aside class="filepane">
       <div class="fp-h">ads.toml</div>
-      <pre class="fp-b">{fileText}</pre>
+      <div class="fp-b">
+        {#each fileLines as line, i (i)}
+          <div class="ln">{line}</div>
+        {/each}
+      </div>
     </aside>
   {/if}
 </div>
@@ -655,6 +660,9 @@
     max-width: 900px;
   }
 
+  /* the settings column stops growing at its max width and the file pane takes the rest */
+  .app.filed { grid-template-columns: var(--nav-w) minmax(0, 900px) minmax(var(--file-w), 1fr); }
+
   .main h2 {
     font-size: 21px;
     margin-bottom: 4px;
@@ -713,7 +721,7 @@
   }
 
   .filepane {
-    width: var(--file-w);
+    min-width: 0;
     border-left: 1px solid var(--line);
     background: var(--sunk);
     display: flex;
@@ -732,13 +740,33 @@
   }
 
   .fp-b {
-    margin: 0;
-    padding: 12px 14px;
-    overflow: auto;
+    padding: 12px 14px 12px 0;
+    overflow-x: hidden;
+    overflow-y: auto;
     font-family: var(--mono);
     font-size: 12px;
     line-height: 1.6;
     color: var(--ink-2);
-    white-space: pre;
+  }
+
+  .ln {
+    position: relative;
+    min-height: 1.6em;
+    padding-left: 16px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* a wrap mark in the gutter of every visual row after a line's first */
+  .ln::after {
+    content: '';
+    position: absolute;
+    top: 1.6em;
+    bottom: 0;
+    left: 3px;
+    width: 10px;
+    background: var(--ink-3);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 1v4.5h6M6 3l2.5 2.5L6 8' fill='none' stroke='black' stroke-width='1.3'/%3E%3C/svg%3E") 0 0 / 10px 1.6em repeat-y;
+    pointer-events: none;
   }
 </style>

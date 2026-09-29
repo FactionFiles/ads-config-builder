@@ -142,6 +142,14 @@
     return settingCell(row, col)
   }
 
+  // named in the badge tooltip, since most overrides are not shown as columns
+  function overridesOf(level: LevelEntry): string {
+    return [
+      ...Object.keys(level.rules.manual).map(path => textFor('rules', path).label),
+      ...level.rules.mutators.map(m => `${mutatorLabel(m.name)} mutator`),
+    ].join(', ')
+  }
+
   function toggleColumn(id: string) {
     columns = columns.includes(id) ? columns.filter(c => c !== id) : [...columns, id]
   }
@@ -325,6 +333,11 @@
             <td class="n">{row.index + 1}</td>
             <td class="mapname">
               <button type="button" class="open" onclick={() => onopen([row.index])}>{row.name}</button>
+              {#if row.changed && row.level}
+                <span class="ovr" title={overridesOf(row.level)}>
+                  {row.changed} {row.changed === 1 ? 'override' : 'overrides'}
+                </span>
+              {/if}
               {#if rotationCheck.statusOf(row.name) === 'absent'}
                 <span class="nodl" title="Not available on FactionFiles. Players without this map cannot download it.">
                   no auto-download
@@ -580,6 +593,18 @@
     margin-top: 14px;
     padding-top: 13px;
     border-top: 1px solid var(--line);
+  }
+
+  .ovr {
+    display: inline-block;
+    margin-left: 7px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--p-map-b);
+    color: var(--p-map);
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
   }
 
   .nodl {

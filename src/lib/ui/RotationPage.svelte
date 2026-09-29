@@ -158,20 +158,136 @@
     onchange([...levels, ...names.map(emptyLevel)])
   }
 
-  function move(index: number, by: number) {
-    const to = index + by
-    if (to < 0 || to >= levels.length) return
-    const next = [...levels]
-    const [moved] = next.splice(index, 1)
-    next.splice(to, 0, moved)
-    onselect([])
-    onchange(next)
+  // applies a new order, given as original indexes, keeping the selection on
+  // the same maps rather than the same row numbers
+  function reorder(order: number[]) {
+    if (order.every((from, i) => from === i)) return
+    onselect(order.flatMap((from, i) => (ticked.has(from) ? [i] : [])))
+    onchange(order.map(from => levels[from]))
+  }
+
+  // original indexes after moving a set of rows to an insertion point (0..length)
+  function orderAfterMove(moving: number[], target: number): number[] {
+    const set = new Set(moving)
+    const rest = levels.map((_, i) => i).filter(i => !set.has(i))
+    const at = rest.filter(i => i < target).length
+    return [...rest.slice(0, at), ...moving, ...rest.slice(at)]
+  }
+
+  // grabbing a selected row carries the whole selection
+  function movingFor(index: number) {
+    return ticked.has(index) ? selection : [index]
   }
 
   function removeAt(indexes: number[]) {
     const drop = new Set(indexes)
-    onselect([])
-    onchange(levels.filter((_, i) => !drop.has(i)))
+    const keep = levels.map((_, i) => i).filter(i => !drop.has(i))
+    onselect(keep.flatMap((from, i) => (ticked.has(from) ? [i] : [])))
+    onchange(keep.map(from => levels[from]))
+  }
+
+  let rowEls = $state<HTMLTableRowElement[]>([])
+  let gripEls = $state<HTMLButtonElement[]>([])
+
+  interface Drag {
+    grabbed: number
+    moving: number[]
+    startY: number
+    y: number
+    active: boolean
+    target: number
+    scroller: HTMLElement | null
+    frame: number
+  }
+
+  let drag = $state<Drag | null>(null)
+
+  const dragMoving = $derived(new Set(drag?.active ? drag.moving : []))
+
+  // insertion point for the drop line, hidden when the drop would change nothing
+  const dropAt = $derived.by(() => {
+    if (!drag?.active) return -1
+    const order = orderAfterMove(drag.moving, drag.target)
+    return order.every((from, i) => from === i) ? -1 : drag.target
+  })
+
+  function scrollParent(el: HTMLElement | null): HTMLElement | null {
+    for (let n = el?.parentElement; n; n = n.parentElement) {
+      const oy = getComputedStyle(n).overflowY
+      if ((oy === 'auto' || oy === 'scroll') && n.scrollHeight > n.clientHeight) return n
+    }
+    return null
+  }
+
+  function targetAt(y: number) {
+    let target = 0
+    for (let i = 0; i < levels.length; i++) {
+      const r = rowEls[i]?.getBoundingClientRect()
+      if (r && y > r.top + r.height / 2) target = i + 1
+    }
+    return target
+  }
+
+  // scrolls while the pointer rests near the edge of the scroll area
+  function autoScroll() {
+    if (!drag) return
+    if (drag.active && drag.scroller) {
+      const box = drag.scroller.getBoundingClientRect()
+      const edge = 48
+      const by = drag.y < box.top + edge ? -(box.top + edge - drag.y)
+        : drag.y > box.bottom - edge ? drag.y - (box.bottom - edge) : 0
+      if (by) {
+        drag.scroller.scrollTop += Math.round(by / 3)
+        drag.target = targetAt(drag.y)
+      }
+    }
+    drag.frame = requestAnimationFrame(autoScroll)
+  }
+
+  function gripDown(e: PointerEvent, index: number) {
+    if (e.button !== 0) return
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    drag = {
+      grabbed: index,
+      moving: movingFor(index),
+      startY: e.clientY,
+      y: e.clientY,
+      active: false,
+      target: index,
+      scroller: scrollParent(rowEls[index]),
+      frame: 0,
+    }
+    drag.frame = requestAnimationFrame(autoScroll)
+  }
+
+  function gripMove(e: PointerEvent) {
+    if (!drag) return
+    drag.y = e.clientY
+    if (!drag.active && Math.abs(e.clientY - drag.startY) < 4) return
+    drag.active = true
+    drag.target = targetAt(e.clientY)
+  }
+
+  function endDrag(commit: boolean) {
+    if (!drag) return
+    const { active, moving, target, frame } = drag
+    cancelAnimationFrame(frame)
+    drag = null
+    if (commit && active) reorder(orderAfterMove(moving, target))
+  }
+
+  function gripKey(e: KeyboardEvent, index: number) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return
+    e.preventDefault()
+    const moving = movingFor(index)
+    const target = e.key === 'ArrowUp' ? Math.min(...moving) - 1 : Math.max(...moving) + 2
+    if (target < 0 || target > levels.length) return
+    const order = orderAfterMove(moving, target)
+    reorder(order)
+    // keep focus on the grip of the map that was moved
+    const to = order.indexOf(index)
+    queueMicrotask(() => gripEls[to]?.focus())
   }
 
   const ticked = $derived(new Set(selection))
@@ -190,6 +306,8 @@
     panel = panel === which ? null : which
   }
 </script>
+
+<svelte:window onkeydown={e => { if (e.key === 'Escape' && drag) { e.preventDefault(); endDrag(false) } }} />
 
 <div class="banner">
   <span class="ic">i</span>
@@ -265,6 +383,7 @@
     <table class="sheet">
       <thead>
         <tr>
+          <th class="grip"></th>
           <th class="tick">
             <button
               type="button"
@@ -282,6 +401,7 @@
       </thead>
       <tbody>
         <tr class="baserow">
+          <td class="grip"></td>
           <td class="tick"></td>
           <td class="n"></td>
           <td class="mapname">
@@ -298,7 +418,36 @@
         </tr>
 
         {#each rows as row (row.index)}
-          <tr class="lvl" class:sel={ticked.has(row.index)}>
+          <tr
+            class="lvl"
+            class:sel={ticked.has(row.index)}
+            class:moving={dragMoving.has(row.index)}
+            class:dropbefore={dropAt === row.index}
+            class:dropafter={dropAt === levels.length && row.index === levels.length - 1}
+            bind:this={rowEls[row.index]}
+          >
+            <td class="grip">
+              <button
+                type="button"
+                class="handle"
+                class:grabbing={drag?.active}
+                title="Drag to reorder"
+                aria-label="Reorder {row.name}. Use arrow keys to move."
+                bind:this={gripEls[row.index]}
+                onpointerdown={e => gripDown(e, row.index)}
+                onpointermove={gripMove}
+                onpointerup={() => endDrag(true)}
+                onpointercancel={() => endDrag(false)}
+                onlostpointercapture={() => endDrag(false)}
+                onkeydown={e => gripKey(e, row.index)}
+              >
+                <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true">
+                  <circle cx="2" cy="2" r="1.3" /><circle cx="6" cy="2" r="1.3" />
+                  <circle cx="2" cy="7" r="1.3" /><circle cx="6" cy="7" r="1.3" />
+                  <circle cx="2" cy="12" r="1.3" /><circle cx="6" cy="12" r="1.3" />
+                </svg>
+              </button>
+            </td>
             <td class="tick">
               <button
                 type="button"
@@ -327,10 +476,6 @@
               <td><span class="v {cell.kind}">{cell.text}</span></td>
             {/each}
             <td class="acts">
-              <button type="button" class="sm" title="Move up" aria-label="Move {row.name} up"
-                onclick={() => move(row.index, -1)}>&uarr;</button>
-              <button type="button" class="sm" title="Move down" aria-label="Move {row.name} down"
-                onclick={() => move(row.index, 1)}>&darr;</button>
               <button type="button" class="sm" title="Remove" aria-label="Remove {row.name}"
                 onclick={() => removeAt([row.index])}>&times;</button>
               <button type="button" class="sm go" aria-label="Edit {row.name}"
@@ -498,6 +643,28 @@
   }
 
   td.tick, th.tick { width: 34px; padding-right: 0; }
+  td.grip, th.grip { width: 20px; padding-left: 6px; padding-right: 0; }
+
+  .handle {
+    display: block;
+    border: 0;
+    background: none;
+    padding: 3px 4px;
+    border-radius: 4px;
+    color: var(--ink-3);
+    opacity: .55;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .handle svg { display: block; fill: currentColor; }
+  tr.lvl:hover .handle, .handle:focus-visible { opacity: 1; }
+  .handle:hover { background: var(--surface-2); color: var(--ink); }
+  .handle.grabbing { cursor: grabbing; }
+
+  table.sheet tr.lvl.moving td { opacity: .45; }
+  table.sheet tr.lvl.dropbefore td { box-shadow: inset 0 2px 0 var(--graphite); }
+  table.sheet tr.lvl.dropafter td { box-shadow: inset 0 -2px 0 var(--graphite); }
   td.mapname { font-weight: 500; }
 
   td.mapname .open {
@@ -514,7 +681,7 @@
     text-underline-offset: 2px;
   }
 
-  td.acts, th.acts { width: 124px; text-align: right; white-space: nowrap; }
+  td.acts, th.acts { width: 80px; text-align: right; white-space: nowrap; }
 
   td.acts .sm {
     border: 0;

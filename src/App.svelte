@@ -437,6 +437,7 @@
         inherited={targets.length ? doc.base.mutators : []}
         modeCleared={targets.length > 0 && gameType !== baseGameType}
         mixed={multi && combined.mutatorsMixed}
+        maps={targets.length}
         resolved={activeRules}
         {gameType}
         onchange={setMutators}

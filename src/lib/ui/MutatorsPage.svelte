@@ -19,6 +19,8 @@
     modeCleared?: boolean
     /** the maps in scope declare different mutators */
     mixed?: boolean
+    /** how many maps this scope edits at once */
+    maps?: number
     resolved: ResolvedRules
     gameType: string
     onchange: (next: MutatorDeclaration[]) => void
@@ -26,7 +28,7 @@
 
   const {
     declared, levelScope = false, inherited = [], modeCleared = false, mixed = false,
-    resolved, gameType, onchange,
+    maps = 1, resolved, gameType, onchange,
   }: Props = $props()
 
   const all = mutatorSchema.mutators
@@ -76,6 +78,23 @@
       d.name === m.name ? { ...d, options: { ...d.options, [option]: value } } : d
     ))
   }
+
+  function resetOption(m: Mutator, option: string) {
+    onchange(declared.map(d => {
+      if (d.name !== m.name || !d.options) return d
+      const { [option]: _dropped, ...rest } = d.options
+      return Object.keys(rest).length ? { ...d, options: rest } : { name: d.name }
+    }))
+  }
+
+  function isSet(m: Mutator, option: string) {
+    return declaredBy.get(m.name)?.options?.[option] !== undefined
+  }
+
+  const tone = $derived(levelScope ? 'map' : 'you')
+  const setLabel = $derived(
+    maps > 1 ? 'Set for these maps' : levelScope ? 'Set for this map' : 'Changed'
+  )
 
   // some options default to the current setting value, so they need the resolved rules
   function shown(m: Mutator, option: string) {
@@ -166,39 +185,48 @@
     {#if state === 'on' && !base && m.options.length}
       <div class="opts">
         {#each m.options as option (option.name)}
-          <label class="opt">
-            <span>{option.label}</span>
-            {#if option.type === 'bool'}
-              <button
-                type="button"
-                class="sw"
-                class:on={shown(m, option.name) === true}
-                role="switch"
-                aria-checked={shown(m, option.name) === true}
-                aria-label={option.label}
-                onclick={() => setOption(m, option.name, !(shown(m, option.name) === true))}
-              ></button>
-            {:else if option.choicesFrom === 'weaponsWithPickup'}
-              <select
-                class="ctl"
-                value={String(shown(m, option.name) ?? '')}
-                onchange={e => setOption(m, option.name, e.currentTarget.value)}
-              >
-                {#each weaponsWithPickup as weapon (weapon.name)}
-                  <option value={weapon.name}>{weapon.display}</option>
-                {/each}
-              </select>
-            {:else}
-              <input
-                class="ctl"
-                type="number"
-                min="1"
-                step="1"
-                value={shown(m, option.name) as number}
-                onchange={e => setOption(m, option.name, Number(e.currentTarget.value))}
-              />
+          <div class="opt">
+            <label class="row">
+              <span>{option.label}</span>
+              {#if option.type === 'bool'}
+                <button
+                  type="button"
+                  class="sw"
+                  class:on={shown(m, option.name) === true}
+                  role="switch"
+                  aria-checked={shown(m, option.name) === true}
+                  aria-label={option.label}
+                  onclick={() => setOption(m, option.name, !(shown(m, option.name) === true))}
+                ></button>
+              {:else if option.choicesFrom === 'weaponsWithPickup'}
+                <select
+                  class="ctl"
+                  value={String(shown(m, option.name) ?? '')}
+                  onchange={e => setOption(m, option.name, e.currentTarget.value)}
+                >
+                  {#each weaponsWithPickup as weapon (weapon.name)}
+                    <option value={weapon.name}>{weapon.display}</option>
+                  {/each}
+                </select>
+              {:else}
+                <input
+                  class="ctl"
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={shown(m, option.name) as number}
+                  onchange={e => setOption(m, option.name, Number(e.currentTarget.value))}
+                />
+              {/if}
+            </label>
+            {#if isSet(m, option.name)}
+              <div class="src {tone}">
+                <i class="pd {tone}"></i>
+                {setLabel}
+                <button type="button" class="rst" onclick={() => resetOption(m, option.name)}>undo</button>
+              </div>
             {/if}
-          </label>
+          </div>
         {/each}
       </div>
     {/if}
@@ -310,13 +338,36 @@
     font-size: 12.5px;
   }
 
-  .opt {
+  .opt .row {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .opt > span { flex: 1; }
+  .opt .row > span { flex: 1; }
+
+  .opt .src {
+    font-size: 11.5px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .opt .src.you { color: var(--p-you); }
+  .opt .src.map { color: var(--p-map); }
+
+  .opt .rst {
+    color: var(--ink-3);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-size: 11.5px;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
   .opt :global(.ctl) { padding: 3px 8px; font-size: 12.5px; }
   .opt input.ctl { width: 92px; }
 

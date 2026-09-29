@@ -64,6 +64,17 @@
       : levelScope ? 'Set for this map' : 'Changed'
   )
 
+  // an unsigned identifier: digits only, and clearing the box removes the key
+  const digitsMax = $derived(scalar?.max ?? (scalar?.cppType === 'uint32_t' ? 2 ** 32 - 1 : Number.MAX_SAFE_INTEGER))
+  const digitsShown = $derived(
+    mixed || value === undefined || (value === 0 && current?.layer !== 'manual') ? '' : String(value)
+  )
+
+  function setDigits(raw: string) {
+    if (raw === '') { onreset?.(path); return }
+    onchange?.(path, Math.min(Number(raw), digitsMax))
+  }
+
   function setBool(next: boolean) { onchange?.(path, next) }
   function setNumber(raw: string) {
     const n = Number(raw)
@@ -121,6 +132,22 @@
             <option value={option.value}>{option.label}</option>
           {/each}
         </select>
+      {:else if scalar?.type === 'int' && text.digits}
+        <input
+          class="ctl"
+          type="text"
+          inputmode="numeric"
+          autocomplete="off"
+          value={digitsShown}
+          placeholder={mixed ? 'Mixed' : text.emptyLabel}
+          disabled={inert}
+          aria-label={text.label}
+          oninput={e => {
+            const clean = e.currentTarget.value.replace(/\D/g, '')
+            if (clean !== e.currentTarget.value) e.currentTarget.value = clean
+          }}
+          onchange={e => setDigits(e.currentTarget.value)}
+        />
       {:else if scalar?.type === 'int' || scalar?.type === 'float'}
         <span class="ctl">
           <input

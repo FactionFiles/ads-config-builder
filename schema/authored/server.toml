@@ -438,7 +438,9 @@ help = "Overrides the base rules for this map only."
 ["bot_shared_secret"]
 page = "bots"
 label = "Bot shared secret"
-help = "Bot clients must present this number to join as bots. Set to 0 to reject all bots."
+help = "Bot clients must present this number to join as bots. Leave blank or set to 0 to reject all bots."
+digits = true
+emptyLabel = "Disabled"
 
 ["bot_profiles"]
 page = "bots"

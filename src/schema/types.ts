@@ -205,6 +205,10 @@ export interface AuthoredEntry {
   choiceLabels?: Record<string, string>
   /** alternate choice names kept in step with the choice they stand for */
   aliases?: Record<string, string>
+  /** a number that is an identifier, typed as text rather than stepped */
+  digits?: boolean
+  /** shown in an empty control */
+  emptyLabel?: string
   /** column headings for a list setting */
   fields?: Record<string, AuthoredField>
   /** game types this applies in; absent means all */

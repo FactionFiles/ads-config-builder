@@ -64,6 +64,12 @@
     const picked = e.currentTarget.files?.[0]
     e.currentTarget.value = ''
     if (!picked) return
+    // accept is only a hint to the picker, so the extension is checked here too
+    if (!picked.name.toLowerCase().endsWith('.toml')) {
+      imported = null
+      importError = `${picked.name} is not a .toml file.`
+      return
+    }
     try {
       const report = fromToml(await picked.text())
       doc = report.doc
@@ -267,7 +273,7 @@
     <span class="ver">Alpine {meta.alpineVersion} &middot; ads_version {meta.adsVersion}</span>
     <input
       type="file"
-      accept=".toml,text/plain"
+      accept=".toml"
       bind:this={fileInput}
       onchange={openFile}
       hidden

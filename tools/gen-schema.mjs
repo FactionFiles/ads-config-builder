@@ -118,8 +118,20 @@ export function collectConstants(src) {
   }
 }
 
+// a string length cap, written as a trim or a size test
+function lengthCap(code) {
+  const trim = code.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*([^()]+?)\s*\)/) ?? code.match(/\.size\(\)\s*>\s*([\w:]+)/)
+  if (!trim) return undefined
+  const b = parseBound(trim[1])
+  expect(b.ok, 'Unreadable length cap', `${trim[0]}: ${trim[1]} is not a literal or a known constant`)
+  return b.value
+}
+
 // a literal, or a named constant optionally qualified and negated
 function parseBound(raw) {
+  // a cast only changes the type, as in static_cast<float>(max_delay_ms)
+  const cast = raw.trim().match(/^static_cast\s*<[^<>]+>\s*\(([\s\S]*)\)$/)
+  if (cast) return parseBound(cast[1])
   const lit = parseLiteral(raw)
   if (lit.ok) return lit
   const named = raw.trim().match(/^(-?)\s*(?:\w+::)*(\w+)$/)
@@ -183,21 +195,26 @@ function analyzeSetter(body, argName, members) {
     if (lo.ok) result.min = lo.value / result.scale
     if (hi.ok) result.max = hi.value / result.scale
   } else {
-    const max = callArgs(body, 'std::max')
-    if (max && max.length === 2) {
-      const lo = parseBound(max[1])
-      if (lo.ok) result.min = lo.value / result.scale
+    // std::max(lo, std::min(v, hi)) in either argument order. whichever argument
+    // does not carry the setter's input is the bound, and it must be readable
+    const carries = arg => [...tainted].some(t => new RegExp(`\\b${t}\\b`).test(arg))
+    for (const [fn, side] of [['std::max', 'min'], ['std::min', 'max']]) {
+      const args = callArgs(body, fn)
+      if (!args) continue
+      const bounds = args.filter(a => !carries(a))
+      if (args.length !== 2 || bounds.length !== 1) { result.unreadableBound = `${fn}(${args.join(', ')})`; continue }
+      const b = parseBound(bounds[0])
+      if (b.ok) result[side] = b.value / result.scale
+      else result.unreadableBound = bounds[0]
     }
-    const min = callArgs(body, 'std::min')
-    if (min && min.length === 2) {
-      const hi = parseBound(min[1])
-      if (hi.ok) result.max = hi.value / result.scale
-    }
+  }
+  if (clamp && (clamp.length === 3 || clamp.length === 4)) {
+    for (const raw of clamp.slice(1, 3)) if (!parseBound(raw).ok) result.unreadableBound = raw
   }
 
   // string length caps show up as a trim rather than a clamp
-  const trim = body.match(/\.substr\s*\(\s*0\s*,\s*(\d+)\s*\)/) ?? body.match(/\.size\(\)\s*>\s*(\d+)/)
-  if (trim) result.maxLength = Number(trim[1])
+  const cap = lengthCap(body)
+  if (cap !== undefined) result.maxLength = cap
 
   // a name resolved against a game data table rather than stored as given
   const lookup = body.match(/rf::weapon_lookup_type|rf::multi_find_character|item_lookup_type/)
@@ -428,6 +445,8 @@ function resolveTarget(structs, structName, path) {
     if (last && cur.setters[part]) {
       const setter = cur.setters[part]
       if (setter.opaque) return { via: 'setter', opaque: true, struct: cur.name, setter: part }
+      expect(!setter.unreadableBound, 'Unreadable setter bound',
+        `${cur.name}::${part} clamps to ${setter.unreadableBound}, which is not a literal or a known constant`)
       const member = cur.members[setter.target]
       const res = { via: 'setter', struct: cur.name, setter: part, member: setter.target, scale: setter.scale }
       if (setter.min !== undefined) res.min = setter.min
@@ -643,8 +662,8 @@ function readInlineConstraints(consequent) {
     }
   }
 
-  const trim = consequent.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*(\d+)\s*\)/)
-  if (trim) out.maxLength = Number(trim[1])
+  const cap = lengthCap(consequent)
+  if (cap !== undefined) out.maxLength = cap
 
   return out
 }
@@ -931,9 +950,14 @@ export function extractGameTypes(sources, structs) {
     `multi_gametype_help_text yielded ${described} descriptions, expected at least 14`)
 
   // bots: everything the mutator mask does not exclude
-  const maskFn = funcBody(sources.mutatorsCpp, /\bgametype_mask_for_req\s*\([^)]*\)\s*\{/, 'gametype_mask_for_req')
-  for (const m of maskFn.matchAll(/~\s*\(\s*1u?\s*<<\s*static_cast<int>\s*\(\s*rf::(NG_TYPE_\w+)\s*\)\s*\)/g)) {
-    if (byId[m[1]]) byId[m[1]].botsSupported = false
+  const maskFn = funcBody(sources.mutatorsCpp, /\bmutator_gametype_mask_for_req\s*\([^)]*\)\s*\{/, 'mutator_gametype_mask_for_req')
+  const botsArm = maskFn.match(/case\s+MutatorGametypeReq::BotsSupported\s*:([\s\S]*?)\breturn\b([^;]*);/)
+  expect(botsArm, 'Bots mask not found', 'Expected `case MutatorGametypeReq::BotsSupported: ... return ...;` in mutator_gametype_mask_for_req')
+  expect(/^\s*MUTATOR_GAMETYPE_MASK_ANY\s*(?:&\s*~\s*\(\s*1u?\s*<<\s*static_cast<int>\s*\(\s*rf::NG_TYPE_\w+\s*\)\s*\)\s*)*$/.test(botsArm[2]),
+    'Unreadable bots mask', `Expected MUTATOR_GAMETYPE_MASK_ANY minus single game types, got: ${botsArm[2].trim()}`)
+  for (const m of botsArm[2].matchAll(/rf::(NG_TYPE_\w+)/g)) {
+    expect(byId[m[1]], 'Unknown game type in bots mask', `${m[1]} is not in the NetGameType enum`)
+    byId[m[1]].botsSupported = false
   }
 
   return named
@@ -1216,7 +1240,7 @@ export function extractMutators(sources) {
       opt.defaultFrom = 'currentValue'
       continue
     }
-    if (/build_featured_weapon_choices/.test(m[3])) {
+    if (/mutators_pickup_weapon_choices/.test(m[3])) {
       // choices are the weapons that have a pickup item; default is the rail gun
       opt.choicesFrom = 'weaponsWithPickup'
       opt.defaultFrom = 'railGun'
@@ -1377,15 +1401,38 @@ function extractInlineArrays(sources, known) {
     if (!named || known.has(named[1])) continue
     // delegated ones are already covered by the array dispatcher
     if (/apply_known_array_in_order/.test(consequent)) continue
-    const elem = consequent.match(/\belem\s*\.\s*value<([^>]+)>/)
-    out.push({
-      key: named[1],
-      kind: 'array',
-      itemType: elem ? normalizeType(elem[1].trim()) : null,
-      inline: true,
-    })
+    const elem = consequent.match(/\belem\s*\.\s*(?:value|value_or)<([^>]+)>/)
+    expect(elem && normalizeType(elem[1].trim()), 'Unreadable server list',
+      `${named[1]}: expected elem.value<T>() or elem.value_or<T>(...) with a scalar T`)
+    const entry = { key: named[1], kind: 'array', itemType: normalizeType(elem[1].trim()), inline: true }
+    // names turned into values by a *_from_config_name helper are a fixed set
+    const parsed = consequent.match(/\b(\w+)_from_config_name\s*\(\s*elem\b/)
+    if (parsed) entry.choices = configNameChoices(sources.dediCpp, parsed[1])
+    out.push(entry)
   }
   return out
+}
+
+// X_from_config_name tries each value through X_config_name, which returns its name
+function configNameChoices(cpp, stem) {
+  const fromFn = funcBody(cpp, new RegExp(`\\b${stem}_from_config_name\\s*\\([^)]*\\)\\s*\\{`), `${stem}_from_config_name`)
+  const loop = fromFn.match(/for\s*\(\s*const\s+\w+\s+(\w+)\s*:\s*\{([^}]*)\}\s*\)/)
+  expect(loop && new RegExp(`string_iequals\\s*\\(\\s*\\w+\\s*,\\s*${stem}_config_name\\s*\\(\\s*${loop[1]}\\s*\\)\\s*\\)`).test(fromFn),
+    'Unreadable config name parser', `Expected ${stem}_from_config_name to loop over values comparing ${stem}_config_name(value)`)
+  const nameFn = funcBody(cpp, new RegExp(`\\b${stem}_config_name\\s*\\([^)]*\\)\\s*\\{`), `${stem}_config_name`)
+  // each value is named by the return it reaches: `if (x == V) return "a";`, `x == V ? "b" : "c"`
+  const named = new Map()
+  for (const m of nameFn.matchAll(/(\w+)\s*==\s*([\w:]+)\s*\)?\s*\{?\s*return\s+"(\w+)"/g)) named.set(m[2], m[3])
+  const tern = nameFn.match(/return\s+\w+\s*==\s*([\w:]+)\s*\?\s*"(\w+)"\s*:\s*"(\w+)"\s*;/)
+  expect(tern, 'Unreadable config name table', `Expected a final \`return x == V ? "a" : "b";\` in ${stem}_config_name`)
+  named.set(tern[1], tern[2])
+  const values = loop[2].split(',').map(v => v.trim().replace(/^static_cast<\w+>\s*\((.*)\)$/, '$1'))
+  return values.map(v => {
+    if (named.has(v)) return named.get(v)
+    const others = [...named.keys()]
+    expect(!others.includes(v), 'Unreadable config name table', v)
+    return tern[3]
+  })
 }
 
 // [[levels]] entries accept a fixed, explicitly listed set of keys
@@ -1456,6 +1503,29 @@ export function extractLevelLayering(sources) {
     'Expected `["enabled"].value<bool>().value_or(true)` in multi/mutators.cpp')
 
   return { base: 'over-gametype-defaults', disableMutator: 'enabled' }
+}
+
+// finite_float(t, key) reads a float like t[key].value<float>() but ignores nan
+// and inf, which no editor here produces. rewritten to the plain read so every
+// extractor sees one form
+function unwrapFiniteFloat(cpp) {
+  const def = cpp.match(/static\s+std::optional<float>\s+finite_float\s*\(\s*const\s+toml::table&\s*(\w+)\s*,\s*std::string_view\s+(\w+)\s*\)\s*\{/)
+  if (!def) {
+    expect(!/\bfinite_float\s*\(/.test(cpp), 'finite_float changed shape',
+      'Expected `static std::optional<float> finite_float(const toml::table& t, std::string_view key)` in multi/dedi_cfg.cpp')
+    return cpp
+  }
+  const body = bodyAt(cpp, def.index + def[0].length - 1)
+  expect(new RegExp(`\\b${def[1]}\\s*\\.\\s*get\\s*\\(\\s*${def[2]}\\s*\\)`).test(body) && /toml_finite_float\s*\(/.test(body),
+    'finite_float no longer reads the key directly', `Expected ${def[1]}.get(${def[2]}) and toml_finite_float in:\n${body.trim()}`)
+  let calls = 0
+  const out = cpp.replace(/\bfinite_float\s*\(\s*(\w+)\s*,\s*("[\w.]+"|\w+)\s*\)/g, (call, table, key, at) => {
+    if (at >= def.index && at < def.index + def[0].length) return call
+    calls++
+    return `${table}[${key}].value<float>()`
+  })
+  expect(calls > 0, 'finite_float is never called', 'Expected finite_float(t, "key") reads in multi/dedi_cfg.cpp')
+  return out
 }
 
 // a score limit of round wins in a best-of-n match, stored as the round count:
@@ -1595,7 +1665,7 @@ function main() {
   const S = f => stripComments(read(f))
   const sources = {
     serverInternalH: S('game_patch/multi/server_internal.h'),
-    dediCpp: S('game_patch/multi/dedi_cfg.cpp'),
+    dediCpp: unwrapFiniteFloat(S('game_patch/multi/dedi_cfg.cpp')),
     mutatorsCpp: S('game_patch/multi/mutators.cpp'),
     mutatorsH: S('game_patch/multi/mutators.h'),
     serverCpp: S('game_patch/multi/server.cpp'),
@@ -1605,9 +1675,10 @@ function main() {
     versionH: read('common/include/common/version/version.h'),
     payloadH: S('common/include/common/payload.h'),
     alpineSettingsH: S('game_patch/misc/alpine_settings.h'),
+    networkH: S('game_patch/multi/network.h'),
   }
 
-  for (const src of [sources.payloadH, sources.serverInternalH]) collectConstants(src)
+  for (const src of [sources.payloadH, sources.serverInternalH, sources.networkH]) collectConstants(src)
   const structs = parseStructs(sources.serverInternalH)
   expect(structs.AlpineServerConfigRules, 'AlpineServerConfigRules is gone',
     'server_internal.h no longer declares the rules struct')

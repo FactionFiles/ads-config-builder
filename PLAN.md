@@ -64,7 +64,10 @@ Approved prototype: https://claude.ai/code/artifact/dca8eb94-71f3-47de-9f09-8c67
   CI config is added last (M10).
 - **AlpineFaction is a git submodule pinned to an exact commit**, never a moving
   branch. Bumping the pin is the entire update process. `main` is pinned to
-  the `v1.4.0_Lupin` tag; the `alpine-1.5` branch to a 1.5.0 `master` commit. The upstream default branch is `master`, not `main`.
+  the `v1.4.0_Lupin` tag; the `alpine-1.5` branch to `v1.5.0_Trillium`. Alpine
+  release tags carry a release name. The bare `v1.5.0` and `v1.5.0-rc*` tags
+  date from 2020 and belong to Dash Faction, which Alpine forked from. The
+  upstream default branch is `master`, not `main`.
 - **The schema generator lives and runs in this repo.** Alpine developers do
   nothing for it. If the source changes shape, our build breaks, not theirs.
 - **The generator parses the Alpine source; it does not run it.** Functions like
@@ -419,11 +422,7 @@ on each, as designed.
   evaluated for that label, and a default expression that reaches a config key
   without a value fails the generator.
 
-### Alpine 1.5.0 (branch `alpine-1.5`)
-
-The pin moved from `v1.4.0_Lupin` to `master`, which already reports 1.5.0 but
-has no RC tag. Re-pin to the 1.5.0 release tag before merging; the branch
-deploys nothing until then.
+### Alpine 1.5.0 (`v1.5.0_Trillium`, branch `alpine-1.5`)
 
 - **Layering.** See Base replay under Resolution model. The rebase is gone from
   the resolver, the popover and the problems page; maps can switch base
@@ -436,7 +435,7 @@ deploys nothing until then.
   (explode) and Gibbing (scrapyard).
 - **New settings**: Scavenger and Payload rules, `vehicles`, `level_message`,
   `spawn_delay.wave_respawns`, `exposure_damage`, `bag_multiple_spawns`,
-  `gg_end_with_fusion`, `server_bots`, `announce_next_level`, and a Network page
+  `gg_end_with_fusion`, `server_bots`, `bot_teams`, `announce_next_level`, and a Network page
   (`bandwidth`, `delta_obj_update`, lag compensation). `allow_unlimited_fps` was
   removed; an import drops it and says so.
 - **Settings with no default.** Payload's overrides are `std::optional`: unset
@@ -453,10 +452,16 @@ deploys nothing until then.
     (`payload::max_x`), `clamp_rule` and `std::clamp<T>` were not analyzed. They
     are now, and a setting without a readable default fails.
   - `bandwidth` is a tier name looked up in `net_rate_tiers`, read as a choice.
+  - Float keys are read through `finite_float`, which drops nan and inf. Its
+    calls are rewritten to the plain read after checking its shape.
+  - Bounds written as `std::max(lo, std::min(v, hi))` and length caps named by
+    constants are read, and a bound or cap that cannot be read fails.
+  - `bot_teams` names are read from `bot_team_config_name`, and a server list
+    whose element type cannot be read fails.
 
 ## Next
 
-1. Re-pin to the 1.5.0 release tag and merge `alpine-1.5`.
+1. Merge `alpine-1.5`.
 2. Parity pass against `old.html`. That closes M8.
 3. M10 CI and deploy.
 

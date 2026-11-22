@@ -44,6 +44,8 @@
     key: string
     type: ScalarType
     lookup?: LookupTable
+    /** fixed values the server accepts */
+    choices?: string[]
     text: AuthoredField
   }
 
@@ -67,7 +69,8 @@
     key: '',
     type: schema.itemType ?? 'string',
     lookup: schema.lookup,
-    text: { label: text.label },
+    choices: schema.choices,
+    text: { label: text.label, choiceLabels: text.choiceLabels },
   })
 
   const canReset = $derived(current?.layer === 'manual')
@@ -231,6 +234,19 @@
       aria-label={label}
       onclick={() => apply(!(value === true))}
     ></button>
+  {:else if column.choices}
+    {@const shown = typeof value === 'string' ? value : ''}
+    <select
+      class="ctl"
+      value={shown}
+      aria-label={label}
+      onchange={e => apply(e.currentTarget.value)}
+    >
+      {#if !column.choices.includes(shown)}<option value={shown}>{shown} (unknown)</option>{/if}
+      {#each column.choices as choice (choice)}
+        <option value={choice}>{column.text.choiceLabels?.[choice] ?? choice}</option>
+      {/each}
+    </select>
   {:else if column.lookup}
     <select
       class="ctl"
@@ -403,7 +419,7 @@
     <button
       type="button"
       class="btn addbtn"
-      onclick={() => set([...rows, schema.lookup ? firstName : ''])}
+      onclick={() => set([...rows, schema.choices?.[0] ?? (schema.lookup ? firstName : '')])}
     >
       Add
     </button>

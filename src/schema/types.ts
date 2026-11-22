@@ -236,6 +236,7 @@ export interface AuthoredField {
   lookup?: LookupTable
   /** shown when empty is a meaningful value */
   emptyLabel?: string
+  choiceLabels?: Record<string, string>
 }
 
 export interface Page {

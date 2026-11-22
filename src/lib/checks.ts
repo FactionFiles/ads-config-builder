@@ -407,6 +407,15 @@ function serverFindings(doc: ConfigDocument, server: ResolvedRules, out: Finding
       'Bots cannot join the server.')
   }
 
+  // each team belongs to the bot profile at the same position
+  const teams = valueAt(server, 'bot_teams')
+  const profileCount = Array.isArray(bots) ? bots.length : 0
+  if (Array.isArray(teams) && teams.length > profileCount) {
+    const extra = teams.length - profileCount
+    warn('botteams', 'bot_teams', `${extra} bot profile ${extra === 1 ? 'team has' : 'teams have'} no bot profile`,
+      `The server ignores ${extra === 1 ? 'it' : 'them'}.`)
+  }
+
   if (blank(valueAt(server, 'rcon_password')) && !doc.rconProfiles.length) {
     warn('rcon', 'rcon_password', 'No rcon password or rcon profiles',
       'No one can use rcon to manage the server.')

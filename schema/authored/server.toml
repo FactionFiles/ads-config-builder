@@ -506,6 +506,16 @@ page = "bots"
 label = "Bot profiles"
 help = "Specify the TOML file names for your bots."
 
+["bot_teams"]
+page = "bots"
+label = "Bot profile teams"
+help = "The team each bot profile joins in team game types, in bot profile order. Profiles without an entry use Auto."
+
+["bot_teams".choiceLabels]
+auto = "Auto"
+red = "Red"
+blue = "Blue"
+
 ["bot_profiles.player_name"]
 page = "bots"
 label = "Name"

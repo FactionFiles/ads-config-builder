@@ -31,6 +31,11 @@ label = "Max players"
 help = "Up to 32."
 unit = "players"
 
+["announce_next_level"]
+page = "srv-basics"
+label = "Announce next map"
+help = "Announces the next map and its game type at the end of each map. Off, it is only announced when the game type changes."
+
 ["upnp"]
 page = "srv-basics"
 basic = true
@@ -119,11 +124,6 @@ help = "Lets players disable screenshake."
 page = "srv-client"
 label = "Disable muzzle flash"
 help = "Lets players disable muzzle flash lights."
-
-["allow_unlimited_fps"]
-page = "srv-client"
-label = "Unlimited FPS"
-help = "Lets players disable the 240 FPS cap."
 
 ["allow_footsteps"]
 page = "srv-client"
@@ -431,6 +431,39 @@ page = "rules-damage"
 label = "Single player damage calculation"
 help = "Uses the single player damage formula, which changes how much damage armor absorbs."
 
+# ---------------------------------------------------------------- network
+
+["bandwidth"]
+page = "srv-network"
+label = "Bandwidth"
+help = "Low sends 20 updates per second, medium 40 and high 100. The server frame rate follows it."
+
+["bandwidth".choiceLabels]
+low = "Low"
+medium = "Medium"
+high = "High"
+
+["delta_obj_update"]
+page = "srv-network"
+label = "Delta-compressed object updates"
+help = "Sharply reduces bandwidth. A change applies to players who join afterwards."
+
+["projectile_lag_comp"]
+page = "srv-network"
+label = "Projectile lag compensation"
+help = "Projectiles and splash damage hit players where the shooter saw them."
+
+["projectile_lag_comp_max_ms"]
+page = "srv-network"
+label = "Projectile lag compensation limit"
+unit = "milliseconds"
+
+["hitscan_lag_comp_max_ms"]
+page = "srv-network"
+label = "Hitscan lag compensation limit"
+help = "Shooters with more latency are compensated up to this much."
+unit = "milliseconds"
+
 # ---------------------------------------------------------------- rotation
 
 ["dynamic_rotation"]
@@ -461,6 +494,12 @@ label = "Bot shared secret"
 help = "Bot clients must present this number to join as bots. Leave blank or set to 0 to reject all bots."
 digits = true
 emptyLabel = "Disabled"
+
+["server_bots"]
+page = "bots"
+label = "Server bots"
+help = "Bots run inside the server process. They use the bot profiles and follow the ideal player count."
+unit = "bots"
 
 ["bot_profiles"]
 page = "bots"
@@ -553,13 +592,27 @@ maxfps = "Set the server FPS cap"
 sv_caplimit = "Set the capture limit"
 sv_fraglimit = "Set the frag limit"
 sv_gametype = "Set the game type, optionally with a map"
-sv_netfps = "Set the server network update rate"
+sv_bandwidth = "Set the server bandwidth"
 gt = "Set the game type (alias of sv_gametype)"
 sv_geolimit = "Set the geomod limit"
 sv_pass = "Set the join password"
 sv_timelimit = "Set the time limit"
 download_level = "Download a map from FactionFiles"
 sv_loadconfig = "Reload the server config"
+sv_loadpackfiles = "Load newly added packfiles"
+sv_afstats_events_status = "Show the stats event stream status"
+sv_afstats_events_reset = "Reset the stats event stream"
+sv_afstats_trace = "Log stats batches"
+sv_fflink_status = "Show the FactionFiles link status"
+sv_fflink_resync = "Resync the FactionFiles link"
+sv_bot_add = "Add a server bot"
+sv_bot_remove = "Remove server bots"
+sv_bot_list = "List server bots"
+sv_swap_team = "Move a player to the other team"
+sv_force_spectate = "Force a player into spectate mode"
+sv_force_unspectate = "Take a player out of spectate mode"
+sv_toggle_ready = "Toggle a player's ready status"
+sv_mute_chat = "Mute a player's chat"
 
 # alpine checks the command name as typed, so an alias is granted with its command
 ["rcon_profiles.allowed_commands".aliases]

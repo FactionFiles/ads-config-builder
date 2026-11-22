@@ -41,38 +41,46 @@ blurb = "Detect, warn, and kick idle players."
 advanced = true
 
 [[page]]
+id = "srv-network"
+title = "Network"
+scope = "server"
+order = 6
+blurb = "Bandwidth and lag compensation."
+advanced = true
+
+[[page]]
 id = "rules-mode"
 title = "Game type & scoring"
 scope = "rules"
-order = 6
+order = 7
 blurb = "Game type, time limit, and win conditions."
 
 [[page]]
 id = "rules-mutators"
 title = "Mutators"
 scope = "rules"
-order = 7
+order = 8
 blurb = "Preset rule changes such as Instagib or Low Gravity."
 
 [[page]]
 id = "rules-spawn"
 title = "Spawning"
 scope = "rules"
-order = 8
+order = 9
 blurb = "Spawn loadout, spawn protection, respawn delay, and spawn point selection."
 
 [[page]]
 id = "rules-weapons"
 title = "Weapons & items"
 scope = "rules"
-order = 9
+order = 10
 blurb = "Weapon stay, item respawn times, and item replacements."
 
 [[page]]
 id = "rules-damage"
 title = "Damage & physics"
 scope = "rules"
-order = 10
+order = 11
 blurb = "Damage, gibbing, kill rewards, and physics."
 advanced = true
 
@@ -80,21 +88,21 @@ advanced = true
 id = "rules-msg"
 title = "Messages"
 scope = "rules"
-order = 11
+order = 12
 blurb = "Messages the server sends to players."
 
 [[page]]
 id = "rotation"
 title = "All maps"
 scope = "other"
-order = 12
+order = 13
 blurb = "The maps the server plays, in order."
 
 [[page]]
 id = "bots"
 title = "Bots"
 scope = "server"
-order = 13
+order = 14
 blurb = "Bot access and bot profiles."
 advanced = true
 note = "Bots require further setup, explained on the Red Faction Wiki:"
@@ -105,7 +113,7 @@ linkLabel = "Launching Alpine Faction Bots"
 id = "admin"
 title = "Advanced admin access"
 scope = "server"
-order = 14
+order = 15
 blurb = "Named rcon passwords, each limited to the commands you choose."
 advanced = true
 
@@ -113,19 +121,19 @@ advanced = true
 id = "srv-stats"
 title = "Stats tracking"
 scope = "server"
-order = 15
+order = 16
 blurb = "Report matches played on this server to FactionFiles."
 
 [[page]]
 id = "srv-demos"
 title = "Demos"
 scope = "server"
-order = 16
+order = 17
 blurb = "Record matches to demo files and upload them to FactionFiles."
 
 [[page]]
 id = "checks"
 title = "Problems"
 scope = "other"
-order = 17
+order = 18
 blurb = "Settings that are invalid or conflict with each other."

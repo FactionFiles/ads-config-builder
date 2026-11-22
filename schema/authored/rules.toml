@@ -46,19 +46,19 @@ help = "Extends the map past the time limit when the score is tied."
 ["overtime.enabled"]
 page = "rules-mode"
 label = "Overtime"
-notModes = ["run", "pit", "wo", "gg"]
+notModes = ["run", "pit", "wo", "gg", "pay"]
 
 ["overtime.time"]
 page = "rules-mode"
 label = "Overtime length"
 unit = "minutes"
-notModes = ["run", "pit", "wo", "gg"]
+notModes = ["run", "pit", "wo", "gg", "pay"]
 
 ["overtime.tie_when_flag_stolen"]
 page = "rules-mode"
 label = "Stolen flag counts as a tie"
 help = "Goes to overtime if a flag is being carried when time runs out, even if one team is ahead."
-modes = ["ctf", "sal"]
+modes = ["ctf", "sal", "scav"]
 
 ["overtime.tie_when_hill_contested"]
 page = "rules-mode"
@@ -164,6 +164,12 @@ basic = true
 label = "Salvage cap limit"
 unit = "captures"
 
+["scav_cap_limit"]
+page = "rules-mode"
+basic = true
+label = "Scavenger cap limit"
+unit = "captures"
+
 # ---------------------------------------------------------------- objectives
 
 ["bag_return_time"]
@@ -178,6 +184,12 @@ page = "rules-mode"
 label = "Bag spawn delay"
 help = "Time after the map starts before the bag first appears."
 unit = "seconds"
+modes = ["bag", "tbag"]
+
+["bag_multiple_spawns"]
+page = "rules-mode"
+label = "Random bag spawn"
+help = "The bag spawns at a random Bag object or super item spot each time it returns."
 modes = ["bag", "tbag"]
 
 ["sal_flag_spawn_delay"]
@@ -201,11 +213,124 @@ help = "Time before a dropped flag returns to its spawn point."
 unit = "seconds"
 modes = ["sal"]
 
+["scav_cartridge_spawn_delay"]
+page = "rules-mode"
+label = "Scavenger cartridge spawn delay"
+help = "Time after the map starts before the cartridge first appears."
+unit = "seconds"
+modes = ["scav"]
+
+["scav_cartridge_capture_respawn_delay"]
+page = "rules-mode"
+label = "Scavenger cartridge respawn delay after capture"
+help = "Time after a capture before a new cartridge appears."
+unit = "seconds"
+modes = ["scav"]
+
+["scav_cartridge_return_time"]
+page = "rules-mode"
+label = "Scavenger cartridge return time"
+help = "Time before a dropped cartridge returns."
+unit = "seconds"
+modes = ["scav"]
+
+["scav_target_timeout"]
+page = "rules-mode"
+label = "Scavenger target timeout"
+help = "Time before the target moves."
+unit = "seconds"
+modes = ["scav"]
+
+["scav_target_radius"]
+page = "rules-mode"
+label = "Scavenger target radius"
+unit = "meters"
+modes = ["scav"]
+
+["pay_setup_time"]
+page = "rules-mode"
+label = "Payload setup time"
+help = "Time the cart stays put at the start of a round. Counts against the time limit."
+unit = "seconds"
+modes = ["pay"]
+
+["pay_checkpoint_time_bonus"]
+page = "rules-mode"
+label = "Payload checkpoint time bonus"
+help = "Time added when the cart captures a checkpoint. Applies to every checkpoint."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_overtime_grace"]
+page = "rules-mode"
+label = "Payload overtime grace"
+help = "Time in overtime with no attacker at the cart before the defenders win."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_heal_per_tick"]
+page = "rules-mode"
+label = "Payload cart healing"
+help = "Effective health given each second to each attacker at the cart. Also refills ammo; 0 disables both."
+unit = "HP/s"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_attacker_respawn_extra"]
+page = "rules-mode"
+label = "Payload attacker extra delay"
+help = "Added to the attackers' spawn delay. Requires spawn delay."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_attacker_respawn_per_checkpoint"]
+page = "rules-mode"
+label = "Payload attacker extra delay per checkpoint"
+help = "Added to the attackers' spawn delay for each checkpoint the cart has passed."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_attacker_respawn_final_stretch"]
+page = "rules-mode"
+label = "Payload attacker extra delay on final stretch"
+help = "Added to the attackers' spawn delay once the cart reaches the final stretch."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_defender_respawn_extra"]
+page = "rules-mode"
+label = "Payload defender extra delay"
+help = "Added to the defenders' spawn delay. Requires spawn delay."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_defender_respawn_per_checkpoint"]
+page = "rules-mode"
+label = "Payload defender extra delay per checkpoint"
+help = "Added to the defenders' spawn delay for each checkpoint the cart has passed."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
+["pay_defender_respawn_final_stretch"]
+page = "rules-mode"
+label = "Payload defender extra delay on final stretch"
+help = "Added to the defenders' spawn delay once the cart reaches the final stretch."
+unit = "seconds"
+emptyLabel = "Level's value"
+modes = ["pay"]
+
 ["flag_dropping"]
 page = "rules-mode"
 label = "Flag dropping"
 help = "Lets the flag carrier drop the flag."
-modes = ["ctf", "sal"]
+modes = ["ctf", "sal", "scav"]
 
 ["flag_captures_while_stolen"]
 page = "rules-mode"
@@ -236,6 +361,12 @@ modes = ["gg"]
 page = "rules-mode"
 label = "Final weapon"
 help = "The weapon a player must get their last kill with to win."
+modes = ["gg"]
+
+["gg_end_with_fusion"]
+page = "rules-mode"
+label = "End with Fusion"
+help = "Adds a one-kill Fusion Rocket Launcher tier after the final weapon."
 modes = ["gg"]
 
 # ---------------------------------------------------------------- teams and population
@@ -343,8 +474,13 @@ label = "Spawn delay"
 ["spawn_delay.base_seconds"]
 page = "rules-spawn"
 label = "Delay"
-help = "In Wipeout, this is multiplied by the player's deaths in the round."
+help = "In Wipeout, this is multiplied by the player's deaths in the round. Payload adds each team's extra delay."
 unit = "seconds"
+
+["spawn_delay.wave_respawns"]
+page = "rules-spawn"
+label = "Wave respawns"
+help = "Players respawn with their team in waves, one spawn delay apart."
 
 ["spawn_protection"]
 page = "rules-spawn"
@@ -525,7 +661,6 @@ label = "Item"
 
 ["item_replacements".fields.replacement]
 label = "Replace with"
-lookup = "item"
 emptyLabel = "Nothing (remove)"
 
 ["item_respawn_time_overrides"]
@@ -557,6 +692,11 @@ label = "Item"
 page = "rules-damage"
 label = "Fall damage"
 
+["exposure_damage"]
+page = "rules-damage"
+label = "Exposure damage"
+help = "Players outside without armor take damage, as in single player."
+
 ["pvp_damage_modifier"]
 page = "rules-damage"
 label = "PvP damage modifier"
@@ -584,6 +724,25 @@ unit = "craters"
 page = "rules-damage"
 label = "Geomod chunk physics"
 help = "Geometry chunks that are blasted loose fall down."
+
+["vehicles"]
+page = "rules-damage"
+label = "Vehicles"
+
+["vehicles.crash_damage"]
+page = "rules-damage"
+label = "Crash damage"
+help = "Vehicles take damage from hard impacts, hard landings and scraping."
+
+["vehicles.bots_use_vehicles"]
+page = "rules-damage"
+label = "Bots use vehicles"
+
+["vehicles.bot_max_drivers"]
+page = "rules-damage"
+label = "Max bot drivers"
+help = "Vehicles bots may drive at once."
+unit = "vehicles"
 
 ["clear_stale_movement_input"]
 page = "rules-damage"
@@ -659,6 +818,20 @@ page = "rules-msg"
 basic = true
 label = "Message"
 help = "Limited to 240 characters."
+
+["level_message"]
+page = "rules-msg"
+label = "Level message"
+help = "Sent to all players when a map loads."
+
+["level_message.enabled"]
+page = "rules-msg"
+label = "Level message"
+
+["level_message.text"]
+page = "rules-msg"
+label = "Message"
+help = "Limited to 240 characters. $LEVEL is replaced with the level name."
 
 ["location_pinging"]
 page = "rules-msg"

@@ -142,7 +142,7 @@ export function modesForMutator(m: Mutator): string[] {
   switch (m.gametypeReq) {
     case 'TeamOnly': return gametypes.gametypes.filter(g => g.isTeam).map(g => g.name)
     case 'GunGameOnly': return gametypes.gametypes.filter(g => g.name === 'gg').map(g => g.name)
-    case 'HasScoreLimit': return gametypes.gametypes.filter(g => g.scoreLimitKey).map(g => g.name)
+    case 'HasScoreLimit': return gametypes.gametypes.filter(g => g.scoreLimitKey || g.roundsToWinKey).map(g => g.name)
     case 'BotsSupported': return gametypes.gametypes.filter(g => g.botsSupported).map(g => g.name)
     default: return allModes
   }

@@ -79,6 +79,11 @@
   // clamped the way alpine clamps on load, so the box never holds a value the server would change
   function setNumber(input: HTMLInputElement) {
     const n = Number(input.value)
+    // a setting with no default goes back to unset when cleared
+    if (input.value === '' && scalar?.unsetByDefault) {
+      onreset?.(path)
+      return
+    }
     if (input.value === '' || !Number.isFinite(n)) {
       input.value = String(shown ?? '')
       return
@@ -181,7 +186,7 @@
           <input
             type="number"
             value={mixed ? '' : shown as number}
-            placeholder={mixed ? 'Mixed' : undefined}
+            placeholder={mixed ? 'Mixed' : text.emptyLabel}
             min={scalar.min}
             max={scalar.max}
             step={scalar.type === 'int' ? 1 : 'any'}

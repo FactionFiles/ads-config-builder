@@ -2,7 +2,7 @@
 // written. everything else is derived by the resolver.
 
 import { parse, stringify } from 'smol-toml'
-import { meta, rconCommandAliases, rulesIndex, server as serverSchema, serverIndex } from '../schema'
+import { meta, mutatorEffects, mutators as mutatorSchema, rconCommandAliases, rulesIndex, server as serverSchema, serverIndex } from '../schema'
 import type { ArrayKey, SchemaKey } from '../schema/types'
 import type { MutatorDeclaration } from './resolve'
 
@@ -108,7 +108,11 @@ function scopeToToml(scope: RulesScope): Record<string, unknown> {
   // nested together so a table with both edited and unknown keys stays whole
   const rules = nest({ ...scope.manual, ...scope.unknown })
   if (scope.mutators.length) {
-    rules.mutators = scope.mutators.map(m => ({ name: m.name, ...(m.options ?? {}) }))
+    rules.mutators = scope.mutators.map(m => ({
+      name: m.name,
+      ...(m.enabled === false ? { enabled: false } : {}),
+      ...(m.options ?? {}),
+    }))
   }
   if (Object.keys(rules).length) out.rules = rules
   return out
@@ -147,8 +151,14 @@ export interface ImportReport {
   /** known settings with no editor yet */
   kept: string[]
   unrecognized: string[]
-  /** keys alpine has removed. dropped rather than kept, since the server ignores them */
+  /** rules preset keys, which alpine has removed. dropped rather than kept, since the server ignores them */
   removed: string[]
+  /** other keys alpine has removed, dropped for the same reason */
+  removedSettings: string[]
+  /** scopes whose own table and [rules] table were folded together */
+  combined: string[]
+  /** rcon commands alpine no longer accepts, which the server skips */
+  removedCommands: string[]
   fromVersion: number | null
 }
 
@@ -207,27 +217,53 @@ function readMutators(value: unknown): MutatorDeclaration[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(entry => {
     if (!isTable(entry) || typeof entry.name !== 'string') return []
-    const { name, ...options } = entry
-    return [Object.keys(options).length ? { name, options } : { name }]
+    const { name: written, enabled, ...options } = entry
+    // the server matches names case-insensitively; known ones are stored as the canonical name
+    const name = mutatorSchema.mutators.find(m => m.name === written.toLowerCase())?.name ?? written
+    const decl: MutatorDeclaration = Object.keys(options).length ? { name, options } : { name }
+    if (enabled === false) decl.enabled = false
+    // any other enabled value is the server default, kept as written
+    else if (enabled !== undefined) decl.options = { ...decl.options, enabled }
+    return [decl]
   })
+}
+
+// keys a mutator writes, from the hand-written effects
+function keysWrittenBy(declared: MutatorDeclaration[]): string[] {
+  return declared.filter(d => d.enabled !== false)
+    .flatMap(d => (mutatorEffects[d.name]?.sets ?? []).map(set => set.key))
 }
 
 function scopeFromToml(table: Record<string, unknown>, report: ImportReport, where: string): RulesScope {
   // alpine 1.4 still accepts rules_presets so old configs load, but ignores it
-  const { rules_presets, rules, ...direct } = table
-  if (rules_presets !== undefined) report.removed.push(where)
+  const { rules_presets, rules, mutators: outerMutators, ...direct } = table
+  if (rules_presets !== undefined) report.removed.push(`${where}.rules_presets`)
 
-  // alpine reads keys set directly on the scope before [rules], so [rules] wins
+  // the server applies the scope's own table (mutators, then keys) before its
+  // [rules] table, and both are folded into one layer here
   const inner = isTable(rules) ? rules : {}
-  const { mutators, ...innerRules } = inner
-  const merged = { ...direct, ...innerRules }
+  const { mutators: innerMutators, ...innerRules } = inner
+  const outerM = readMutators(outerMutators)
+  let innerM = readMutators(innerMutators)
+  let outerK = flatten(direct, rulesIndex)
+  const innerK = flatten(innerRules, rulesIndex)
 
-  const parts = split(flatten(merged, rulesIndex), rulesIndex)
+  if ((outerM.length || outerK.length) && (innerM.length || innerK.length)) {
+    // a [rules] mutator lands after the outer keys, so an outer key it writes is overridden
+    const written = keysWrittenBy(innerM)
+    outerK = outerK.filter(([path]) => !written.some(k => path === k || path.startsWith(`${k}.`)))
+    // enabled = false only removes a declaration from its own table
+    const outerNames = new Set(outerM.map(d => d.name))
+    innerM = innerM.filter(d => d.enabled !== false || !outerNames.has(d.name))
+    report.combined.push(where)
+  }
+
+  const parts = split([...outerK, ...innerK], rulesIndex)
   report.kept.push(...parts.kept)
   report.unrecognized.push(...parts.unrecognized)
 
   return {
-    mutators: readMutators(mutators),
+    mutators: [...outerM, ...innerM],
     manual: parts.manual,
     unknown: parts.unknown,
   }
@@ -236,7 +272,7 @@ function scopeFromToml(table: Record<string, unknown>, report: ImportReport, whe
 function levelFromToml(table: Record<string, unknown>, report: ImportReport): LevelEntry {
   const { filename, rules_presets, rules, ...rest } = table
   const level = emptyLevel(typeof filename === 'string' ? filename : '')
-  level.rules = scopeFromToml({ rules_presets, rules }, report, 'levels.rules_presets')
+  level.rules = scopeFromToml({ rules_presets, rules }, report, 'levels')
   level.unknown = rest
   for (const key of Object.keys(rest)) report.unrecognized.push(`levels.${key}`)
   return level
@@ -259,7 +295,13 @@ function rconProfileFromToml(table: Record<string, unknown>, report: ImportRepor
   const profile = emptyRconProfile()
   for (const [key, value] of Object.entries(table)) {
     if (key === 'allowed_commands' && Array.isArray(value)) {
-      profile.fields[key] = withCommandAliases(value.filter((c): c is string => typeof c === 'string'))
+      const named = value.filter((c): c is string => typeof c === 'string')
+      const accepted = named.filter(c => {
+        const known = rconCommands.includes(c.toLowerCase()) || c.toLowerCase() in rconCommandAliases
+        if (!known && !report.removedCommands.includes(c)) report.removedCommands.push(c)
+        return known
+      })
+      profile.fields[key] = withCommandAliases(accepted)
     } else if (rconFields.has(key)) profile.fields[key] = value
     else {
       profile.unknown[key] = value
@@ -268,6 +310,9 @@ function rconProfileFromToml(table: Record<string, unknown>, report: ImportRepor
   }
   return profile
 }
+
+// server keys alpine no longer reads
+const REMOVED_SERVER_KEYS = ['allow_unlimited_fps']
 
 export function fromToml(text: string): ImportReport {
   const root = parse(text) as Record<string, unknown>
@@ -278,7 +323,17 @@ export function fromToml(text: string): ImportReport {
     kept: [],
     unrecognized: [],
     removed: [],
+    removedSettings: [],
+    combined: [],
+    removedCommands: [],
     fromVersion: typeof ads_version === 'number' ? ads_version : null,
+  }
+
+  for (const key of REMOVED_SERVER_KEYS) {
+    if (key in server) {
+      delete server[key]
+      report.removedSettings.push(key)
+    }
   }
 
   const parts = split(flatten(server, serverIndex), serverIndex)
@@ -293,7 +348,7 @@ export function fromToml(text: string): ImportReport {
     report.doc.rconProfiles = rcon_profiles.filter(isTable).map(p => rconProfileFromToml(p, report))
   }
 
-  if (isTable(base)) report.doc.base = scopeFromToml(base, report, 'base.rules_presets')
+  if (isTable(base)) report.doc.base = scopeFromToml(base, report, 'base')
   if (Array.isArray(levels)) {
     report.doc.levels = levels.filter(isTable).map(level => levelFromToml(level, report))
   }

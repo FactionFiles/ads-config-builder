@@ -5,7 +5,7 @@
   import { gametypesByName, mutatorsByName, textFor } from '../../schema'
   import { emptyLevel, parseLevelList, type LevelEntry, type RulesScope } from '../config'
   import { formatValue } from '../format'
-  import { effectiveMutators, type Resolved, type ResolvedRules } from '../resolve'
+  import { activeMutators, effectiveMutators, roundsToWin, type Resolved, type ResolvedRules } from '../resolve'
   import { rotationCheck } from '../mapcheck.svelte'
   import MapPicker from './MapPicker.svelte'
   import SettingPicker from './SettingPicker.svelte'
@@ -54,7 +54,6 @@
     level?: LevelEntry
     rules: ResolvedRules
     mode: string
-    modeChanged: boolean
     changed: number
   }
 
@@ -68,7 +67,6 @@
         level,
         rules,
         mode,
-        modeChanged: mode !== baseMode,
         changed: Object.keys(level.rules.manual).length + level.rules.mutators.length,
       }
     })
@@ -112,24 +110,28 @@
 
   function mutatorCell(row: Row): Cell {
     if (!row.level) {
-      const names = base.mutators.map(m => mutatorLabel(m.name))
+      const names = activeMutators(base.mutators).map(m => mutatorLabel(m.name))
       return names.length ? { text: names.join(', '), kind: 'mut' } : { text: 'none', kind: 'muted' }
     }
     const own = row.level.rules.mutators
-    const effective = effectiveMutators(base.mutators, own, row.modeChanged)
-    // changing game type clears the base rules' mutators
-    const differs = own.length > 0 || (row.modeChanged && base.mutators.length > 0)
-    if (!differs) {
-      return base.mutators.length
+    const effective = effectiveMutators(base.mutators, own)
+    if (!own.length) {
+      return effective.length
         ? { text: 'same', kind: 'inherited' }
         : { text: 'none', kind: 'muted' }
     }
-    if (!effective.length) return { text: 'none (game type changed)', kind: 'map' }
+    if (!effective.length) return { text: 'none', kind: 'map' }
     return { text: effective.map(m => mutatorLabel(m.name)).join(', '), kind: 'mut' }
   }
 
   function scoreCell(row: Row): Cell {
-    const key = gametypesByName.get(row.mode)?.scoreLimitKey
+    const mode = gametypesByName.get(row.mode)
+    const key = mode?.scoreLimitKey
+    if (!key && mode?.roundsToWinKey) {
+      const cell = settingCell(row, mode.roundsToWinKey, row.level !== undefined && row.mode !== baseMode)
+      const r = row.rules.get(mode.roundsToWinKey)
+      return cell.kind === 'inherited' || !r ? cell : { ...cell, text: `${roundsToWin(r.value)} round wins` }
+    }
     if (!key) return { text: 'no score limit', kind: 'muted' }
     // a different game type uses a different score key, so "same" would be misleading
     return settingCell(row, key, row.level !== undefined && key !== baseScoreKey)
@@ -444,7 +446,7 @@
             <span class="sub">base rules</span>
           </td>
           {#each columns as col (col)}
-            {@const cell = cellFor({ index: -1, name: '', rules: baseRules, mode: baseMode, modeChanged: false, changed: 0 }, col)}
+            {@const cell = cellFor({ index: -1, name: '', rules: baseRules, mode: baseMode, changed: 0 }, col)}
             <td><span class="v {cell.kind}">{cell.text}</span></td>
           {/each}
           <td class="acts">

@@ -59,7 +59,7 @@ function listOf(scope: Scope, path: string, value: unknown[]): string {
 }
 
 export function formatValue(scope: Scope, path: string, value: unknown): string {
-  if (value === undefined || value === null) return 'not set'
+  if (value === undefined || value === null) return textFor(scope, path).emptyLabel ?? 'not set'
   if (typeof value === 'boolean') return value ? 'On' : 'Off'
   if (typeof value === 'string') return value === '' ? 'not set' : labelForChoice(scope, path, value)
   if (typeof value === 'number') {

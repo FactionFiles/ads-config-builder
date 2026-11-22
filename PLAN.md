@@ -63,8 +63,8 @@ Approved prototype: https://claude.ai/code/artifact/dca8eb94-71f3-47de-9f09-8c67
 - **Host**: deferred. The build is host-agnostic (`npm run build` -> `dist/`);
   CI config is added last (M10).
 - **AlpineFaction is a git submodule pinned to an exact commit**, never a moving
-  branch. Bumping the pin is the entire update process. It is currently pinned to
-  the `v1.4.0_Lupin` tag. The upstream default branch is `master`, not `main`.
+  branch. Bumping the pin is the entire update process. `main` is pinned to
+  the `v1.4.0_Lupin` tag; the `alpine-1.5` branch to a 1.5.0 `master` commit. The upstream default branch is `master`, not `main`.
 - **The schema generator lives and runs in this repo.** Alpine developers do
   nothing for it. If the source changes shape, our build breaks, not theirs.
 - **The generator parses the Alpine source; it does not run it.** Functions like
@@ -104,7 +104,7 @@ ads-config-builder/
 Split by how the data is obtained, since confidence differs per tier.
 
 **Tier 1 - parsed from the Alpine source, trusted.** Setting names, types and
-defaults; the 14 game types; the full mutator table with options, labels, client
+defaults; the game types; the full mutator table with options, labels, client
 version floors and game type masks. These are flat literals and regular
 declarations. The generator fails loudly if a pattern stops matching.
 
@@ -134,25 +134,33 @@ real name immediately instead of a raw key.
 
 ## Resolution model
 
-From `parse_scope_rules` in `dedi_cfg.cpp`, the layering per scope is:
+From `build_scope_rules` in `dedi_cfg.cpp` (Alpine 1.5), a map's rules are:
 
 ```
 Alpine built-in default
-  -> game type defaults      (apply_defaults_for_game_type)
-  -> mutators                (fixed apply order, before manual keys)
-  -> manual keys in scope
+  -> the map's game type defaults   (apply_defaults_for_game_type)
+  -> [base] mutators                (fixed apply order, minus any the map switches off)
+  -> [base] manual keys
+  -> the map's mutators
+  -> the map's manual keys
 ```
 
-This is applied once for `[base]`, then again for each `[[levels]]` entry. Manual
-keys always win over mutators in the same scope.
+The base rules are the first four steps under the base game type. Manual keys
+always win over mutators in the same scope.
 
-**Game type rebase.** A scope that names a different game type than the one it
-inherited does not layer onto the inherited rules. It restarts from the built-in
-defaults plus `base_rules_keys_only` (the keys `[base]` set by hand), so neither
-the old mode's defaults nor the base mutators survive. The new mode's defaults
-land on top of those base keys, then the scope's own mutators and keys apply.
-`gameTypeRebase` in `rules.json` is read from the source rather than assumed, so
-the popover trail cannot drift from server behavior.
+**Base replay.** A map does not layer onto the resolved base rules: the server
+replays every `[base]` table under the map's game type. When the map keeps the
+base game type and switches nothing off, that is the resolved base rules, so the
+resolver copies them. Otherwise it resolves the base scope again under the
+map's game type, without the mutators the map switches off. A map switches a
+base mutator off with an `enabled = false` entry in its own mutators array.
+A mutator the map's game type cannot run is skipped, without the startup
+warning the server gives for one the scope declares itself.
+`levelLayering` in `rules.json` records that the generator verified this order
+in the source; it fails if the order changes.
+
+Alpine 1.4 instead restarted a map that changed the game type from the base
+scope's manual keys, dropping the base mutators. 1.5 removed that.
 
 The resolver merges tier 1 and tier 2 tables in this order and records which
 layer set each value; that record drives the dots and the popover. Where a
@@ -209,7 +217,7 @@ gated too, and each records the source file and line in the research notes.
   picker, multi-select edit, paste a level list. Clicking a row scopes the settings
   pages to that map. **Done.**
 - **M6 - Mutators page.** Cards, options, game type gating, client version
-  warnings. **Done.**
+  warnings, switching a base mutator off per map. **Done.**
 - **M7 - Import round-trip.** Open an existing config; preserve unknown keys on
   export. **Done.**
 - **M8 - Remaining pages.** Bots, admin/rcon profiles, voting, idle, demo
@@ -345,8 +353,9 @@ second pass.
     download is dropped from the rotation. A number out of bounds is clamped (the
     bounds are `std::clamp` calls), so the file keeps a value the server replaced.
     A mutator the mode cannot run produces a server warning and is skipped.
-  - The most valuable check: a map that changes the mode runs without the base
-    rules' mutators but keeps the ordinary keys those mutators wrote.
+  - A base mutator carried to a map whose game type cannot run it is reported
+    on that map. (Under 1.4 the check here was a map that changed the mode
+    losing the base mutators; 1.5 removed that behavior.)
   - The guard test (a setting read only when a sibling is on) is `unsatisfiedGuard`
     beside the resolver; the field renderer and problems page share it.
   - The sidebar shows a count of problems, excluding notes. The count and the page
@@ -410,13 +419,46 @@ on each, as designed.
   evaluated for that label, and a default expression that reaches a config key
   without a value fails the generator.
 
+### Alpine 1.5.0 (branch `alpine-1.5`)
+
+The pin moved from `v1.4.0_Lupin` to `master`, which already reports 1.5.0 but
+has no RC tag. Re-pin to the 1.5.0 release tag before merging; the branch
+deploys nothing until then.
+
+- **Layering.** See Base replay under Resolution model. The rebase is gone from
+  the resolver, the popover and the problems page; maps can switch base
+  mutators off.
+- **Two game types**, Scavenger (`scav`) and Payload (`pay`). Scavenger runs on
+  the Salvage framework, so flag dropping and the stolen-flag overtime tie apply
+  to it. Payload has its own overtime; the general overtime settings do nothing
+  there.
+- **Two mutators**, Join Bots and Item Replacement, and options for Jetpacks
+  (explode) and Gibbing (scrapyard).
+- **New settings**: Scavenger and Payload rules, `vehicles`, `level_message`,
+  `spawn_delay.wave_respawns`, `exposure_damage`, `bag_multiple_spawns`,
+  `gg_end_with_fusion`, `server_bots`, `announce_next_level`, and a Network page
+  (`bandwidth`, `delta_obj_update`, lag compensation). `allow_unlimited_fps` was
+  removed; an import drops it and says so.
+- **Settings with no default.** Payload's overrides are `std::optional`: unset
+  means the level's own value. The generator marks these `unsetByDefault`, and
+  `check-schema` requires an `emptyLabel` for the empty state.
+- **Generator gaps the release exposed**, each now a hard failure:
+  - Wipeout and Scavenger got their kits from a new helper call, which the
+    defaults reader skipped. Helper calls are followed, and any other call fails.
+  - Six Payload keys are read in a loop over `{"key", &field}` pairs. The loop is
+    read, and any key read through a variable fails.
+  - Join Bots' choice lists and count default were not read. Every
+    `mutators_get_registry` branch must now be understood.
+  - Setters that forward to a static helper, bounds named by constants
+    (`payload::max_x`), `clamp_rule` and `std::clamp<T>` were not analyzed. They
+    are now, and a setting without a readable default fails.
+  - `bandwidth` is a tier name looked up in `net_rate_tiers`, read as a choice.
+
 ## Next
 
-1. Parity pass against `old.html`. That closes M8.
-2. M10 CI and deploy.
-3. Bump the `vendor/AlpineFaction` pin when 1.5.0 is tagged (`master` already
-   carries 1.5.0 work), as its own commit so `check-schema` findings are reviewed
-   separately from feature work.
+1. Re-pin to the 1.5.0 release tag and merge `alpine-1.5`.
+2. Parity pass against `old.html`. That closes M8.
+3. M10 CI and deploy.
 
 Known gaps: `gg_final_weapon` is a weapon name in a plain text box, for the same
 reason `gg_tiers` was (the check is in game code, not the parser), and the
@@ -463,27 +505,30 @@ Facts established from the Alpine source:
   `AlpineServerConfigRules` (~728), `AlpineServerConfigLevelEntry` (~965),
   `AlpineRconProfile` (~977), `ServerBotConfig` (~991).
 - `game_patch/multi/dedi_cfg.cpp` - all TOML key lookups;
-  `apply_defaults_for_game_type` at ~326 (pure value assignments, one case per
-  game type); layering comment at ~566.
+  `apply_defaults_for_game_type` (value assignments and the
+  `apply_fixed_loadout_defaults` helper, one case per game type);
+  `build_scope_rules` and `build_rules_over_base` for the layering.
 - `game_patch/multi/mutators.cpp` - `MutatorDef` struct at ~390 and the
-  `MUTATORS` array at ~417 (id, TOML name, label, min client minor version, apply
+  `MUTATORS` array (id, TOML name, label, min client minor version, apply
   fn, options, num options, game type req, vote label, vote detail option), with
-  the `MutatorOptionDef` arrays just above; `MUTATOR_APPLY_ORDER` at ~443. 20
-  entries. The array is `MUTATORS`, the struct is `MutatorDef`.
+  the `MutatorOptionDef` arrays just above (Item Replacement's is built from
+  `ITEM_REPLACE_SETS`); `MUTATOR_APPLY_ORDER` below it. 23 entries. The array is `MUTATORS`, the struct is `MutatorDef`.
 - `game_patch/multi/mutators.h` - `MutatorId` enum with frozen wire values,
   `MutatorGametypeReq`, `MutatorOptionType`.
 - `game_patch/multi/server.cpp:825` - `resolve_gametype_from_name`, the
   authoritative game type name list and aliases.
 - `common/include/common/version/version.h:34` - `ADS_VERSION`, currently 2.
+- `common/include/common/payload.h` - bounds for the Payload settings.
+- `game_patch/misc/alpine_settings.h` - `net_rate_tiers`, the `bandwidth` choices.
 - `tools/vpp` - prebuilt Linux VPP unpacker, used by `extract-tables.mjs`.
 
 ## Upstream findings
 
 Worth reporting to Alpine; none block the builder.
 
-- **Overtime is silently dead in four modes.** Pit and Wipeout are excluded by
-  `gt_uses_rounds`, Gun Game by an explicit "cannot be tied" case, and Run by the
-  default branch of `round_is_tied`. Nothing warns an operator who sets
+- **Overtime is silently dead in five modes.** Pit and Wipeout are excluded by
+  `gt_uses_rounds`, Gun Game by an explicit "cannot be tied" case, Payload by its
+  own overtime, and Run by the default branch of `round_is_tied`. Nothing warns an operator who sets
   `overtime.enabled` on a Pit server.
 - **`overtime.tie_when_hill_contested` is King of the Hill only**, although four
   modes have hills and the key name names none of them. Damage Control's tie test
@@ -504,12 +549,8 @@ Worth reporting to Alpine; none block the builder.
   for the seeding call, or seed once rather than per layer.
 - **The CTF mode description reads "Steal the the enemy flag".** The tool shows
   the game's own wording, so the typo is visible.
-- **A map that changes the mode silently loses the base rules' mutators.**
-  `apply_defaults_for_game_type` clears `MutatorConfig`, and a source comment says
-  such a scope must re-declare its mutators. Nothing tells the operator, and the
-  values mutators wrote into ordinary rules keys are not cleared, so the map keeps
-  half of Instagib's effects with Instagib off. The tool warns on the map's
-  mutators page and in the rotation sheet's Mutators column.
+- ~~**A map that changes the mode silently loses the base rules' mutators.**~~
+  Fixed in 1.5, which replays the base rules under each map's game type.
 - **`rcon_password` creates a profile nobody wrote.** The server builds a profile
   named `legacy` with a fixed 18-command list, unless a written profile already
   uses that password. The admin page shows it as its own card.

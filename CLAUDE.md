@@ -7,11 +7,12 @@ milestones and status, and reference notes on the Alpine source.
 ## Core idea
 
 Alpine resolves a server's rules in layers: built-in default, game type
-defaults, mutators, then keys set by hand. This runs once for the base rules and
-again for each map in the rotation. The old builder used two duplicate flat
-forms, which is why it drifted. This tool models the layering directly and
-records which layer set each value. That record is the interface: a colored dot
-per setting and a popover showing the full trail.
+defaults, mutators, then keys set by hand. The base rules resolve this way, and
+each map replays them under its own game type before adding its own mutators
+and keys. The old builder used two duplicate flat forms, which is why it
+drifted. This tool models the layering directly and records which layer set
+each value. That record is the interface: a colored dot per setting and a
+popover showing the full trail.
 
 ## Build
 
@@ -37,7 +38,8 @@ npm run check          svelte-check plus tsc
   authored entry, an authored entry for a setting that no longer exists, a
   mutator with no effects entry, a source-allowed value with no name, a list
   column with no heading, a name the source states that the game's tables no
-  longer hold, or a settings page that would be empty with advanced settings
+  longer hold, a setting with no default and no name for its empty state, or a
+  settings page that would be empty with advanced settings
   hidden.
 - `tools/extract-tables.mjs` - one-shot, run by hand. Produces `gamedata/*.json`
   from the game's `tables.vpp`, since those names are not in the Alpine repo.
@@ -48,9 +50,10 @@ npm run check          svelte-check plus tsc
 - `src/schema/` - types and the loader the UI imports.
 - `src/lib/resolve.ts` - the layering and the provenance trail. Some list keys
   fold across layers by a key field instead of being replaced, so a scope can
-  change one entry without restating the list. A scope that changes the game
-  type restarts from built-in defaults plus the base scope's hand-set keys, with
-  the new mode's defaults on top.
+  change one entry without restating the list. A map replays the whole base
+  scope (mutators and keys) over its own game type's defaults, minus any base
+  mutator it switches off with `enabled = false` or its game type cannot run,
+  then applies its own.
 - `src/lib/config.ts` - the edited document, and reading and writing `ads.toml`.
   Anything it cannot model is kept verbatim.
 - `src/lib/maps.ts` - the FactionFiles archive, queried live from the browser;

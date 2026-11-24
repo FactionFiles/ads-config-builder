@@ -124,14 +124,14 @@
     return found?.scope === 'rules' ? found : rulesPages[0]
   })
 
+  function scopeInput(scope: RulesScope) {
+    return { gameType: scope.manual.game_type as string | undefined, mutators: scope.mutators, manual: scope.manual }
+  }
+
   function resolve(scope: RulesScope, base?: ResolvedRules): ResolvedRules {
     return resolveScope({
-      base,
-      // a map that changes game type restarts from the base scope's manual keys
-      baseManual: base ? doc.base.manual : undefined,
-      gameType: scope.manual.game_type as string | undefined,
-      mutators: scope.mutators,
-      manual: scope.manual,
+      ...scopeInput(scope),
+      base: base ? { scope: scopeInput(doc.base), resolved: base } : undefined,
     })
   }
 
@@ -418,6 +418,9 @@
       {@const kept = once(imported.kept)}
       {@const strange = once(imported.unrecognized)}
       {@const removed = once(imported.removed)}
+      {@const removedSettings = once(imported.removedSettings)}
+      {@const removedCommands = imported.removedCommands}
+      {@const combined = once(imported.combined)}
       <div class="notice">
         <div>
           <b>Opened {openedName}.</b>
@@ -442,6 +445,23 @@
             <span class="keys">{removed.join(', ')}</span>, so
             {removed.length === 1 ? 'it was' : 'they were'} dropped. Set those rules
             in the base rules or on individual maps instead.
+          {/if}
+          {#if removedCommands.length}
+            <br />Alpine {meta.alpineVersion} does not accept the rcon
+            {removedCommands.length === 1 ? 'command' : 'commands'}
+            <span class="keys">{removedCommands.join(', ')}</span>, so
+            {removedCommands.length === 1 ? 'it was' : 'they were'} dropped.
+          {/if}
+          {#if combined.length}
+            <br /><span class="keys">{combined.map(w => `[${w}]`).join(', ')}</span> and
+            {combined.length === 1 ? 'its' : 'their'} <span class="keys">[rules]</span>
+            {combined.length === 1 ? 'table were' : 'tables were'} merged and will be saved under
+            <span class="keys">[rules]</span>.
+          {/if}
+          {#if removedSettings.length}
+            <br />Alpine {meta.alpineVersion} no longer supports
+            <span class="keys">{removedSettings.join(', ')}</span>, so
+            {removedSettings.length === 1 ? 'it was' : 'they were'} dropped.
           {/if}
           <br />Comments and key order are not preserved on download.
         </div>
@@ -518,7 +538,6 @@
         declared={activeScope.mutators}
         levelScope={targets.length > 0}
         inherited={targets.length ? doc.base.mutators : []}
-        modeCleared={targets.length > 0 && gameType !== baseGameType}
         mixed={multi && combined.mutatorsMixed}
         maps={targets.length}
         resolved={activeRules}

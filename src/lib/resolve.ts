@@ -1,19 +1,16 @@
 // replays alpine's rule layering and records which layer set each value.
 //
-// from dedi_cfg.cpp, one scope resolves as:
+// from dedi_cfg.cpp, the base rules resolve as:
 //
 //   Alpine built-in default
-//     -> game type defaults   (only when the game type changed, or was never applied)
+//     -> game type defaults
 //     -> mutators             (fixed apply order, before manual keys)
-//     -> manual keys in this scope
+//     -> manual keys
 //
-// applied once for [base], then per [[levels]] entry starting from the resolved
-// base rules.
-//
-// exception: a level that changes the game type restarts from built-in defaults
-// plus [base]'s manual keys, and the new game type's defaults land on top.
+// a map replays the base rules under its own game type, leaving out any base
+// mutator it switches off, then applies its own mutators and keys on top.
 
-import { gametypes, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
+import { gametypes, mutatorAllowsMode, mutators as mutatorSchema, mutatorEffects, rules as rulesSchema, server as serverSchema } from '../schema'
 import type { ArrayKey, DefaultOp, Guard, Mutator, ScalarKey, SchemaKey, StockReserve } from '../schema/types'
 import { railGunName, reserveAmmo } from './gamedata'
 
@@ -46,18 +43,21 @@ export type ResolvedRules = Map<string, Resolved>
 export interface MutatorDeclaration {
   name: string
   options?: Record<string, unknown>
+  /** false switches off a mutator a broader scope declared */
+  enabled?: false
 }
 
-export interface ScopeInput {
-  /** resolved base rules; omit for the base scope itself */
-  base?: ResolvedRules
+export interface RulesScopeInput {
   /** game type declared in this scope, if any */
   gameType?: string
-  /** manual keys from [base], which a game type change restarts from */
-  baseManual?: Record<string, unknown>
   mutators?: MutatorDeclaration[]
   /** keys written directly in this scope */
   manual?: Record<string, unknown>
+}
+
+export interface ScopeInput extends RulesScopeInput {
+  /** the base scope and its resolved rules; omit for the base scope itself */
+  base?: { scope: RulesScopeInput; resolved: ResolvedRules }
 }
 
 function contribute(into: ResolvedRules, path: string, c: Contribution) {
@@ -301,29 +301,35 @@ function applyGameTypeDefaults(into: ResolvedRules, gameType: string) {
   apply(gametypes.defaults.after)
 }
 
-function applyMutator(into: ResolvedRules, decl: MutatorDeclaration) {
+function applyMutator(into: ResolvedRules, decl: MutatorDeclaration, inherited: boolean, gameType: string) {
   const mutator = mutatorSchema.mutators.find(m => m.name === decl.name)
   if (!mutator) return
+  // the server skips a mutator its game type cannot run
+  if (!mutatorAllowsMode(mutator, gameType)) return
   const effect = mutatorEffects[decl.name]
   if (!effect) return
+  const layer: Layer = inherited ? 'inherited' : 'mutator'
 
   for (const set of effect.sets ?? []) {
+    if (set.modes && !set.modes.includes(gameType)) continue
     // mutator lists replace rather than merge
     const list = listAt(set.key)
     if (list && Array.isArray(set.value)) {
-      setRows(into, set.key, mutatorRows(list, set.value), { layer: 'mutator', source: mutator.label })
+      setRows(into, set.key, mutatorRows(list, set.value), { layer, source: mutator.label })
       continue
     }
     const schema = findScalar(set.key)
-    const value = set.fromOption === undefined
+    const current = into.get(set.key)?.value
+    const option = set.fromOption === undefined
       ? set.value
-      : optionValue(mutator, decl, set.fromOption, into.get(set.key)?.value)
+      : optionValue(mutator, decl, set.fromOption, set.transform ? roundsToWin(current) : current)
+    const value = set.transform && typeof option === 'number' ? winsToRounds(option) : option
     // a mistyped value is prose describing an effect we cannot compute
     const usable = schema ? valueMatchesType(value, schema.type) : false
     contribute(into, set.key, usable
-      ? { layer: 'mutator', value, source: mutator.label }
+      ? { layer, value, source: mutator.label }
       : {
-          layer: 'mutator',
+          layer,
           value: into.get(set.key)?.value,
           source: mutator.label,
           description: typeof value === 'string' ? value : set.note,
@@ -343,6 +349,15 @@ function mutatorRows(list: ArrayKey, entries: unknown[]): Row[] {
     rows = withRow(list, rows, edit)
   }
   return rows
+}
+
+// a best-of-n match: round wins from the round count, and back as the server sets it
+export function roundsToWin(rounds: unknown): unknown {
+  return typeof rounds === 'number' ? Math.floor(rounds / 2) + 1 : rounds
+}
+
+function winsToRounds(wins: number): number {
+  return Math.min(Math.max(Math.trunc(wins), 1), 500) * 2 - 1
 }
 
 // `currentValue` options default to the setting's already-resolved value, as the server does
@@ -389,29 +404,75 @@ function orderMutators(declared: MutatorDeclaration[]): MutatorDeclaration[] {
   })
 }
 
-export function resolveScope(input: ScopeInput): ResolvedRules {
-  const isBase = !input.base
+// one mutators array as the server reads it: a later entry for the same mutator
+// replaces an earlier one, and enabled = false removes it
+export function activeMutators(declared: MutatorDeclaration[]): MutatorDeclaration[] {
+  const active = new Map<string, MutatorDeclaration>()
+  for (const decl of declared) {
+    active.delete(decl.name)
+    if (decl.enabled !== false) active.set(decl.name, decl)
+  }
+  return [...active.values()]
+}
 
-  // repeating the base game type does not reset anything
-  const baseGameType = input.base ? (input.base.get('game_type')?.value as string | undefined) : undefined
-  const gameType = input.gameType ?? baseGameType ?? gametypes.gametypes[0].name
-  const changedGameType = !isBase && !!input.gameType && input.gameType !== baseGameType
+/** base mutators a map switches off */
+export function disabledMutators(declared: MutatorDeclaration[]): string[] {
+  return declared.filter(d => d.enabled === false).map(d => d.name)
+}
+
+function resolveBase(scope: RulesScopeInput, gameType: string, skip: string[], inherited: boolean): ResolvedRules {
+  const out = defaults()
+  if (scope.gameType) {
+    contribute(out, 'game_type', inherited
+      ? { layer: 'inherited', value: scope.gameType, source: 'base rules' }
+      : { layer: 'manual', value: scope.gameType })
+  } else {
+    contribute(out, 'game_type', { layer: 'default', value: gametypes.gametypes[0].name, source: 'Alpine default' })
+  }
+  applyGameTypeDefaults(out, gameType)
+
+  // the server leaves a skipped mutator's entries out entirely, enabled or not
+  const kept = (scope.mutators ?? []).filter(d => !skip.includes(d.name))
+  for (const decl of orderMutators(activeMutators(kept))) applyMutator(out, decl, inherited, gameType)
+  applySeeds(out)
+  applyValues(out, scope.manual ?? {}, inherited ? { layer: 'inherited', source: 'base rules' } : { layer: 'manual' })
+  return out
+}
+
+export function resolveScope(input: ScopeInput): ResolvedRules {
+  if (!input.base) return resolveBase(input, input.gameType ?? gametypes.gametypes[0].name, [], false)
+
+  const base = input.base
+  const baseGameType = base.resolved.get('game_type')?.value as string
+  const gameType = input.gameType ?? baseGameType
+  const modeChanged = gameType !== baseGameType
+  const baseActive = activeMutators(base.scope.mutators ?? []).map(d => d.name)
+  const skip = disabledMutators(input.mutators ?? [])
 
   let out: ResolvedRules
-
-  if (isBase) {
-    out = defaults()
-  } else if (changedGameType) {
-    // old game type defaults and base mutators are discarded
-    out = defaults()
-    applyValues(out, input.baseManual ?? {}, {
-      layer: 'inherited',
-      source: 'base rules',
-      description: 'Set in the base rules. Manual settings carry over when a map changes the game type.',
-    })
+  if (modeChanged || skip.some(name => baseActive.includes(name))) {
+    // the base rules replayed under this map's game type and without its switched-off mutators
+    out = resolveBase(base.scope, gameType, skip, true)
+    // the same game type's defaults are the base rules', not this map's, and
+    // anything that differs from the base rules does so because of this map
+    if (!modeChanged) {
+      const names = skip.filter(name => baseActive.includes(name))
+        .map(name => mutatorSchema.mutators.find(m => m.name === name)?.label ?? name)
+      for (const [path, resolved] of out) {
+        if (resolved.layer === 'gametype' || resolved.layer === 'default') out.set(path, { ...resolved, layer: 'inherited' })
+        if (JSON.stringify(resolved.value) !== JSON.stringify(base.resolved.get(path)?.value)) {
+          // a mutator change rather than a key the map sets, so there is nothing to reset
+          contribute(out, path, {
+            layer: 'mutator',
+            value: resolved.value,
+            description: `This map turns off ${names.join(', ')}.`,
+          })
+        }
+      }
+    }
   } else {
     out = new Map()
-    for (const [path, resolved] of input.base!) {
+    for (const [path, resolved] of base.resolved) {
       out.set(path, { ...resolved, layer: 'inherited', trail: [...resolved.trail] })
     }
   }
@@ -420,40 +481,30 @@ export function resolveScope(input: ScopeInput): ResolvedRules {
     contribute(out, 'game_type', {
       layer: 'manual',
       value: input.gameType,
-      description: changedGameType
-        ? 'This map changes the game type. Its rules start from the manual settings in the base '
-          + "rules, with this game type's defaults applied on top."
+      description: modeChanged
+        ? "This map changes the game type. Its rules start from this game type's defaults, "
+          + 'with the base rules applied on top.'
         : undefined,
     })
   }
-  else if (isBase) {
-    contribute(out, 'game_type', { layer: 'default', value: gameType, source: 'Alpine default' })
-  }
 
-  if (isBase || changedGameType) {
-    applyGameTypeDefaults(out, gameType)
-  }
-
-  for (const decl of orderMutators(input.mutators ?? [])) {
-    applyMutator(out, decl)
-  }
-
+  for (const decl of orderMutators(activeMutators(input.mutators ?? []))) applyMutator(out, decl, false, gameType)
   applySeeds(out)
-
   applyValues(out, input.manual ?? {}, { layer: 'manual' })
-
   return out
 }
 
-// a game type change clears base mutators. otherwise level mutators stack on
-// the base's, replacing any with the same name
+// what runs on a map: the base's mutators less any the map switches off or
+// redeclares, then the map's own
 export function effectiveMutators(
   base: MutatorDeclaration[],
   level: MutatorDeclaration[],
-  modeChanged: boolean,
 ): MutatorDeclaration[] {
-  if (modeChanged) return level
-  return [...base.filter(b => !level.some(l => l.name === b.name)), ...level]
+  const skip = disabledMutators(level)
+  const own = activeMutators(level)
+  const inherited = activeMutators(base.filter(b => !skip.includes(b.name)))
+    .filter(b => !own.some(l => l.name === b.name))
+  return [...inherited, ...own]
 }
 
 export interface RowOrigin {
@@ -487,13 +538,6 @@ export function rowSources(resolved: Resolved | undefined, mergeKey?: string): R
     }
     return origin
   })
-}
-
-/** paths this scope changed relative to what it inherited */
-export function overridden(resolved: ResolvedRules): string[] {
-  return [...resolved]
-    .filter(([, r]) => r.layer !== 'inherited' && r.layer !== 'default')
-    .map(([path]) => path)
 }
 
 function siblingPath(full: string, key: string): string {

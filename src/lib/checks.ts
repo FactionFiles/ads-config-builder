@@ -8,7 +8,7 @@ import {
 } from '../schema'
 import type { ArrayKey, ScalarKey } from '../schema/types'
 import type { ConfigDocument, ManualKeys, RulesScope } from './config'
-import { unsatisfiedGuard, type MutatorDeclaration, type ResolvedRules } from './resolve'
+import { activeMutators, effectiveMutators, unsatisfiedGuard, type MutatorDeclaration, type ResolvedRules } from './resolve'
 import { formatValue } from './format'
 import { tableFor } from './gamedata'
 
@@ -173,21 +173,25 @@ function mutatorFindings(
   gameType: string,
   where: FindingScope,
   out: Finding[],
+  inherited = false,
 ) {
   const blocked = running
     .map(d => mutatorsByName.get(d.name))
     .filter(m => m !== undefined && !mutatorAllowsMode(m, gameType))
   if (!blocked.length) return
 
+  const it = blocked.length === 1 ? 'it' : 'them'
   out.push({
-    id: `${where.kind}${where.map ?? ''}:mutators:mode`,
+    id: `${where.kind}${where.map ?? ''}:mutators:mode${inherited ? ':base' : ''}`,
     severity: 'warning',
     scope: where,
     title: blocked.length === 1
       ? `${blocked[0]!.label} does nothing in ${modeTitle(gameType)}`
       : `${blocked.length} mutators do nothing in ${modeTitle(gameType)}`,
-    detail: 'The server logs a warning at startup and skips '
-      + (blocked.length === 1 ? 'it' : 'them') + '.',
+    // a base mutator replayed for a map is applied quietly, so only the scope's own warn
+    detail: inherited
+      ? `Set in the base rules. The server skips ${it} on this map without a warning.`
+      : `The server logs a warning at startup and skips ${it}.`,
     page: 'rules-mutators',
     items: blocked.map(m => m!.label),
   })
@@ -326,36 +330,6 @@ function rotationFindings(doc: ConfigDocument, absent: string[], out: Finding[])
   }
 }
 
-// changing game_type clears inherited mutators, and alpine does not warn about it
-function clearedMutatorFindings(
-  doc: ConfigDocument,
-  base: MutatorDeclaration[],
-  modeChanged: boolean[],
-  out: Finding[],
-) {
-  if (!base.length) return
-
-  doc.levels.forEach((level, i) => {
-    if (!modeChanged[i]) return
-    const kept = new Set(level.rules.mutators.map(m => m.name))
-    const lost = base.filter(m => !kept.has(m.name))
-    if (!lost.length) return
-
-    out.push({
-      id: `map${i}:mutators:cleared`,
-      severity: 'error',
-      scope: mapScope(i, level.filename),
-      title: `This map changes the game type and drops ${
-        lost.length === 1 ? 'a mutator' : 'mutators'
-      } from the game rules`,
-      detail: 'Changing the game type clears all mutators, so re-enable any this map needs. '
-        + 'Settings those mutators changed are not reset, so their effects may partially remain.',
-      page: 'rules-mutators',
-      items: lost.map(m => mutatorsByName.get(m.name)?.label ?? m.name),
-    })
-  })
-}
-
 // the parser reseeds some list rows before each scope, undoing base changes on
 // any map that does not repeat them. alpine does not warn about it
 function reseededRowFindings(doc: ConfigDocument, out: Finding[]) {
@@ -431,6 +405,15 @@ function serverFindings(doc: ConfigDocument, server: ResolvedRules, out: Finding
   if (Array.isArray(bots) && bots.length && !valueAt(server, 'bot_shared_secret')) {
     warn('botsecret', 'bot_shared_secret', 'Bot profiles are set but there is no bot shared secret',
       'Bots cannot join the server.')
+  }
+
+  // each team belongs to the bot profile at the same position
+  const teams = valueAt(server, 'bot_teams')
+  const profileCount = Array.isArray(bots) ? bots.length : 0
+  if (Array.isArray(teams) && teams.length > profileCount) {
+    const extra = teams.length - profileCount
+    warn('botteams', 'bot_teams', `${extra} bot profile ${extra === 1 ? 'team has' : 'teams have'} no bot profile`,
+      `The server ignores ${extra === 1 ? 'it' : 'them'}.`)
   }
 
   if (blank(valueAt(server, 'rcon_password')) && !doc.rconProfiles.length) {
@@ -511,24 +494,29 @@ export function findProblems(input: CheckInput): Finding[] {
 
   const baseMode = (baseRules.get('game_type')?.value as string) ?? ''
   const modeOf = (i: number) => (levelRules[i]?.get('game_type')?.value as string) ?? baseMode
-  const modeChanged = doc.levels.map((_, i) => modeOf(i) !== baseMode)
 
   serverFindings(doc, server, out)
   rotationFindings(doc, absentMaps, out)
   welcomeFindings(doc, baseRules, levelRules, out)
   reseededRowFindings(doc, out)
-  clearedMutatorFindings(doc, doc.base.mutators, modeChanged, out)
 
   settingFindings('server', doc.server, server, baseMode, SERVER_SCOPE, out)
   settingFindings('rules', doc.base.manual, baseRules, baseMode, BASE_SCOPE, out)
-  mutatorFindings(doc.base.mutators, baseMode, BASE_SCOPE, out)
+  mutatorFindings(activeMutators(doc.base.mutators), baseMode, BASE_SCOPE, out)
 
   doc.levels.forEach((level: { filename: string; rules: RulesScope }, i) => {
     const rules = levelRules[i] ?? baseRules
     const where = mapScope(i, level.filename)
     settingFindings('rules', level.rules.manual, rules, modeOf(i), where, out)
-    // only this map's own mutators; inherited ones were already checked against the base mode
-    mutatorFindings(level.rules.mutators, modeOf(i), where, out)
+    const own = activeMutators(level.rules.mutators)
+    mutatorFindings(own, modeOf(i), where, out)
+    // base mutators carry over to a map in another game type, which may not run them.
+    // in the base game type they were already checked against the base rules
+    if (modeOf(i) !== baseMode) {
+      const inherited = effectiveMutators(doc.base.mutators, level.rules.mutators)
+        .filter(d => !own.some(o => o.name === d.name))
+      mutatorFindings(inherited, modeOf(i), where, out, true)
+    }
   })
 
   repeatedFindings(doc, out)

@@ -106,6 +106,39 @@ export function normalizeType(cppType) {
   return null // not a scalar
 }
 
+// named numeric constants from every source, for bounds written as `ns::max_x`.
+// a name declared twice with different values is left out rather than guessed.
+const CONSTS = new Map()
+export function collectConstants(src) {
+  for (const m of src.matchAll(/\bconstexpr\s+(?:[\w:]+\s+)+?(\w+)\s*=\s*([^;{}]+);/g)) {
+    const lit = parseLiteral(m[2])
+    if (!lit.ok || typeof lit.value !== 'number') continue
+    if (CONSTS.has(m[1]) && CONSTS.get(m[1]) !== lit.value) CONSTS.set(m[1], undefined)
+    else CONSTS.set(m[1], lit.value)
+  }
+}
+
+// a string length cap, written as a trim or a size test
+function lengthCap(code) {
+  const trim = code.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*([^()]+?)\s*\)/) ?? code.match(/\.size\(\)\s*>\s*([\w:]+)/)
+  if (!trim) return undefined
+  const b = parseBound(trim[1])
+  expect(b.ok, 'Unreadable length cap', `${trim[0]}: ${trim[1]} is not a literal or a known constant`)
+  return b.value
+}
+
+// a literal, or a named constant optionally qualified and negated
+function parseBound(raw) {
+  // a cast only changes the type, as in static_cast<float>(max_delay_ms)
+  const cast = raw.trim().match(/^static_cast\s*<[^<>]+>\s*\(([\s\S]*)\)$/)
+  if (cast) return parseBound(cast[1])
+  const lit = parseLiteral(raw)
+  if (lit.ok) return lit
+  const named = raw.trim().match(/^(-?)\s*(?:\w+::)*(\w+)$/)
+  const value = named ? CONSTS.get(named[2]) : undefined
+  return value === undefined ? { ok: false } : { ok: true, value: named[1] ? -value : value }
+}
+
 // returns {ok:true, value} for literals we understand, {ok:false} otherwise
 export function parseLiteral(raw) {
   const s = raw.trim().replace(/^\{|\}$/g, '').trim()
@@ -154,28 +187,34 @@ function analyzeSetter(body, argName, members) {
     if (div) { result.scale = 1 / Number(div[1]); break }
   }
 
-  const clamp = callArgs(body, 'std::clamp')
-  if (clamp && clamp.length === 3) {
-    const lo = parseLiteral(clamp[1])
-    const hi = parseLiteral(clamp[2])
+  // clamp_rule(value, lo, hi, fallback) keeps the fallback for non-finite input
+  const clamp = callArgs(body, 'std::clamp') ?? callArgs(body, 'clamp_rule')
+  if (clamp && (clamp.length === 3 || clamp.length === 4)) {
+    const lo = parseBound(clamp[1])
+    const hi = parseBound(clamp[2])
     if (lo.ok) result.min = lo.value / result.scale
     if (hi.ok) result.max = hi.value / result.scale
   } else {
-    const max = callArgs(body, 'std::max')
-    if (max && max.length === 2) {
-      const lo = parseLiteral(max[1])
-      if (lo.ok) result.min = lo.value / result.scale
+    // std::max(lo, std::min(v, hi)) in either argument order. whichever argument
+    // does not carry the setter's input is the bound, and it must be readable
+    const carries = arg => [...tainted].some(t => new RegExp(`\\b${t}\\b`).test(arg))
+    for (const [fn, side] of [['std::max', 'min'], ['std::min', 'max']]) {
+      const args = callArgs(body, fn)
+      if (!args) continue
+      const bounds = args.filter(a => !carries(a))
+      if (args.length !== 2 || bounds.length !== 1) { result.unreadableBound = `${fn}(${args.join(', ')})`; continue }
+      const b = parseBound(bounds[0])
+      if (b.ok) result[side] = b.value / result.scale
+      else result.unreadableBound = bounds[0]
     }
-    const min = callArgs(body, 'std::min')
-    if (min && min.length === 2) {
-      const hi = parseLiteral(min[1])
-      if (hi.ok) result.max = hi.value / result.scale
-    }
+  }
+  if (clamp && (clamp.length === 3 || clamp.length === 4)) {
+    for (const raw of clamp.slice(1, 3)) if (!parseBound(raw).ok) result.unreadableBound = raw
   }
 
   // string length caps show up as a trim rather than a clamp
-  const trim = body.match(/\.substr\s*\(\s*0\s*,\s*(\d+)\s*\)/) ?? body.match(/\.size\(\)\s*>\s*(\d+)/)
-  if (trim) result.maxLength = Number(trim[1])
+  const cap = lengthCap(body)
+  if (cap !== undefined) result.maxLength = cap
 
   // a name resolved against a game data table rather than stored as given
   const lookup = body.match(/rf::weapon_lookup_type|rf::multi_find_character|item_lookup_type/)
@@ -189,9 +228,10 @@ function analyzeSetter(body, argName, members) {
 
 // arguments of the first `name(...)` call in expr, paren-balanced
 function callArgs(expr, name) {
-  const at = expr.indexOf(name + '(')
-  if (at === -1) return null
-  const open = at + name.length
+  // explicit template arguments are allowed, as in std::clamp<int64_t>(...)
+  const call = expr.match(new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(?:<[^<>()]*>)?\\s*\\(`))
+  if (!call) return null
+  const open = call.index + call[0].length - 1
   let depth = 0
   for (let i = open; i < expr.length; i++) {
     if (expr[i] === '(') depth++
@@ -255,7 +295,7 @@ export function parseStructs(src) {
       const argName = params.length === 1 ? (params[0].match(/([A-Za-z_]\w*)\s*$/)?.[1] ?? null) : null
       const setBody = bodyAt(body, sm.index + sm[0].length - 1)
       const analyzed = argName ? analyzeSetter(setBody, argName, structs[name].members) : null
-      structs[name].setters[setter] = analyzed ?? { opaque: true }
+      structs[name].setters[setter] = analyzed ?? { opaque: true, body: setBody, argName }
     }
 
     // other methods, since array entries are often validated inside one
@@ -274,8 +314,27 @@ export function parseStructs(src) {
         .filter(Boolean)
       structs[name].methods[km[1]] = { params, body: methodBody, lookups: lookupsByRoot(methodBody, params) }
     }
+
+    for (const [setter, info] of Object.entries(structs[name].setters)) {
+      if (!info.opaque || !info.argName) continue
+      const inlined = inlineHelperCall(info.body, structs[name].methods)
+      const analyzed = inlined && analyzeSetter(inlined, info.argName, structs[name].members)
+      structs[name].setters[setter] = analyzed ?? { opaque: true }
+    }
   }
   return structs
+}
+
+// a body that is one call to a helper, with the helper's parameters replaced by
+// the call's arguments, e.g. `set_clamped_ms(x_ms, in, 0.0f, 60000.0f);`
+export function inlineHelperCall(body, methods) {
+  const call = body.trim().match(/^(?:\w+::)*(\w+)\s*\(([\s\S]*)\)\s*;$/)
+  const helper = call && methods[call[1]]
+  if (!helper) return null
+  const args = splitTopLevelArgs(call[2])
+  if (args.length !== helper.params.length) return null
+  return helper.params.reduce(
+    (text, param, i) => text.replace(new RegExp(`\\b${param}\\b`, 'g'), args[i]), helper.body)
 }
 
 const LOOKUP_CALL = /\b(?:rf::)?(weapon_lookup_type|item_lookup_type|multi_find_character)\s*\(([^;)]*)\)/g
@@ -368,6 +427,12 @@ const ACCESSOR = /\[\s*"([\w.]+)"\s*\]\s*\.\s*(value<([^>]+)>|value_or<([^>]+)>|
 
 // resolve a member/setter path such as `bagman.set_bag_score_limit` against the
 // struct table, returning the default plus any bounds and unit scale
+// std::optional<float> -> 'float', anything else -> null
+function optionalOf(cppType) {
+  const m = cppType.match(/^std::optional\s*<\s*(.+?)\s*>$/)
+  return m ? normalizeType(m[1]) : null
+}
+
 function resolveTarget(structs, structName, path) {
   const parts = path.split('.')
   let cur = structs[structName]
@@ -380,6 +445,8 @@ function resolveTarget(structs, structName, path) {
     if (last && cur.setters[part]) {
       const setter = cur.setters[part]
       if (setter.opaque) return { via: 'setter', opaque: true, struct: cur.name, setter: part }
+      expect(!setter.unreadableBound, 'Unreadable setter bound',
+        `${cur.name}::${part} clamps to ${setter.unreadableBound}, which is not a literal or a known constant`)
       const member = cur.members[setter.target]
       const res = { via: 'setter', struct: cur.name, setter: part, member: setter.target, scale: setter.scale }
       if (setter.min !== undefined) res.min = setter.min
@@ -388,10 +455,12 @@ function resolveTarget(structs, structName, path) {
         if (typeof member.default === 'number') res.default = member.default / (setter.scale ?? 1)
         else if (member.default !== undefined) res.default = member.default
         else if (member.scalar === 'string') res.default = ''
+        else if (optionalOf(member.type)) res.unsetByDefault = true
       }
       if (setter.maxLength !== undefined) res.maxLength = setter.maxLength
       if (setter.lookup) res.lookup = setter.lookup
       if (member?.scalar) res.storedType = member.scalar
+      else if (member && optionalOf(member.type)) res.storedType = optionalOf(member.type)
       return res
     }
 
@@ -402,7 +471,9 @@ function resolveTarget(structs, structName, path) {
       if (member.default !== undefined) res.default = member.default
       else if (member.scalar === 'string') res.default = ''
       else if (member.uninitialized) res.uninitialized = true
+      else if (optionalOf(member.type)) res.unsetByDefault = true
       if (member.scalar) res.storedType = member.scalar
+      else if (optionalOf(member.type)) res.storedType = optionalOf(member.type)
       return res
     }
     cur = structs[member.type]
@@ -444,6 +515,43 @@ function walkBody(cpp, structs, body, structName, seen, requires) {
   // skip lambda bodies, or their item fields would appear as top-level keys
   let scanText = body
   for (const l of lambdas) scanText = scanText.replace(l.body, ' '.repeat(l.body.length))
+
+  // keys read in a loop over {"key", &field} pairs, all with one static setter
+  for (const m of scanText.matchAll(/\bfor\s*\(\s*const\s+auto&\s*\[\s*(\w+)\s*,\s*(\w+)\s*\]\s*:\s*\{/g)) {
+    const listOpen = m.index + m[0].length - 1
+    const list = bodyAt(scanText, listOpen)
+    const loopOpen = scanText.indexOf('{', listOpen + list.length + 2)
+    const loop = bodyAt(scanText, loopOpen)
+    const [, keyVar, fieldVar] = m
+    const read = loop.match(new RegExp(`\\[\\s*${keyVar}\\s*\\]\\s*\\.\\s*value<([^>]+)>\\s*\\(\\s*\\)\\s*\\)\\s*(\\w+)::(set_\\w+)\\s*\\(\\s*\\*${fieldVar}\\s*,\\s*\\*\\w+\\s*\\)\\s*;`))
+    expect(read, 'Unreadable key loop',
+      `Expected \`if (auto v = t[${keyVar}].value<T>()) Struct::set_x(*${fieldVar}, *v);\` in:\n${loop.trim()}`)
+    const [, cppType, helperStruct, helperName] = read
+    const helper = structs[helperStruct]?.methods?.[helperName]
+    expect(helper && helper.params.length === 2, 'Unknown key loop setter', `${helperStruct}::${helperName}`)
+    for (const pair of list.matchAll(/std::pair\s*\{\s*"(\w+)"\s*,\s*&\s*\w+((?:\.\w+)+)\s*\}/g)) {
+      const path = pair[2].replace(/^\./, '')
+      const member = resolveTarget(structs, structName, path)
+      expect(member, 'Unresolved key loop field', `${pair[1]} -> ${path}`)
+      // the setter body with its out-parameter bound to this field
+      const body = inlineHelperCall(`${helperName}(${path.split('.').pop()}, v);`, structs[helperStruct].methods)
+      const bodyInlined = inlineHelperCall(body?.trim() ?? '', structs[helperStruct].methods) ?? body
+      const leaf = path.split('.').pop()
+      const analyzed = bodyInlined && analyzeSetter(bodyInlined, 'v', { [leaf]: {} })
+      expect(analyzed, 'Unreadable key loop setter', `${helperStruct}::${helperName} for ${pair[1]}`)
+      const entry = { key: pair[1], kind: 'scalar', cppType: cppType.trim(), type: normalizeType(cppType), ...member,
+        via: 'setter', setter: `${helperStruct}::${helperName}`, scale: analyzed.scale, target: path }
+      if (analyzed.min !== undefined) entry.min = analyzed.min
+      if (analyzed.max !== undefined) entry.max = analyzed.max
+      if (requires) entry.requires = requires
+      keys.push(entry)
+    }
+    const end = loopOpen + loop.length + 2
+    scanText = scanText.slice(0, m.index) + ' '.repeat(end - m.index) + scanText.slice(end)
+  }
+  // a key read through a variable must have been handled above
+  const dynamic = scanText.match(/\b\w+\s*\[\s*[a-z_]\w*\s*\]\s*\.\s*(?:value|value_or|as_table|as_array)\b/)
+  expect(!dynamic, 'Key read through a variable', `${dynamic?.[0]} is not a pattern the extractor reads`)
   const ifs = scanIfStatements(scanText)
 
   for (const { cond, consequent } of ifs) {
@@ -554,8 +662,8 @@ function readInlineConstraints(consequent) {
     }
   }
 
-  const trim = consequent.match(/(?:\.|->)substr\s*\(\s*0\s*,\s*(\d+)\s*\)/)
-  if (trim) out.maxLength = Number(trim[1])
+  const cap = lengthCap(consequent)
+  if (cap !== undefined) out.maxLength = cap
 
   return out
 }
@@ -793,9 +901,12 @@ export function extractGameTypes(sources, structs) {
     const c = line.match(/case\s+rf::NetGameType::(NG_TYPE_\w+)\s*:/)
     if (c) cases.push(c[1])
     const isDefault = /^\s*default\s*:/.test(line)
+    if (!/\breturn\b/.test(line)) continue
     const ret = line.match(/return\s+([\w.]+|std::nullopt)\s*;/)
-    if (!ret) continue
-    const target = ret[1] === 'std::nullopt' ? null : ret[1]
+    // wipeout's limit is round wins, derived from the round count
+    const wins = line.match(/return\s+(\w+)\.wins_to_take_match\s*\(\s*\)\s*;/)
+    expect(ret || wins, 'Unreadable score limit', `get_score_limit returns something the extractor does not read: ${line.trim()}`)
+    const target = wins ? { roundsToWin: wins[1] } : ret[1] === 'std::nullopt' ? null : ret[1]
     if (isDefault) {
       for (const g of order) if (g.scoreLimitTarget === undefined) g.scoreLimitTarget = target
     } else {
@@ -839,9 +950,14 @@ export function extractGameTypes(sources, structs) {
     `multi_gametype_help_text yielded ${described} descriptions, expected at least 14`)
 
   // bots: everything the mutator mask does not exclude
-  const maskFn = funcBody(sources.mutatorsCpp, /\bgametype_mask_for_req\s*\([^)]*\)\s*\{/, 'gametype_mask_for_req')
-  for (const m of maskFn.matchAll(/~\s*\(\s*1u?\s*<<\s*static_cast<int>\s*\(\s*rf::(NG_TYPE_\w+)\s*\)\s*\)/g)) {
-    if (byId[m[1]]) byId[m[1]].botsSupported = false
+  const maskFn = funcBody(sources.mutatorsCpp, /\bmutator_gametype_mask_for_req\s*\([^)]*\)\s*\{/, 'mutator_gametype_mask_for_req')
+  const botsArm = maskFn.match(/case\s+MutatorGametypeReq::BotsSupported\s*:([\s\S]*?)\breturn\b([^;]*);/)
+  expect(botsArm, 'Bots mask not found', 'Expected `case MutatorGametypeReq::BotsSupported: ... return ...;` in mutator_gametype_mask_for_req')
+  expect(/^\s*MUTATOR_GAMETYPE_MASK_ANY\s*(?:&\s*~\s*\(\s*1u?\s*<<\s*static_cast<int>\s*\(\s*rf::NG_TYPE_\w+\s*\)\s*\)\s*)*$/.test(botsArm[2]),
+    'Unreadable bots mask', `Expected MUTATOR_GAMETYPE_MASK_ANY minus single game types, got: ${botsArm[2].trim()}`)
+  for (const m of botsArm[2].matchAll(/rf::(NG_TYPE_\w+)/g)) {
+    expect(byId[m[1]], 'Unknown game type in bots mask', `${m[1]} is not in the NetGameType enum`)
+    byId[m[1]].botsSupported = false
   }
 
   return named
@@ -872,7 +988,7 @@ export function extractGameTypeDefaults(sources, structs) {
     const labels = [...m[1].matchAll(/NG_TYPE_(\w+)/g)].map(g => `NG_TYPE_${g[1]}`)
     const body = bodyAt(switchBody, m.index + m[0].length - 1)
     // read per label, since a shared arm can test which game type is running
-    for (const label of labels) perType[label] = readDefaultOps(body, structs, label)
+    for (const label of labels) perType[label] = readDefaultOps(inlineRulesHelpers(sources.dediCpp, body), structs, label)
   }
   expect(Object.keys(perType).length > 0, 'No game type default cases',
     'The switch in apply_defaults_for_game_type matched no `case rf::NetGameType::X: {`')
@@ -881,7 +997,7 @@ export function extractGameTypeDefaults(sources, structs) {
   const defaultAt = switchBody.search(/\bdefault\s*:\s*\{/)
   expect(defaultAt !== -1, 'The game type switch has no default arm',
     'Expected `default: {`')
-  const fallback = readDefaultOps(bodyAt(switchBody, defaultAt), structs)
+  const fallback = readDefaultOps(inlineRulesHelpers(sources.dediCpp, bodyAt(switchBody, defaultAt)), structs)
 
   // the tail after the switch adds the spawn weapon to the loadout
   const tail = body.slice(switchOpen + switchBody.length + 2)
@@ -891,6 +1007,17 @@ export function extractGameTypeDefaults(sources, structs) {
     'Expected `spawn_loadout.add(rules.default_player_weapon.weapon_name, rules.stock_spawn_weapon_reserve(), ...)` after the switch')
 
   return { common, perType, fallback, after }
+}
+
+// `helper(rules);` replaced by the helper's body. any other bare call would be
+// skipped by readDefaultOps, so it fails here instead
+function inlineRulesHelpers(cpp, block) {
+  return block.replace(/(^|[{};\n])(\s*)(\w+)\s*\(\s*rules\s*\)\s*;/g, (all, lead, space, name) => {
+    const helper = cpp.match(new RegExp(`\\bstatic\\s+void\\s+${name}\\s*\\(\\s*AlpineServerConfigRules&\\s*rules\\s*\\)\\s*\\{`))
+    expect(helper, 'Unknown call in game type defaults',
+      `${name}(rules) is not a static void ${name}(AlpineServerConfigRules& rules) in dedi_cfg.cpp`)
+    return `${lead}${space}${bodyAt(cpp, helper.index + helper[0].length - 1)};`
+  })
 }
 
 function readDefaultOps(block, structs, gameType = null) {
@@ -1037,6 +1164,30 @@ export function extractMutators(sources) {
       }
     })
   }
+  // option tables built by a lambda from a set table: one option per set row, id = row index
+  for (const m of sources.mutatorsCpp.matchAll(/\bstatic\s+constexpr\s+auto\s+(\w+)\s*=\s*\[\s*\]\s*\{/g)) {
+    const body = bodyAt(sources.mutatorsCpp, m.index + m[0].length - 1)
+    if (!/std::array\s*<\s*MutatorOptionDef\b/.test(body)) continue
+    const row = body.match(/options\s*\[\s*i\s*\]\s*=\s*\{\s*static_cast<uint8_t>\(i\)\s*,\s*(\w+)\[i\]\.(\w+)\s*,\s*\1\[i\]\.(\w+)\s*,\s*(MutatorOptionType::\w+)\s*\}/)
+    expect(row, 'Unreadable generated MutatorOptionDef table',
+      `${m[1]}: expected options[i] = {static_cast<uint8_t>(i), SETS[i].name, SETS[i].label, MutatorOptionType::X}`)
+    const [, setTable, nameField, labelField, typeRef] = row
+    const type = optionTypes[typeRef]
+    expect(type, 'Unknown MutatorOptionType', `${typeRef} in ${m[1]}`)
+    const structName = sources.mutatorsCpp.match(new RegExp(`\\b(\\w+)\\s+${setTable}\\s*\\[\\s*\\]\\s*=\\s*\\{`))
+    expect(structName, 'Missing option set table', `${setTable}, referenced by ${m[1]}`)
+    const struct = funcBody(sources.mutatorsCpp, new RegExp(`\\bstruct\\s+${structName[1]}\\s*\\{`), `struct ${structName[1]}`)
+    const fields = [...struct.matchAll(/(\w+)\s*;/g)].map(f => f[1])
+    const nameAt = fields.indexOf(nameField), labelAt = fields.indexOf(labelField)
+    expect(nameAt >= 0 && labelAt >= 0, 'Option set fields not found',
+      `${nameField} or ${labelField} is not a field of ${structName[1]}`)
+    const setsBody = bodyAt(sources.mutatorsCpp, structName.index + structName[0].length - 1)
+    optionArrays[`${m[1]}.data()`] = braceRows(setsBody).map((cells, i) => {
+      const name = parseLiteral(cells[nameAt] ?? ''), label = parseLiteral(cells[labelAt] ?? '')
+      expect(name.ok && label.ok, 'Malformed option set row', `Row ${i} of ${setTable}: ${cells.join(' | ')}`)
+      return { id: i, name: name.value, label: label.value, type }
+    })
+  }
 
   const defsBody = funcBody(sources.mutatorsCpp, /\bstatic\s+const\s+MutatorDef\s+MUTATORS\s*\[\s*\]\s*=\s*\{/, 'the MUTATORS table')
   const mutators = braceRows(defsBody).map(cells => {
@@ -1089,11 +1240,39 @@ export function extractMutators(sources) {
       opt.defaultFrom = 'currentValue'
       continue
     }
-    if (/build_featured_weapon_choices/.test(m[3])) {
+    if (/mutators_pickup_weapon_choices/.test(m[3])) {
       // choices are the weapons that have a pickup item; default is the rail gun
       opt.choicesFrom = 'weaponsWithPickup'
       opt.defaultFrom = 'railGun'
+      continue
     }
+    const intDefault = m[3].match(/^\s*opt\.default_int\s*=\s*(\w+)\s*;\s*$/)
+    if (intDefault) {
+      const lit = parseLiteral(intDefault[1])
+      opt.default = lit.ok ? lit.value : consts[intDefault[1]]
+      expect(opt.default !== undefined, 'Unreadable mutator option default', `${m[1]}.${m[2]}: ${intDefault[1]}`)
+      continue
+    }
+    // a fixed table of {label, value} rows, the default given by row index
+    const choiceTable = m[3].match(/opt\.choices\.assign\s*\(\s*std::begin\s*\(\s*(\w+)\s*\)\s*,\s*std::end\s*\(\s*\1\s*\)\s*\)\s*;\s*opt\.default_choice\s*=\s*(\w+)\s*;\s*$/)
+    if (choiceTable) {
+      const at = sources.mutatorsCpp.search(new RegExp(`\\bMutatorOptionChoice\\s+${choiceTable[1]}\\s*\\[\\s*\\]\\s*=\\s*\\{`))
+      expect(at !== -1, 'Missing mutator choice table', `${choiceTable[1]}, used by ${m[1]}.${m[2]}`)
+      const rows = braceRows(bodyAt(sources.mutatorsCpp, sources.mutatorsCpp.indexOf('{', at))).map(cells => {
+        const label = parseLiteral(cells[0] ?? ''), value = parseLiteral(cells[1] ?? '')
+        expect(cells.length === 2 && label.ok && value.ok, 'Malformed mutator choice row',
+          `In ${choiceTable[1]}: expected {label, value}, got ${cells.join(' | ')}`)
+        return { label: label.value, value: value.value }
+      })
+      const index = consts[choiceTable[2]] ?? parseLiteral(choiceTable[2]).value
+      expect(rows[index], 'Unreadable mutator choice default', `${m[1]}.${m[2]}: ${choiceTable[2]}`)
+      opt.choices = rows.map(r => r.value)
+      opt.choiceLabels = Object.fromEntries(rows.map(r => [r.value, r.label]))
+      opt.default = rows[index].value
+      continue
+    }
+    fail('Unreadable mutator option registry entry',
+      `${m[1]}.${m[2]} in mutators_get_registry assigns something the extractor does not read:\n${m[3].trim()}`)
   }
 
   const orderBody = funcBody(sources.mutatorsCpp, /\bstatic\s+const\s+MutatorId\s+MUTATOR_APPLY_ORDER\s*\[\s*\]\s*=\s*\{/, 'MUTATOR_APPLY_ORDER')
@@ -1147,11 +1326,12 @@ export function extractServerKeys(sources, structs) {
       if (!acc) return { key, kind: 'scalar', complex: true }
       const cppType = (acc[1] ?? acc[2]).trim()
       const entry = { key, kind: 'scalar', cppType, type: normalizeType(cppType) }
+      if (/\bnet_rate_tiers\b/.test(consequent)) return { ...entry, ...extractRateTierKey(sources, structs, consequent) }
       const assign = consequent.match(/\bcfg\s*((?:\.\w+)+)\s*(?:=|\()/)
       if (assign) {
         const path = assign[1].replace(/^\./, '')
         const target = resolveTarget(structs, structName, path)
-        if (target) Object.assign(entry, target, { target: path })
+        if (target) Object.assign(entry, target, readInlineConstraints(consequent), { target: path })
         else entry.unresolved = path
       } else if (/g_ads_loaded_version/.test(consequent)) {
         entry.target = 'ads_version'
@@ -1186,6 +1366,27 @@ export function extractServerKeys(sources, structs) {
   return { scalars, tables, arrays }
 }
 
+// a tier name looked up in net_rate_tiers, stored as that tier's send rate
+function extractRateTierKey(sources, structs, consequent) {
+  const assign = consequent.match(/\bcfg\.(\w+)\s*=\s*it->(\w+)\s*;/)
+  expect(assign && /string_iequals\s*\(\s*\*v\s*,\s*tier\.name\s*\)/.test(consequent),
+    'Unreadable rate tier key', `Expected a tier matched by name and cfg.x = it->y in:\n${consequent.trim()}`)
+  const table = sources.alpineSettingsH.match(/\bnet_rate_tiers\s*\[\s*\]\s*=\s*\{([\s\S]*?)\};/)
+  expect(table, 'net_rate_tiers is gone', 'Expected `net_rate_tiers[] = {...};` in misc/alpine_settings.h')
+  const fields = sources.alpineSettingsH.match(/\bstruct\s+NetRateTier\s*\{([^}]*)\}/)
+  expect(fields, 'NetRateTier is gone', 'Expected `struct NetRateTier {...}` in misc/alpine_settings.h')
+  const names = [...fields[1].matchAll(/(\w+)\s*;/g)].map(f => f[1])
+  const nameAt = names.indexOf('name'), rateAt = names.indexOf(assign[2])
+  expect(nameAt >= 0 && rateAt >= 0, 'NetRateTier fields changed', `Fields are ${names.join(', ')}`)
+  const tiers = braceRows(table[1]).map(cells => ({
+    name: parseLiteral(cells[nameAt]).value, rate: parseLiteral(cells[rateAt]).value,
+  }))
+  const member = structs.AlpineServerConfig.members[assign[1]]
+  const def = tiers.find(t => t.rate === member?.default)
+  expect(def, 'Rate tier default not found', `${assign[1]} defaults to ${member?.default}, which is no tier`)
+  return { choices: tiers.map(t => t.name), default: def.name, storedType: 'string', target: assign[1], via: 'member' }
+}
+
 // some top-level arrays are handled inline rather than by apply_known_array_in_order
 function extractInlineArrays(sources, known) {
   const body = funcBody(sources.dediCpp, /\bstatic\s+void\s+apply_config_table_in_order\s*\(/, 'apply_config_table_in_order')
@@ -1200,15 +1401,38 @@ function extractInlineArrays(sources, known) {
     if (!named || known.has(named[1])) continue
     // delegated ones are already covered by the array dispatcher
     if (/apply_known_array_in_order/.test(consequent)) continue
-    const elem = consequent.match(/\belem\s*\.\s*value<([^>]+)>/)
-    out.push({
-      key: named[1],
-      kind: 'array',
-      itemType: elem ? normalizeType(elem[1].trim()) : null,
-      inline: true,
-    })
+    const elem = consequent.match(/\belem\s*\.\s*(?:value|value_or)<([^>]+)>/)
+    expect(elem && normalizeType(elem[1].trim()), 'Unreadable server list',
+      `${named[1]}: expected elem.value<T>() or elem.value_or<T>(...) with a scalar T`)
+    const entry = { key: named[1], kind: 'array', itemType: normalizeType(elem[1].trim()), inline: true }
+    // names turned into values by a *_from_config_name helper are a fixed set
+    const parsed = consequent.match(/\b(\w+)_from_config_name\s*\(\s*elem\b/)
+    if (parsed) entry.choices = configNameChoices(sources.dediCpp, parsed[1])
+    out.push(entry)
   }
   return out
+}
+
+// X_from_config_name tries each value through X_config_name, which returns its name
+function configNameChoices(cpp, stem) {
+  const fromFn = funcBody(cpp, new RegExp(`\\b${stem}_from_config_name\\s*\\([^)]*\\)\\s*\\{`), `${stem}_from_config_name`)
+  const loop = fromFn.match(/for\s*\(\s*const\s+\w+\s+(\w+)\s*:\s*\{([^}]*)\}\s*\)/)
+  expect(loop && new RegExp(`string_iequals\\s*\\(\\s*\\w+\\s*,\\s*${stem}_config_name\\s*\\(\\s*${loop[1]}\\s*\\)\\s*\\)`).test(fromFn),
+    'Unreadable config name parser', `Expected ${stem}_from_config_name to loop over values comparing ${stem}_config_name(value)`)
+  const nameFn = funcBody(cpp, new RegExp(`\\b${stem}_config_name\\s*\\([^)]*\\)\\s*\\{`), `${stem}_config_name`)
+  // each value is named by the return it reaches: `if (x == V) return "a";`, `x == V ? "b" : "c"`
+  const named = new Map()
+  for (const m of nameFn.matchAll(/(\w+)\s*==\s*([\w:]+)\s*\)?\s*\{?\s*return\s+"(\w+)"/g)) named.set(m[2], m[3])
+  const tern = nameFn.match(/return\s+\w+\s*==\s*([\w:]+)\s*\?\s*"(\w+)"\s*:\s*"(\w+)"\s*;/)
+  expect(tern, 'Unreadable config name table', `Expected a final \`return x == V ? "a" : "b";\` in ${stem}_config_name`)
+  named.set(tern[1], tern[2])
+  const values = loop[2].split(',').map(v => v.trim().replace(/^static_cast<\w+>\s*\((.*)\)$/, '$1'))
+  return values.map(v => {
+    if (named.has(v)) return named.get(v)
+    const others = [...named.keys()]
+    expect(!others.includes(v), 'Unreadable config name table', v)
+    return tern[3]
+  })
 }
 
 // [[levels]] entries accept a fixed, explicitly listed set of keys
@@ -1238,33 +1462,85 @@ export function extractMutatorsKey(sources) {
   return { key: 'mutators', kind: 'array', of: 'mutator' }
 }
 
-// game_type is resolved by the scope, not a struct member. since 1.4 it is read
-// in parse_scope_rules before other keys, with [rules] winning over the scope.
+// game_type is resolved by the scope, not a struct member. it is read before
+// other keys, with [rules] winning over the scope.
 export function extractGameTypeKey(sources) {
-  const body = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
+  const body = funcBody(sources.dediCpp, /\bstatic\s+rf::NetGameType\s+scope_game_type\s*\([^)]*\)\s*\{/, 'scope_game_type')
   const reads = [...body.matchAll(/\[\s*"game_type"\s*\]\s*\.value<std::string>\s*\(\s*\)/g)]
   expect(reads.length === 2,
-    'parse_scope_rules no longer reads game_type from both tables',
+    'scope_game_type no longer reads game_type from both tables',
     `Found ${reads.length} string reads of game_type, expected 2 (the nested [rules] table and the scope itself)`)
   expect(/resolve_gametype_from_name\s*\(/.test(body),
-    'parse_scope_rules no longer resolves the game type by name',
-    'Expected a resolve_gametype_from_name call in parse_scope_rules')
+    'scope_game_type no longer resolves the game type by name',
+    'Expected a resolve_gametype_from_name call in scope_game_type')
   return { key: 'game_type', kind: 'scalar', cppType: 'std::string', type: 'string' }
 }
 
-// verifies that a game type change restarts from [base]'s manual keys
-export function extractGameTypeRebase(sources) {
-  const scope = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+parse_scope_rules\s*\([^)]*\)\s*\{/, 'parse_scope_rules')
-  expect(/game_type_changed\s*&&\s*opts\.rebase_source/.test(scope),
-    'parse_scope_rules no longer rebases on a game type change',
-    'Expected `if (game_type_changed && opts.rebase_source)` in parse_scope_rules')
+// verifies how a level's rules are built: that game type's defaults, every [base]
+// table replayed with its mutators (minus those the level disables with
+// enabled = false), then the level's own tables
+export function extractLevelLayering(sources) {
+  const over = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+build_rules_over_base\s*\([^)]*\)\s*\{/, 'build_rules_over_base')
+  const defaultsAt = over.search(/\bapply_defaults_for_game_type\s*\(\s*game_type\b/)
+  const replayAt = over.search(/for\s*\(\s*const\s+toml::table&\s+\w+\s*:\s*base_tables\s*\)/)
+  expect(defaultsAt !== -1 && replayAt > defaultsAt,
+    'Base rules are no longer replayed over the game type defaults',
+    'Expected build_rules_over_base to call apply_defaults_for_game_type(game_type, ...) and then loop over base_tables')
 
-  const levels = funcBody(sources.dediCpp, /\bstatic\s+void\s+add_level_entry_from_table\s*\(/, 'add_level_entry_from_table')
-  expect(/RulesParseOptions\s*\{\s*RulesParseMode::Full\s*,\s*&cfg\.base_rules_keys_only\s*\}/.test(levels),
-    'A level no longer rebases onto base_rules_keys_only',
-    'Expected add_level_entry_from_table to pass &cfg.base_rules_keys_only as the rebase source')
+  const scope = funcBody(sources.dediCpp, /\bstatic\s+AlpineServerConfigRules\s+build_scope_rules\s*\([^)]*\)\s*\{/, 'build_scope_rules')
+  const baseAt = scope.search(/\bbuild_rules_over_base\s*\(\s*base_tables\s*,\s*game_type\s*,\s*RulesParseOptions\s*\{\s*mode\s*,\s*&disabled\s*\}/)
+  const levelAt = scope.search(/\bparse_server_rules\s*\(\s*\*lvl_tbl\b/)
+  expect(baseAt !== -1 && levelAt > baseAt,
+    'A level no longer layers onto the replayed base rules',
+    'Expected build_scope_rules to call build_rules_over_base(base_tables, game_type, RulesParseOptions{mode, &disabled}) before parse_server_rules(*lvl_tbl, ...)')
+  expect(/level_disabled_mutators\s*\(\s*lvl_tbl\s*\)/.test(scope),
+    'Levels can no longer switch off base mutators',
+    'Expected build_scope_rules to read level_disabled_mutators(lvl_tbl)')
 
-  return { on: 'gametype-change', source: 'base-manual-keys' }
+  const mutCpp = sources.mutatorsCpp
+  expect(/\["enabled"\]\.value<bool>\(\)\.value_or\(true\)/.test(mutCpp),
+    'Mutator entries no longer accept enabled = false',
+    'Expected `["enabled"].value<bool>().value_or(true)` in multi/mutators.cpp')
+
+  return { base: 'over-gametype-defaults', disableMutator: 'enabled' }
+}
+
+// finite_float(t, key) reads a float like t[key].value<float>() but ignores nan
+// and inf, which no editor here produces. rewritten to the plain read so every
+// extractor sees one form
+function unwrapFiniteFloat(cpp) {
+  const def = cpp.match(/static\s+std::optional<float>\s+finite_float\s*\(\s*const\s+toml::table&\s*(\w+)\s*,\s*std::string_view\s+(\w+)\s*\)\s*\{/)
+  if (!def) {
+    expect(!/\bfinite_float\s*\(/.test(cpp), 'finite_float changed shape',
+      'Expected `static std::optional<float> finite_float(const toml::table& t, std::string_view key)` in multi/dedi_cfg.cpp')
+    return cpp
+  }
+  const body = bodyAt(cpp, def.index + def[0].length - 1)
+  expect(new RegExp(`\\b${def[1]}\\s*\\.\\s*get\\s*\\(\\s*${def[2]}\\s*\\)`).test(body) && /toml_finite_float\s*\(/.test(body),
+    'finite_float no longer reads the key directly', `Expected ${def[1]}.get(${def[2]}) and toml_finite_float in:\n${body.trim()}`)
+  let calls = 0
+  const out = cpp.replace(/\bfinite_float\s*\(\s*(\w+)\s*,\s*("[\w.]+"|\w+)\s*\)/g, (call, table, key, at) => {
+    if (at >= def.index && at < def.index + def[0].length) return call
+    calls++
+    return `${table}[${key}].value<float>()`
+  })
+  expect(calls > 0, 'finite_float is never called', 'Expected finite_float(t, "key") reads in multi/dedi_cfg.cpp')
+  return out
+}
+
+// a score limit of round wins in a best-of-n match, stored as the round count:
+// wins = rounds / 2 + 1, and setting wins writes rounds = wins * 2 - 1
+function extractRoundsToWin(sources, targetIndex, member) {
+  const h = sources.serverInternalH
+  expect(/int\s+wins_to_take_match\s*\(\s*\)\s*const\s*\{\s*return\s+max_rounds\s*\/\s*2\s*\+\s*1\s*;\s*\}/.test(h),
+    'Round wins are no longer max_rounds / 2 + 1', 'Expected `int wins_to_take_match() const { return max_rounds / 2 + 1; }`')
+  expect(/void\s+set_wins_to_take_match\s*\(\s*int\s+(\w+)\s*\)\s*\{\s*set_max_rounds\s*\(\s*std::clamp\s*\(\s*\1\s*,\s*1\s*,\s*500\s*\)\s*\*\s*2\s*-\s*1\s*\)\s*;\s*\}/.test(h),
+    'Round wins are no longer set as wins * 2 - 1', 'Expected `set_max_rounds(std::clamp(wins, 1, 500) * 2 - 1)` in set_wins_to_take_match')
+  expect(new RegExp(`\\b${member}\\.set_wins_to_take_match\\s*\\(`).test(h),
+    'set_score_limit no longer writes round wins', `Expected ${member}.set_wins_to_take_match(...) in set_score_limit`)
+  const key = targetIndex[`${member}.set_max_rounds`] ?? targetIndex[`${member}.max_rounds`]
+  expect(key, 'Round count key not found', `No rules key sets ${member}.max_rounds`)
+  return key
 }
 
 // [[levels]] keys still accepted but ignored. alpine 1.4 removed rules presets
@@ -1341,6 +1617,10 @@ function extractPrintLabels(sources, targetIndex) {
 // ---------------------------------------------------------------------------
 
 // dotted config path -> entry, for the completeness check and the label files
+function flattenKeys(keys, prefix = '') {
+  return keys.flatMap(k => [{ ...k, path: prefix + k.key }, ...(k.keys ? flattenKeys(k.keys, `${prefix}${k.key}.`) : [])])
+}
+
 function flatten(keys, prefix = '') {
   const out = []
   for (const k of keys) {
@@ -1385,7 +1665,7 @@ function main() {
   const S = f => stripComments(read(f))
   const sources = {
     serverInternalH: S('game_patch/multi/server_internal.h'),
-    dediCpp: S('game_patch/multi/dedi_cfg.cpp'),
+    dediCpp: unwrapFiniteFloat(S('game_patch/multi/dedi_cfg.cpp')),
     mutatorsCpp: S('game_patch/multi/mutators.cpp'),
     mutatorsH: S('game_patch/multi/mutators.h'),
     serverCpp: S('game_patch/multi/server.cpp'),
@@ -1393,8 +1673,12 @@ function main() {
     gungameCpp: S('game_patch/multi/gungame.cpp'),
     multiH: S('game_patch/rf/multi.h'),
     versionH: read('common/include/common/version/version.h'),
+    payloadH: S('common/include/common/payload.h'),
+    alpineSettingsH: S('game_patch/misc/alpine_settings.h'),
+    networkH: S('game_patch/multi/network.h'),
   }
 
+  for (const src of [sources.payloadH, sources.serverInternalH, sources.networkH]) collectConstants(src)
   const structs = parseStructs(sources.serverInternalH)
   expect(structs.AlpineServerConfigRules, 'AlpineServerConfigRules is gone',
     'server_internal.h no longer declares the rules struct')
@@ -1436,7 +1720,7 @@ function main() {
     'game_type is back in the rules key parser',
     'apply_rules_keys_from_toml now reads it too; drop the synthesized entry')
   rulesKeys.unshift(gt, extractMutatorsKey(sources))
-  const gameTypeRebase = extractGameTypeRebase(sources)
+  const levelLayering = extractLevelLayering(sources)
 
   const targetIndex = buildTargetIndex(rulesKeys)
   const printLabels = extractPrintLabels(sources, targetIndex)
@@ -1452,8 +1736,29 @@ function main() {
   })
 
   const scoreLimitKeys = {}
+  const roundsToWinKeys = {}
   for (const g of gametypes) {
-    scoreLimitKeys[g.names[0]] = g.scoreLimitTarget ? (targetIndex[g.scoreLimitTarget] ?? null) : null
+    const target = g.scoreLimitTarget
+    if (target && typeof target === 'object') {
+      roundsToWinKeys[g.names[0]] = extractRoundsToWin(sources, targetIndex, target.roundsToWin)
+      scoreLimitKeys[g.names[0]] = null
+      continue
+    }
+    expect(!target || targetIndex[target], 'Score limit reads no config key',
+      `get_score_limit returns ${target} for ${g.names[0]}, which no rules key sets`)
+    scoreLimitKeys[g.names[0]] = target ? targetIndex[target] : null
+  }
+
+  // every scalar needs a value to show when the file leaves it out
+  const serverKeyList = [...server.scalars, ...server.tables, ...server.arrays]
+  for (const [doc, keys] of [['rules', rulesKeys], ['server', serverKeyList]]) {
+    for (const k of flattenKeys(keys)) {
+      if (k.kind !== 'scalar' || k.global || k.key === 'game_type') continue
+      expect(!k.opaque && !k.unresolved, `Unreadable ${doc} setting`,
+        `${k.path}: ${k.opaque ? `setter ${k.setter} could not be analyzed` : `assignment ${k.unresolved}`}`)
+      expect(k.default !== undefined || k.uninitialized || k.unsetByDefault, `No default for ${doc} setting`,
+        `${k.path} has no readable default in the struct`)
+    }
   }
 
   mkdirSync(OUT, { recursive: true })
@@ -1463,7 +1768,7 @@ function main() {
       alpineVersion: `${version.VERSION_MAJOR}.${version.VERSION_MINOR}.${version.VERSION_PATCH}`,
       alpineCommit: pinnedCommit(),
     }),
-    writeJson('rules.json', { keys: rulesKeys, gameTypeRebase, flat: flatten(rulesKeys).map(k => k.path) }),
+    writeJson('rules.json', { keys: rulesKeys, levelLayering, flat: flatten(rulesKeys).map(k => k.path) }),
     writeJson('console-labels.json', printLabels),
     writeJson('gametypes.json', {
       gametypes: gametypes.map(g => ({
@@ -1476,6 +1781,7 @@ function main() {
         botsSupported: g.botsSupported,
         usesRounds: g.usesRounds,
         scoreLimitKey: scoreLimitKeys[g.names[0]],
+        ...(roundsToWinKeys[g.names[0]] ? { roundsToWinKey: roundsToWinKeys[g.names[0]] } : {}),
       })),
       defaults: {
         common: resolveOps(gametypeDefaults.common, 'the preamble every mode runs'),

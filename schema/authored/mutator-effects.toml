@@ -9,7 +9,7 @@
 # only weakens the provenance popover - it never changes the written config.
 
 [meta]
-apply_order_note = "Mutators are applied in a fixed order, regardless of the order they are listed in: Pogo, Dodging, Skiing, Low Gravity, Weird Gun Game, Humans vs. Bots, Jetpacks, Gibbing, Flaming Enemies, Big Craters, Super Rail, Delayed Supers, Armored, Super Drain, Vampire, Critical Hits, Arena, One Weapon, Instagib, Score Limit Override, Ideal Player Count Override. When two mutators change the same setting, the later one wins. Settings set by hand in the same scope override all mutators."
+apply_order_note = "Mutators are applied in a fixed order, regardless of the order they are listed in: Join Bots, Item Replacement, Pogo, Dodging, Skiing, Low Gravity, Weird Gun Game, Humans vs. Bots, Jetpacks, Gibbing, Flaming Enemies, Big Craters, Super Rail, Delayed Supers, Armored, Super Drain, Vampire, Critical Hits, Arena, One Weapon, Instagib, Score Limit Override, Ideal Player Count Override. When two mutators change the same setting, the later one wins. Settings set by hand in the same scope override all mutators."
 
 
 # ============================================================================
@@ -258,6 +258,9 @@ notes = [
 ["gibbing"]
 summary = "Enables gibbing. Players killed by heavy overkill damage are gibbed."
 help = "Same as enabling the Gibbing settings section. Its threshold and damage type settings still apply."
+notes = [
+  "With Scrapyard mode on, gibs are random debris instead of meat.",
+]
 
 [[gibbing.sets]]
 key = "gibbing.enabled"
@@ -271,6 +274,7 @@ summary = "All players have a jetpack. Hold jump in the air to thrust upward."
 notes = [
   "Fuel lasts about 5 seconds and fully recharges in about 7.5 seconds.",
   "An empty jetpack must recharge briefly before it can be used again.",
+  "With Jetpacks explode on, a direct shot in the back or burning to death gibs the wearer.",
 ]
 
 
@@ -382,7 +386,7 @@ notes = [
 [[scorelimit.sets]]
 key = "individual_kill_limit"
 fromOption = "score_limit"
-note = "Deathmatch and Wipeout."
+note = "Deathmatch."
 
 [[scorelimit.sets]]
 key = "team_kill_limit"
@@ -429,6 +433,18 @@ key = "sal_cap_limit"
 fromOption = "score_limit"
 note = "Salvage."
 
+[[scorelimit.sets]]
+key = "scav_cap_limit"
+fromOption = "score_limit"
+note = "Scavenger."
+
+[[scorelimit.sets]]
+key = "rounds.max_rounds"
+fromOption = "score_limit"
+modes = ["wo"]
+transform = "roundsToWin"
+note = "Wipeout. The value is round wins: 3 plays up to 5 rounds."
+
 
 # ============================================================================
 
@@ -443,3 +459,25 @@ notes = [
 [[idealplayers.sets]]
 key = "ideal_player_count"
 fromOption = "ideal_players"
+
+
+# ============================================================================
+
+["joinbots"]
+summary = "Server bots join for the map, or fill a match's empty slots."
+help = "Bot count, skill and personality are set by the options."
+notes = [
+  "Not available in game types that do not support bots.",
+]
+
+
+# ============================================================================
+
+["itemreplace"]
+summary = "Swaps or removes super pickups when the map loads."
+help = "Each option is a replacement set. When two sets replace the same item differently, the later one in the list wins."
+notes = [
+  "The swaps are added to Item replacements. A replacement set by hand for the same item wins.",
+  "No supers removes Damage Amplifier, Invulnerability, Alpine Haste, Alpine Vampire, Alpine Jetpack, Super Armor and Super Health.",
+  "Swapping in Alpine Haste or Alpine Vampire restricts older clients.",
+]

@@ -218,6 +218,19 @@ crossCheck('rules', rules.flat, authoredRules)
 
 crossCheck('server', server.flat, authoredServer)
 
+// a setting with no default is shown empty, so the empty state needs a name
+function checkUnsetLabels(label, keys, authored, prefix = '') {
+  for (const k of keys) {
+    const path = prefix + k.key
+    if (k.unsetByDefault && authored?.[path] && !authored[path].emptyLabel) {
+      problem(`${label}: setting with no default has no emptyLabel`, path)
+    }
+    if (k.keys) checkUnsetLabels(label, k.keys, authored, `${path}.`)
+  }
+}
+checkUnsetLabels('rules', rules.keys, authoredRules)
+checkUnsetLabels('server', server.keys, authoredServer)
+
 // with advanced settings hidden, a basic setting must be reachable and a settings
 // page must not render empty
 if (pagesFile) {
@@ -258,6 +271,14 @@ if (effects) {
         problem('mutator effect has no value or fromOption', `${m.name} -> "${set.key}"`)
       }
       if (Array.isArray(set.value)) checkReplacementList(m.name, set)
+      for (const mode of set.modes ?? []) {
+        if (!gametypes.gametypes.some(g => g.name === mode)) {
+          problem('mutator effect names an unknown game type', `${m.name} -> "${set.key}" in "${mode}"`)
+        }
+      }
+      if (set.transform !== undefined && set.transform !== 'roundsToWin') {
+        problem('mutator effect has an unknown transform', `${m.name} -> "${set.key}": ${set.transform}`)
+      }
       if (set.fromOption !== undefined && !optionNames.has(set.fromOption)) {
         problem('mutator effect reads an unknown option',
           `${m.name} -> "${set.key}" reads "${set.fromOption}"` +
@@ -265,6 +286,19 @@ if (effects) {
       }
     }
   }
+  // a mutator gated on the score limit must write every game type's score limit
+  for (const m of mutators.mutators.filter(m => m.gametypeReq === 'HasScoreLimit')) {
+    const sets = effects[m.name]?.sets ?? []
+    for (const g of gametypes.gametypes) {
+      const covered = g.scoreLimitKey
+        ? sets.some(s => s.key === g.scoreLimitKey && s.fromOption && !s.modes)
+        : g.roundsToWinKey
+          ? sets.some(s => s.key === g.roundsToWinKey && s.transform === 'roundsToWin' && s.modes?.includes(g.name))
+          : true
+      if (!covered) problem('score limit mutator does not write this game type\'s score limit', `${m.name} in ${g.name}`)
+    }
+  }
+
   const names = new Set(mutators.mutators.map(m => m.name))
   for (const name of Object.keys(effects)) {
     if (name === 'meta') continue

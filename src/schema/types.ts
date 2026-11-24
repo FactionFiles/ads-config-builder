@@ -31,6 +31,8 @@ export interface ScalarKey {
   requires?: Guard[]
   /** file and struct types disagree, an upstream bug */
   typeMismatch?: { readAs: ScalarType; storedAs: ScalarType }
+  /** no default: leaving it out means something else decides, named by the authored emptyLabel */
+  unsetByDefault?: boolean
   /** written by the tool, not the user, e.g. ads_version */
   global?: boolean
 }
@@ -83,8 +85,8 @@ export type SchemaKey = ScalarKey | TableKey | ArrayKey
 
 export interface RulesSchema {
   keys: SchemaKey[]
-  /** how a scope that changes game type rebuilds its rules */
-  gameTypeRebase: { on: string; source: string }
+  /** how a level's rules are built over the base rules */
+  levelLayering: { base: string; disableMutator: string }
   /** every dotted path, groups included */
   flat: string[]
 }
@@ -101,6 +103,8 @@ export interface GameType {
   usesRounds: boolean
   /** null when the game type has no numeric score limit */
   scoreLimitKey: string | null
+  /** the score limit is round wins in a best-of-n match, stored as this round count */
+  roundsToWinKey?: string
 }
 
 /** reserve ammo read from a weapon table column, since the table only exists at runtime */
@@ -144,6 +148,9 @@ export interface MutatorOption {
   /** the default is live server state, so the UI shows the current value */
   defaultFrom?: 'currentValue' | 'railGun'
   choicesFrom?: 'weaponsWithPickup'
+  /** fixed values written to the file, with their labels */
+  choices?: string[]
+  choiceLabels?: Record<string, string>
 }
 
 export type MutatorGametypeReq =
@@ -229,6 +236,7 @@ export interface AuthoredField {
   lookup?: LookupTable
   /** shown when empty is a meaningful value */
   emptyLabel?: string
+  choiceLabels?: Record<string, string>
 }
 
 export interface Page {
@@ -253,6 +261,10 @@ export interface MutatorEffect {
     /** a literal the mutator writes, or prose when the effect is not a value */
     value?: unknown
     fromOption?: string
+    /** only in these game types */
+    modes?: string[]
+    /** the option is round wins, written as a best-of-n round count */
+    transform?: 'roundsToWin'
     note?: string
   }[]
   notes?: string[]
